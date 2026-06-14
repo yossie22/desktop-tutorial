@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<title>EOS影設定</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#141820;color:#f0f0f0;font-family:'Meiryo','Segoe UI',sans-serif;height:100vh;display:flex;flex-direction:column;overflow:hidden;font-size:16px}
+header{padding:12px 16px;background:#0e1218;border-bottom:2px solid #f5c518;flex-shrink:0}
+header h1{font-size:22px;color:#f5c518;font-weight:700}
+#stepHint{margin-top:10px;padding:12px 16px;border-radius:6px;font-size:16px;line-height:1.65;background:#1a2430;border:1px solid #4a5a6a;color:#d8e4f0}
+#status{margin-top:10px;padding:10px 12px;border-radius:4px;font-size:16px;background:#0a1520;border:1px solid #3a5a70;line-height:1.55}
+#status.ok{border-color:#3a9a5a;color:#d4ffd4;background:#0a2018}
+#status.bad{border-color:#cc4444;color:#ffe0e0;background:#280a10}
+#emptyGuide{margin-top:10px;padding:14px 16px;border-radius:8px;font-size:16px;line-height:1.7;background:#2a2210;border:2px solid #c8a030;color:#fff4d0;display:none}
+.layout{display:flex;flex:1;min-height:0}
+.sb{width:420px;min-width:400px;background:#121820;border-right:1px solid #3a4a5a;overflow-y:auto;padding:14px;flex-shrink:0}
+.previewBox{flex:1;display:flex;flex-direction:column;min-width:0;background:#000;position:relative;padding:12px}
+#photoStage{position:relative;flex:1;min-height:320px;background:#111;border:1px solid #404870;border-radius:8px;overflow:hidden;touch-action:none}
+#eosImg{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);pointer-events:none;user-select:none;max-width:100%;max-height:100%}
+#shadowDisplay{position:absolute;pointer-events:none;transform:translate(-50%,-50%)}
+#videoBox{position:absolute;border:1px dashed rgba(245,197,24,0.5);pointer-events:none;overflow:hidden}
+#previewVideo{display:block;width:100%;height:100%;object-fit:contain;mix-blend-mode:lighten}
+#previewVideo.matte-none{mix-blend-mode:normal}
+#paintOverlay{position:absolute;left:0;top:0;right:0;bottom:0;z-index:10;cursor:crosshair;touch-action:none}
+#paintOverlay.erase{cursor:cell}
+.bar{padding:10px 0 0;display:flex;gap:10px;flex-wrap:wrap;flex-shrink:0}
+.bar button{padding:14px 20px;border-radius:6px;border:none;background:#f5c518;color:#111;font-size:18px;cursor:pointer;font-weight:600}
+.bar button.sec{background:#1e2a38;border:1px solid #4a5a6a;color:#f0f0f0;font-size:16px;padding:12px 16px}
+.bar button:disabled{opacity:.4}
+.sec{margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid #2a3545}
+.sec h2{font-size:17px;color:#f5c518;margin-bottom:10px;font-weight:700}
+.row{margin:9px 0}
+.row label{display:flex;justify-content:space-between;font-size:16px;margin-bottom:5px;color:#f0f0f0}
+.row input[type=range]{width:100%;height:32px}
+select.sel{width:100%;padding:10px;background:#1e2a38;border:1px solid #4a5a6a;color:#fff;font-size:16px}
+.toolRow{display:flex;gap:10px;flex-wrap:wrap;margin:10px 0}
+.toolRow button{padding:12px 16px;font-size:16px;border-radius:6px;border:1px solid #5a6a7a;background:#243040;color:#fff;cursor:pointer}
+.toolRow button.on{background:#3a6a9a}
+.colorRow{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 6px}
+.colorRow button{width:48px;height:36px;border-radius:6px;border:2px solid #5a6a7a;cursor:pointer;padding:0}
+.colorRow button.on{border-color:#fff;box-shadow:0 0 0 2px #f5c518}
+.note{font-size:15px;color:#b0c0d0;margin-top:8px;line-height:1.55}
+</style>
+</head>
+<body>
+<header>
+  <h1>EOS影設定（虫眼鏡写真の影）</h1>
+  <div id="stepHint">
+    虫眼鏡で開く <strong>EOS写真</strong> の上に、動画キャラの足元など<strong>地面の影</strong>を塗ります。
+    先に <strong>高画質覗き設定</strong> と <strong>EOS動画重ね</strong> で写真・動画を入れてから使ってください。
+    パノラマ上の人物用は <a href="/shadow" style="color:#9ed0ff">影設定（VR人物）</a> です。
+  </div>
+  <div id="emptyGuide">
+    <strong>EOS写真のあるシーンがありません。</strong><br>
+    先に <strong>高画質覗き設定.html</strong> で EOS 写真（hiResPeek）を設定してください。
+  </div>
+  <div id="status">起動中…</div>
+</header>
+<div class="layout">
+<div class="sb">
+  <div class="sec"><h2>シーン</h2><select id="sceneSel" class="sel"></select></div>
+  <div class="sec">
+    <h2>ブラシ</h2>
+    <div class="toolRow">
+      <button type="button" id="btnErase">消しゴム</button>
+      <button type="button" id="btnUndo">元に戻す</button>
+    </div>
+    <p class="note">筆の色</p>
+    <div class="colorRow" id="colorRow">
+      <button type="button" class="on" data-color="black" title="黒" style="background:#000"></button>
+      <button type="button" data-color="gray" title="グレー" style="background:#505050"></button>
+      <button type="button" data-color="white" title="白" style="background:#e8e8e8"></button>
+      <button type="button" data-color="green" title="暗緑" style="background:#2a4030"></button>
+    </div>
+    <div class="row"><label>筆の太さ <span id="v_brushSize">14</span></label>
+      <input type="range" id="brushSize" min="2" max="40" step="1" value="14"></div>
+    <p class="note">右の EOS 写真をなぞって影を塗ります。動画の<strong>足元の地面</strong>に合わせてください。</p>
+  </div>
+  <div class="sec">
+    <h2>見え方</h2>
+    <div class="row"><label>濃さ <span id="v_opacity">0.35</span></label>
+      <input type="range" id="opacity" min="1" max="100" value="35"></div>
+    <div class="row"><label>ぼかし <span id="v_blurPx">4</span>px</label>
+      <input type="range" id="blurPx" min="0" max="30" value="4"></div>
+  </div>
+</div>
+<div class="previewBox">
+  <div id="photoStage">
+    <img id="eosImg" alt="" hidden>
+    <canvas id="shadowDisplay"></canvas>
+    <div id="videoBox" class="hidden"><video id="previewVideo" playsinline muted loop></video></div>
+    <canvas id="paintOverlay"></canvas>
+  </div>
+  <div class="bar">
+    <button type="button" id="btnSave" disabled>保存する</button>
+    <button type="button" class="sec" id="btnDelete">影を削除</button>
+    <button type="button" class="sec" id="btnOpen">viewer</button>
+  </div>
+</div>
+</div>
+<script>
+(function() {
+  var PW = 512;
+  var PH = 300;
+  var BRUSH_COLORS = {
+    black: 'rgba(0,0,0,1)', gray: 'rgba(70,70,70,1)',
+    white: 'rgba(220,220,220,1)', green: 'rgba(35,55,40,1)'
+  };
+  var sceneId = '', peekCfg = null;
+  var imgNat = { w: 0, h: 0 }, imgDisplay = { w: 0, h: 0, left: 0, top: 0 };
+  var pad = document.createElement('canvas');
+  pad.width = PW; pad.height = PH;
+  var pctx = pad.getContext('2d');
+  var hasPaint = false, erase = false, painting = false, lastPt = null, undoStack = [];
+  var savedShadowImage = '';
+  var statusEl = document.getElementById('status');
+  var btnSave = document.getElementById('btnSave');
+  var overlay = document.getElementById('paintOverlay');
+  var octx = overlay.getContext('2d');
+  var shadowDisplay = document.getElementById('shadowDisplay');
+
+  function setStatus(msg, ok) {
+    statusEl.textContent = msg;
+    statusEl.className = ok === true ? 'ok' : (ok === false ? 'bad' : '');
+  }
+  function showEmptyGuide(show) {
+    document.getElementById('emptyGuide').style.display = show ? 'block' : 'none';
+    document.querySelector('.layout').style.display = show ? 'none' : 'flex';
+  }
+  function brushSize() { return +document.getElementById('brushSize').value; }
+  function shadowOpacity() { return Math.max(0.01, +document.getElementById('opacity').value / 100); }
+  function shadowBlurPx() { return Math.max(0, +document.getElementById('blurPx').value); }
+  function cfgFromUi() {
+    return { opacity: shadowOpacity(), blurPx: shadowBlurPx() };
+  }
+  function applyCfg(cfg) {
+    cfg = cfg || {};
+    document.getElementById('opacity').value = Math.round((cfg.opacity != null ? cfg.opacity : 0.35) * 100);
+    document.getElementById('blurPx').value = cfg.blurPx != null ? cfg.blurPx : 4;
+    updateLabels();
+  }
+  function updateLabels() {
+    document.getElementById('v_brushSize').textContent = document.getElementById('brushSize').value;
+    document.getElementById('v_opacity').textContent = shadowOpacity().toFixed(2);
+    document.getElementById('v_blurPx').textContent = document.getElementById('blurPx').value;
+  }
+  function paintDataUrl() {
+    if (!hasPaint) return '';
+    try { return pad.toDataURL('image/png'); } catch (e) { return ''; }
+  }
+  function resizePadForImage() {
+    if (!imgNat.w || !imgNat.h) return;
+    PH = Math.max(120, Math.round(PW * imgNat.h / imgNat.w));
+    pad.width = PW;
+    pad.height = PH;
+    pctx = pad.getContext('2d');
+  }
+  function layoutPhotoInStage() {
+    var stage = document.getElementById('photoStage');
+    var img = document.getElementById('eosImg');
+    if (!imgNat.w || !stage) return;
+    var sw = stage.clientWidth, sh = stage.clientHeight;
+    var scale = Math.min(sw / imgNat.w, sh / imgNat.h);
+    var dw = imgNat.w * scale, dh = imgNat.h * scale;
+    imgDisplay.w = dw; imgDisplay.h = dh;
+    imgDisplay.left = (sw - dw) / 2;
+    imgDisplay.top = (sh - dh) / 2;
+    img.style.width = dw + 'px';
+    img.style.height = dh + 'px';
+    shadowDisplay.width = Math.max(1, Math.floor(dw));
+    shadowDisplay.height = Math.max(1, Math.floor(dh));
+    shadowDisplay.style.left = (imgDisplay.left + dw / 2) + 'px';
+    shadowDisplay.style.top = (imgDisplay.top + dh / 2) + 'px';
+    shadowDisplay.style.width = dw + 'px';
+    shadowDisplay.style.height = dh + 'px';
+    overlay.width = stage.clientWidth;
+    overlay.height = stage.clientHeight;
+    layoutVideoBox();
+    refreshShadowDisplay();
+  }
+  function layoutVideoBox() {
+    var box = document.getElementById('videoBox');
+    var vid = document.getElementById('previewVideo');
+    var p = peekCfg || {};
+    if (!p.videoSrc && !vid.src) { box.classList.add('hidden'); return; }
+    box.classList.remove('hidden');
+    var iw = imgDisplay.w || 1, ih = imgDisplay.h || 1;
+    var wPct = p.videoWidth != null ? p.videoWidth : 18;
+    var xPct = p.videoX != null ? p.videoX : 50;
+    var yPct = p.videoY != null ? p.videoY : 50;
+    var w = iw * wPct / 100;
+    var ar = vid.videoWidth > 0 ? vid.videoHeight / vid.videoWidth : 1.35;
+    var h = w * ar;
+    box.style.width = w + 'px';
+    box.style.height = h + 'px';
+    box.style.left = (imgDisplay.left + iw * xPct / 100 - w / 2) + 'px';
+    box.style.top = (imgDisplay.top + ih * yPct / 100 - h / 2) + 'px';
+    vid.className = p.videoMatte === 'none' ? 'matte-none' : '';
+  }
+  function refreshShadowDisplay() {
+    var ctx = shadowDisplay.getContext('2d');
+    ctx.clearRect(0, 0, shadowDisplay.width, shadowDisplay.height);
+    if (!hasPaint) return;
+    ctx.save();
+    ctx.globalAlpha = shadowOpacity();
+    var blur = shadowBlurPx();
+    if (blur > 0) ctx.filter = 'blur(' + blur + 'px)';
+    ctx.drawImage(pad, 0, 0, shadowDisplay.width, shadowDisplay.height);
+    ctx.restore();
+  }
+  function padFromOverlay(cx, cy) {
+    var r = overlay.getBoundingClientRect();
+    var lx = cx - r.left - imgDisplay.left;
+    var ly = cy - r.top - imgDisplay.top;
+    var iw = imgDisplay.w || 1, ih = imgDisplay.h || 1;
+    if (lx < 0 || ly < 0 || lx > iw || ly > ih) return null;
+    return { x: lx / iw * PW, y: ly / ih * PH };
+  }
+  function pushUndo() {
+    try {
+      undoStack.push(pctx.getImageData(0, 0, PW, PH));
+      if (undoStack.length > 50) undoStack.shift();
+    } catch (e) {}
+  }
+  function dab(x, y) {
+    var sz = brushSize() * (PW / Math.max(1, imgDisplay.w));
+    if (erase) {
+      pctx.globalCompositeOperation = 'destination-out';
+      pctx.fillStyle = 'rgba(0,0,0,1)';
+    } else {
+      pctx.globalCompositeOperation = 'source-over';
+      pctx.fillStyle = BRUSH_COLORS[brushColor] || BRUSH_COLORS.black;
+    }
+    pctx.beginPath();
+    pctx.arc(x, y, Math.max(2, sz), 0, Math.PI * 2);
+    pctx.fill();
+    pctx.globalCompositeOperation = 'source-over';
+    hasPaint = true;
+    btnSave.disabled = false;
+  }
+  function stroke(x0, y0, x1, y1) {
+    var dx = x1 - x0, dy = y1 - y0, d = Math.sqrt(dx * dx + dy * dy);
+    var sz = brushSize() * (PW / Math.max(1, imgDisplay.w));
+    var step = Math.max(2, sz * 0.35);
+    var n = Math.max(1, Math.ceil(d / step));
+    for (var i = 0; i <= n; i++) {
+      var t = i / n;
+      dab(x0 + dx * t, y0 + dy * t);
+    }
+  }
+  var brushColor = 'black';
+  function paintAt(cx, cy) {
+    var p = padFromOverlay(cx, cy);
+    if (!p) return false;
+    if (lastPt) stroke(lastPt.x, lastPt.y, p.x, p.y);
+    else dab(p.x, p.y);
+    lastPt = p;
+    refreshShadowDisplay();
+    return true;
+  }
+  function bindPaint() {
+    function down(e) {
+      e.preventDefault();
+      pushUndo();
+      painting = true;
+      lastPt = null;
+      var cx = e.clientX != null ? e.clientX : e.touches[0].clientX;
+      var cy = e.clientY != null ? e.clientY : e.touches[0].clientY;
+      paintAt(cx, cy);
+      setStatus('影を描いています…', true);
+    }
+    function move(e) {
+      if (!painting) return;
+      e.preventDefault();
+      var cx = e.clientX != null ? e.clientX : e.touches[0].clientX;
+      var cy = e.clientY != null ? e.clientY : e.touches[0].clientY;
+      paintAt(cx, cy);
+    }
+    function up() {
+      if (!painting) return;
+      painting = false;
+      lastPt = null;
+      setStatus('保存する を押すと data.js に書き込みます', true);
+    }
+    overlay.addEventListener('mousedown', down);
+    overlay.addEventListener('mousemove', move);
+    window.addEventListener('mouseup', up);
+    overlay.addEventListener('touchstart', down, { passive: false });
+    overlay.addEventListener('touchmove', move, { passive: false });
+    window.addEventListener('touchend', up);
+  }
+  function loadPreviewVideo(src) {
+    if (!src) return;
+    var vid = document.getElementById('previewVideo');
+    vid.src = '../' + src + '?t=' + Date.now();
+    vid.onloadedmetadata = function() { layoutVideoBox(); vid.play().catch(function(){}); };
+  }
+  function loadScene(sid) {
+    sceneId = sid;
+    showEmptyGuide(false);
+    return fetch('/api/hi-res-peek?scene=' + encodeURIComponent(sid) + '&_=' + Date.now())
+      .then(function(r) { return r.json(); })
+      .then(function(j) {
+        if (!j.ok || !j.hiResPeek) throw new Error(j.error || 'hiResPeek なし');
+        peekCfg = j.hiResPeek;
+        applyCfg(peekCfg.footShadowConfig);
+        savedShadowImage = peekCfg.footShadowImage || '';
+        hasPaint = false;
+        undoStack = [];
+        pctx.clearRect(0, 0, PW, PH);
+        resizePadForImage();
+        var img = document.getElementById('eosImg');
+        img.hidden = false;
+        img.onload = function() {
+          imgNat.w = img.naturalWidth;
+          imgNat.h = img.naturalHeight;
+          resizePadForImage();
+          layoutPhotoInStage();
+          if (savedShadowImage) {
+            var im = new Image();
+            im.onload = function() {
+              pctx.drawImage(im, 0, 0, PW, PH);
+              hasPaint = true;
+              btnSave.disabled = false;
+              pushUndo();
+              refreshShadowDisplay();
+            };
+            im.src = '../' + savedShadowImage + '?t=' + Date.now();
+          }
+        };
+        img.onerror = function() { setStatus('EOS画像が見つかりません: ' + peekCfg.imageSrc, false); };
+        img.src = '../' + peekCfg.imageSrc + '?t=' + Date.now();
+        loadPreviewVideo(peekCfg.videoSrc);
+        setStatus('EOS写真をなぞって影を塗ってください', true);
+      });
+  }
+  document.getElementById('sceneSel').onchange = function() {
+    loadScene(this.value).catch(function(e) { setStatus(e.message, false); });
+  };
+  document.getElementById('colorRow').onclick = function(ev) {
+    var btn = ev.target.closest('button[data-color]');
+    if (!btn) return;
+    brushColor = btn.getAttribute('data-color') || 'black';
+    document.querySelectorAll('#colorRow button').forEach(function(b) { b.classList.toggle('on', b === btn); });
+  };
+  document.getElementById('btnErase').onclick = function() {
+    erase = !erase;
+    this.classList.toggle('on', erase);
+    overlay.classList.toggle('erase', erase);
+  };
+  document.getElementById('btnUndo').onclick = function() {
+    if (!undoStack.length) { setStatus('戻せる操作がありません', false); return; }
+    pctx.putImageData(undoStack.pop(), 0, 0);
+    hasPaint = undoStack.length > 0;
+    if (!hasPaint) {
+      var d = pctx.getImageData(0, 0, PW, PH), i, any = false;
+      for (i = 3; i < d.data.length; i += 4) { if (d.data[i] > 8) { any = true; break; } }
+      hasPaint = any;
+    }
+    btnSave.disabled = !hasPaint;
+    refreshShadowDisplay();
+    setStatus('1手戻しました', true);
+  };
+  document.querySelectorAll('input[type=range]').forEach(function(inp) {
+    inp.oninput = function() { updateLabels(); refreshShadowDisplay(); };
+  });
+  document.getElementById('btnOpen').onclick = function() {
+    window.open('../viewer.html?id=' + encodeURIComponent(sceneId), '_blank');
+  };
+  document.getElementById('btnDelete').onclick = function() {
+    if (!confirm('このシーンの EOS 影を削除しますか？')) return;
+    fetch('/api/save-hi-res-peek-shadow', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sceneId: sceneId, footShadow: false })
+    }).then(function(r) { return r.json(); }).then(function(j) {
+      if (!j.ok) throw new Error(j.error || '失敗');
+      savedShadowImage = '';
+      hasPaint = false;
+      undoStack = [];
+      pctx.clearRect(0, 0, PW, PH);
+      btnSave.disabled = true;
+      refreshShadowDisplay();
+      setStatus('影を削除しました。viewer で Ctrl+F5', true);
+    }).catch(function(e) { setStatus(e.message, false); });
+  };
+  document.getElementById('btnSave').onclick = function() {
+    var data = paintDataUrl();
+    if (!data) { setStatus('先に影を塗ってください', false); return; }
+    setStatus('保存中…', null);
+    fetch('/api/upload-hi-res-peek-shadow-image', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sceneId: sceneId, dataBase64: data, filename: 'eos_foot.png' })
+    }).then(function(r) { return r.json(); }).then(function(j) {
+      if (!j.ok) throw new Error(j.error || '画像保存失敗');
+      return fetch('/api/save-hi-res-peek-shadow', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sceneId: sceneId, footShadow: true,
+          footShadowImage: j.footShadowImage, footShadowConfig: cfgFromUi()
+        })
+      });
+    }).then(function(r) { return r.json(); }).then(function(j) {
+      if (!j.ok) throw new Error(j.error || '失敗');
+      savedShadowImage = j.hiResPeek && j.hiResPeek.footShadowImage || '';
+      setStatus('保存しました。viewer で Ctrl+F5', true);
+    }).catch(function(e) { setStatus(e.message, false); });
+  };
+  bindPaint();
+  window.addEventListener('resize', layoutPhotoInStage);
+  fetch('/api/hi-res-peek-scenes?_=' + Date.now()).then(function(r) { return r.json(); }).then(function(j) {
+    var sel = document.getElementById('sceneSel');
+    (j.scenes || []).forEach(function(s) {
+      var o = document.createElement('option');
+      o.value = s.id;
+      o.textContent = s.label || s.id;
+      sel.appendChild(o);
+    });
+    if (!sel.options.length) {
+      showEmptyGuide(true);
+      setStatus('EOS写真のあるシーンがありません', false);
+      return;
+    }
+    return loadScene(sel.value);
+  }).catch(function(e) {
+    setStatus('EOS影設定_起動.vbs で開いてください: ' + e.message, false);
+  });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<title>EOS影設定</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#141820;color:#f0f0f0;font-family:'Meiryo','Segoe UI',sans-serif;height:100vh;display:flex;flex-direction:column;overflow:hidden;font-size:16px}
+header{padding:12px 16px;background:#0e1218;border-bottom:2px solid #f5c518;flex-shrink:0}
+header h1{font-size:22px;color:#f5c518;font-weight:700}
+#stepHint{margin-top:10px;padding:12px 16px;border-radius:6px;font-size:16px;line-height:1.65;background:#1a2430;border:1px solid #4a5a6a;color:#d8e4f0}
+#status{margin-top:10px;padding:10px 12px;border-radius:4px;font-size:16px;background:#0a1520;border:1px solid #3a5a70;line-height:1.55}
+#status.ok{border-color:#3a9a5a;color:#d4ffd4;background:#0a2018}
+#status.bad{border-color:#cc4444;color:#ffe0e0;background:#280a10}
+#emptyGuide{margin-top:10px;padding:14px 16px;border-radius:8px;font-size:16px;line-height:1.7;background:#2a2210;border:2px solid #c8a030;color:#fff4d0;display:none}
+.layout{display:flex;flex:1;min-height:0}
+.sb{width:420px;min-width:400px;background:#121820;border-right:1px solid #3a4a5a;overflow-y:auto;padding:14px;flex-shrink:0}
+.previewBox{flex:1;display:flex;flex-direction:column;min-width:0;background:#000;position:relative;padding:12px}
+#photoViewport{position:relative;flex:1;min-height:320px;background:#111;border:1px solid #404870;border-radius:8px;overflow:hidden;touch-action:none}
+#photoViewport.is-panning{cursor:grabbing}
+#photoStageInner{position:absolute;left:50%;top:50%;transform-origin:center center}
+#eosImg{display:block;width:100%;height:100%;pointer-events:none;user-select:none}
+#shadowDisplay{position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none}
+#videoBox{position:absolute;border:1px dashed rgba(245,197,24,0.35);pointer-events:none;overflow:hidden}
+#previewVideo{display:block;width:100%;height:100%;object-fit:contain;mix-blend-mode:lighten}
+#previewVideo.matte-none{mix-blend-mode:normal}
+#paintOverlay{position:absolute;inset:0;z-index:10;cursor:crosshair;touch-action:none}
+#paintOverlay.panMode{pointer-events:none;cursor:default}
+#paintOverlay.erase{cursor:cell}
+.viewBar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:0 0 8px;flex-shrink:0}
+.viewBar button{padding:10px 16px;border-radius:6px;border:2px solid #5a8a6a;background:rgba(10,20,16,0.9);color:#e0ffe8;font-size:16px;cursor:pointer;font-weight:600}
+.viewBar button.on{background:#2a6a4a;border-color:#8ae0a8}
+.viewBar label{font-size:16px;color:#f0f0f0;margin-left:8px}
+.viewBar input[type=range]{width:140px;height:28px;vertical-align:middle}
+.bar{padding:10px 0 0;display:flex;gap:10px;flex-wrap:wrap;flex-shrink:0}
+.bar button{padding:14px 20px;border-radius:6px;border:none;background:#f5c518;color:#111;font-size:18px;cursor:pointer;font-weight:600}
+.bar button.sec{background:#1e2a38;border:1px solid #4a5a6a;color:#f0f0f0;font-size:16px;padding:12px 16px}
+.bar button:disabled{opacity:.4}
+.sec{margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid #2a3545}
+.sec h2{font-size:17px;color:#f5c518;margin-bottom:10px;font-weight:700}
+.row{margin:9px 0}
+.row label{display:flex;justify-content:space-between;font-size:16px;margin-bottom:5px;color:#f0f0f0}
+.row input[type=range]{width:100%;height:32px}
+select.sel{width:100%;padding:10px;background:#1e2a38;border:1px solid #4a5a6a;color:#fff;font-size:16px}
+.toolRow{display:flex;gap:10px;flex-wrap:wrap;margin:10px 0}
+.toolRow button{padding:12px 16px;font-size:16px;border-radius:6px;border:1px solid #5a6a7a;background:#243040;color:#fff;cursor:pointer}
+.toolRow button.on{background:#3a6a9a}
+.colorRow{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 6px}
+.colorRow button{width:48px;height:36px;border-radius:6px;border:2px solid #5a6a7a;cursor:pointer;padding:0}
+.colorRow button.on{border-color:#fff;box-shadow:0 0 0 2px #f5c518}
+#maskPreviewWrap{border:2px solid #4a6a5a;border-radius:6px;background:#b0bab0;margin-top:8px}
+#maskPreview{display:block;width:100%;height:auto}
+.note{font-size:15px;color:#b0c0d0;margin-top:8px;line-height:1.55}
+</style>
+</head>
+<body>
+<header>
+  <h1>EOS影設定（虫眼鏡写真の影）</h1>
+  <div id="stepHint">
+    虫眼鏡の <strong>EOS写真</strong> 上に地面の影を塗ります。動画キャラ（妖精など）の<strong>体の上には影が付きません</strong>（VR人物の影設定と同じ仕組み）。
+    小さいキャラは<strong>拡大スライダー</strong>かマウスホイールで拡大してから塗ってください。
+  </div>
+  <div id="emptyGuide">
+    <strong>EOS写真のあるシーンがありません。</strong><br>
+    先に <strong>高画質覗き設定.html</strong> と <strong>EOS動画重ね.html</strong> を設定してください。
+  </div>
+  <div id="status">起動中…</div>
+</header>
+<div class="layout">
+<div class="sb">
+  <div class="sec"><h2>シーン</h2><select id="sceneSel" class="sel"></select></div>
+  <div class="sec">
+    <h2>ブラシ</h2>
+    <div class="toolRow">
+      <button type="button" id="btnErase">消しゴム</button>
+      <button type="button" id="btnUndo">元に戻す</button>
+    </div>
+    <p class="note">筆の色</p>
+    <div class="colorRow" id="colorRow">
+      <button type="button" class="on" data-color="black" title="黒" style="background:#000"></button>
+      <button type="button" data-color="gray" title="グレー" style="background:#505050"></button>
+      <button type="button" data-color="white" title="白" style="background:#e8e8e8"></button>
+      <button type="button" data-color="green" title="暗緑" style="background:#2a4030"></button>
+    </div>
+    <div class="row"><label>筆の太さ <span id="v_brushSize">14</span></label>
+      <input type="range" id="brushSize" min="2" max="40" step="1" value="14"></div>
+    <p class="note">白い枠＝動画キャラ（ここには影が付きません）。足元の地面だけなぞってください。</p>
+    <div id="maskPreviewWrap"><canvas id="maskPreview" width="512" height="120"></canvas></div>
+  </div>
+  <div class="sec">
+    <h2>見え方</h2>
+    <div class="row"><label>濃さ <span id="v_opacity">0.35</span></label>
+      <input type="range" id="opacity" min="1" max="100" value="35"></div>
+    <div class="row"><label>ぼかし <span id="v_blurPx">4</span>px</label>
+      <input type="range" id="blurPx" min="0" max="30" value="4"></div>
+  </div>
+</div>
+<div class="previewBox">
+  <div class="viewBar">
+    <button type="button" id="btnPaintMode" class="on">影を塗る</button>
+    <button type="button" id="btnPanMode">画面を動かす</button>
+    <label>拡大 <span id="v_zoom">100</span>%</label>
+    <input type="range" id="zoomSlider" min="100" max="600" step="5" value="100">
+  </div>
+  <div id="photoViewport">
+    <div id="photoStageInner">
+      <img id="eosImg" alt="" hidden>
+      <canvas id="shadowDisplay"></canvas>
+      <div id="videoBox" class="hidden"><video id="previewVideo" playsinline muted loop></video></div>
+    </div>
+    <canvas id="paintOverlay"></canvas>
+  </div>
+  <div class="bar">
+    <button type="button" id="btnSave" disabled>保存する</button>
+    <button type="button" class="sec" id="btnDelete">影を削除</button>
+    <button type="button" class="sec" id="btnResetView">表示をリセット</button>
+    <button type="button" class="sec" id="btnOpen">viewer</button>
+  </div>
+</div>
+</div>
+<script>
+(function() {
+  var PW = 512, PH = 300, MASK_INSET = 1;
+  var BRUSH_COLORS = {
+    black: 'rgba(0,0,0,1)', gray: 'rgba(70,70,70,1)',
+    white: 'rgba(220,220,220,1)', green: 'rgba(35,55,40,1)'
+  };
+  var sceneId = '', peekCfg = null, brushColor = 'black';
+  var imgNat = { w: 0, h: 0 }, fitSize = { w: 0, h: 0 };
+  var pad = document.createElement('canvas');
+  pad.width = PW; pad.height = PH;
+  var pctx = pad.getContext('2d');
+  var personMaskPad = null, personMaskPadCtx = null;
+  var maskFrameCanvas = document.createElement('canvas');
+  var maskFrameCtx = maskFrameCanvas.getContext('2d');
+  var hasPaint = false, erase = false, painting = false, lastPt = null, undoStack = [];
+  var savedShadowImage = '', panMode = false, panDrag = null;
+  var viewState = { zoom: 1, panX: 0, panY: 0 };
+  var statusEl = document.getElementById('status');
+  var btnSave = document.getElementById('btnSave');
+  var overlay = document.getElementById('paintOverlay');
+  var viewport = document.getElementById('photoViewport');
+  var shadowDisplay = document.getElementById('shadowDisplay');
+  var maskPreview = document.getElementById('maskPreview');
+  var maskPreviewCtx = maskPreview.getContext('2d');
+
+  function setStatus(msg, ok) {
+    statusEl.textContent = msg;
+    statusEl.className = ok === true ? 'ok' : (ok === false ? 'bad' : '');
+  }
+  function showEmptyGuide(show) {
+    document.getElementById('emptyGuide').style.display = show ? 'block' : 'none';
+    document.querySelector('.layout').style.display = show ? 'none' : 'flex';
+  }
+  function brushSize() { return +document.getElementById('brushSize').value; }
+  function shadowOpacity() { return Math.max(0.01, +document.getElementById('opacity').value / 100); }
+  function shadowBlurPx() { return Math.max(0, +document.getElementById('blurPx').value); }
+  function cfgFromUi() { return { opacity: shadowOpacity(), blurPx: shadowBlurPx() }; }
+  function applyCfg(cfg) {
+    cfg = cfg || {};
+    document.getElementById('opacity').value = Math.round((cfg.opacity != null ? cfg.opacity : 0.35) * 100);
+    document.getElementById('blurPx').value = cfg.blurPx != null ? cfg.blurPx : 4;
+    updateLabels();
+  }
+  function updateLabels() {
+    document.getElementById('v_brushSize').textContent = document.getElementById('brushSize').value;
+    document.getElementById('v_opacity').textContent = shadowOpacity().toFixed(2);
+    document.getElementById('v_blurPx').textContent = document.getElementById('blurPx').value;
+    document.getElementById('v_zoom').textContent = Math.round(viewState.zoom * 100);
+    document.getElementById('zoomSlider').value = Math.round(viewState.zoom * 100);
+  }
+  function paintDataUrl() {
+    if (!hasPaint) return '';
+    try { return pad.toDataURL('image/png'); } catch (e) { return ''; }
+  }
+  function resizePadForImage() {
+    if (!imgNat.w || !imgNat.h) return;
+    PH = Math.max(120, Math.round(PW * imgNat.h / imgNat.w));
+    pad.width = PW; pad.height = PH;
+    pctx = pad.getContext('2d');
+    if (!personMaskPad) {
+      personMaskPad = document.createElement('canvas');
+      personMaskPadCtx = personMaskPad.getContext('2d');
+    }
+    personMaskPad.width = PW;
+    personMaskPad.height = PH;
+  }
+  function videoRectOnPad() {
+    var p = peekCfg || {};
+    var vid = document.getElementById('previewVideo');
+    var wPct = p.videoWidth != null ? p.videoWidth : 18;
+    var xPct = p.videoX != null ? p.videoX : 50;
+    var yPct = p.videoY != null ? p.videoY : 50;
+    var gw = PW * wPct / 100;
+    var ar = vid && vid.videoWidth > 0 ? vid.videoHeight / vid.videoWidth : 1.35;
+    var gh = gw * ar;
+    return {
+      x: PW * xPct / 100 - gw / 2,
+      y: PH * yPct / 100 - gh / 2,
+      w: gw, h: gh
+    };
+  }
+  function rebuildCharacterMaskPad() {
+    var vid = document.getElementById('previewVideo');
+    if (!vid || vid.readyState < 2 || !vid.videoWidth || !personMaskPadCtx) return false;
+    var vr = videoRectOnPad();
+    maskFrameCanvas.width = vid.videoWidth;
+    maskFrameCanvas.height = vid.videoHeight;
+    maskFrameCtx.drawImage(vid, 0, 0);
+    var id = maskFrameCtx.getImageData(0, 0, maskFrameCanvas.width, maskFrameCanvas.height);
+    var matteNone = peekCfg && peekCfg.videoMatte === 'none';
+    var thr = matteNone ? 8 : 24;
+    var i, lum, a;
+    for (i = 0; i < id.data.length; i += 4) {
+      if (matteNone) {
+        a = id.data[i + 3];
+      } else {
+        lum = Math.max(id.data[i], id.data[i + 1], id.data[i + 2]);
+        a = lum > thr ? 255 : 0;
+      }
+      id.data[i] = 255;
+      id.data[i + 1] = 255;
+      id.data[i + 2] = 255;
+      id.data[i + 3] = a > 20 ? 255 : 0;
+    }
+    maskFrameCtx.putImageData(id, 0, 0);
+    personMaskPadCtx.clearRect(0, 0, PW, PH);
+    var inset = MASK_INSET;
+    personMaskPadCtx.drawImage(
+      maskFrameCanvas, 0, 0, maskFrameCanvas.width, maskFrameCanvas.height,
+      vr.x + inset, vr.y + inset,
+      Math.max(4, vr.w - inset * 2), Math.max(4, vr.h - inset * 2)
+    );
+    refreshMaskPreview();
+    return true;
+  }
+  function refreshMaskPreview() {
+    if (!personMaskPad) return;
+    var mh = Math.max(60, Math.round(120 * PH / PW));
+    maskPreview.height = mh;
+    maskPreviewCtx.fillStyle = '#b0bab0';
+    maskPreviewCtx.fillRect(0, 0, maskPreview.width, maskPreview.height);
+    maskPreviewCtx.drawImage(personMaskPad, 0, 0, maskPreview.width, maskPreview.height);
+  }
+  function eraseCharacterFromPad() {
+    if (!personMaskPadCtx) return;
+    pctx.save();
+    pctx.globalCompositeOperation = 'destination-out';
+    pctx.drawImage(personMaskPad, 0, 0);
+    pctx.restore();
+    var d = pctx.getImageData(0, 0, PW, PH);
+    var i, any = false;
+    for (i = 3; i < d.data.length; i += 4) {
+      if (d.data[i] > 8) { any = true; break; }
+    }
+    hasPaint = any;
+    btnSave.disabled = !hasPaint;
+  }
+  function applyViewTransform() {
+    var inner = document.getElementById('photoStageInner');
+    inner.style.transform = 'translate(calc(-50% + ' + viewState.panX + 'px), calc(-50% + ' + viewState.panY + 'px)) scale(' + viewState.zoom + ')';
+  }
+  function layoutPhotoInStage() {
+    var vp = viewport;
+    var inner = document.getElementById('photoStageInner');
+    var img = document.getElementById('eosImg');
+    if (!imgNat.w || !vp) return;
+    var sw = vp.clientWidth, sh = vp.clientHeight;
+    var scale = Math.min(sw / imgNat.w, sh / imgNat.h);
+    fitSize.w = imgNat.w * scale;
+    fitSize.h = imgNat.h * scale;
+    inner.style.width = fitSize.w + 'px';
+    inner.style.height = fitSize.h + 'px';
+    img.style.width = '100%';
+    img.style.height = '100%';
+    shadowDisplay.width = Math.max(1, Math.floor(fitSize.w));
+    shadowDisplay.height = Math.max(1, Math.floor(fitSize.h));
+    overlay.width = sw;
+    overlay.height = sh;
+    layoutVideoBox();
+    applyViewTransform();
+    refreshShadowDisplay();
+  }
+  function layoutVideoBox() {
+    var box = document.getElementById('videoBox');
+    var vid = document.getElementById('previewVideo');
+    var p = peekCfg || {};
+    if (!p.videoSrc && !vid.src) { box.classList.add('hidden'); return; }
+    box.classList.remove('hidden');
+    var vr = videoRectOnPad();
+    box.style.left = (vr.x / PW * 100) + '%';
+    box.style.top = (vr.y / PH * 100) + '%';
+    box.style.width = (vr.w / PW * 100) + '%';
+    box.style.height = (vr.h / PH * 100) + '%';
+    vid.className = p.videoMatte === 'none' ? 'matte-none' : '';
+  }
+  function refreshShadowDisplay() {
+    var ctx = shadowDisplay.getContext('2d');
+    ctx.clearRect(0, 0, shadowDisplay.width, shadowDisplay.height);
+    if (!hasPaint) return;
+    var tmp = document.createElement('canvas');
+    tmp.width = shadowDisplay.width;
+    tmp.height = shadowDisplay.height;
+    var tctx = tmp.getContext('2d');
+    tctx.drawImage(pad, 0, 0, tmp.width, tmp.height);
+    if (personMaskPad) {
+      tctx.save();
+      tctx.globalCompositeOperation = 'destination-out';
+      tctx.drawImage(personMaskPad, 0, 0, tmp.width, tmp.height);
+      tctx.restore();
+    }
+    ctx.save();
+    ctx.globalAlpha = shadowOpacity();
+    var blur = shadowBlurPx();
+    if (blur > 0) ctx.filter = 'blur(' + blur + 'px)';
+    ctx.drawImage(tmp, 0, 0);
+    ctx.restore();
+  }
+  function innerRect() {
+    return document.getElementById('photoStageInner').getBoundingClientRect();
+  }
+  function padFromClient(cx, cy) {
+    var r = innerRect();
+    if (r.width < 2 || r.height < 2) return null;
+    var lx = cx - r.left, ly = cy - r.top;
+    if (lx < 0 || ly < 0 || lx > r.width || ly > r.height) return null;
+    return { x: lx / r.width * PW, y: ly / r.height * PH };
+  }
+  function pushUndo() {
+    try {
+      undoStack.push(pctx.getImageData(0, 0, PW, PH));
+      if (undoStack.length > 50) undoStack.shift();
+    } catch (e) {}
+  }
+  function dab(x, y) {
+    var r = innerRect();
+    var sz = brushSize() * (PW / Math.max(1, r.width));
+    if (erase) {
+      pctx.globalCompositeOperation = 'destination-out';
+      pctx.fillStyle = 'rgba(0,0,0,1)';
+    } else {
+      pctx.globalCompositeOperation = 'source-over';
+      pctx.fillStyle = BRUSH_COLORS[brushColor] || BRUSH_COLORS.black;
+    }
+    pctx.beginPath();
+    pctx.arc(x, y, Math.max(2, sz), 0, Math.PI * 2);
+    pctx.fill();
+    pctx.globalCompositeOperation = 'source-over';
+    hasPaint = true;
+    btnSave.disabled = false;
+  }
+  function stroke(x0, y0, x1, y1) {
+    var dx = x1 - x0, dy = y1 - y0, d = Math.sqrt(dx * dx + dy * dy);
+    var r = innerRect();
+    var sz = brushSize() * (PW / Math.max(1, r.width));
+    var step = Math.max(2, sz * 0.35);
+    var n = Math.max(1, Math.ceil(d / step));
+    for (var i = 0; i <= n; i++) {
+      var t = i / n;
+      dab(x0 + dx * t, y0 + dy * t);
+    }
+  }
+  function paintAt(cx, cy) {
+    var p = padFromClient(cx, cy);
+    if (!p) return false;
+    if (lastPt) stroke(lastPt.x, lastPt.y, p.x, p.y);
+    else dab(p.x, p.y);
+    lastPt = p;
+    refreshShadowDisplay();
+    return true;
+  }
+  function setPanMode(on) {
+    panMode = on;
+    document.getElementById('btnPaintMode').classList.toggle('on', !on);
+    document.getElementById('btnPanMode').classList.toggle('on', on);
+    overlay.classList.toggle('panMode', on);
+    viewport.style.cursor = on ? 'grab' : '';
+    setStatus(on ? 'ドラッグで移動／ホイールで拡大' : '足元の地面をなぞって影を塗る', true);
+  }
+  function setZoom(nextZoom, anchorX, anchorY) {
+    var z0 = viewState.zoom;
+    var z1 = Math.max(1, Math.min(6, nextZoom));
+    if (Math.abs(z1 - z0) < 0.001) return;
+    var vp = viewport.getBoundingClientRect();
+    var cx = anchorX != null ? anchorX : vp.left + vp.width / 2;
+    var cy = anchorY != null ? anchorY : vp.top + vp.height / 2;
+    var vx = cx - vp.left - vp.width / 2 - viewState.panX;
+    var vy = cy - vp.top - vp.height / 2 - viewState.panY;
+    viewState.zoom = z1;
+    viewState.panX = cx - vp.left - vp.width / 2 - vx * (z1 / z0);
+    viewState.panY = cy - vp.top - vp.height / 2 - vy * (z1 / z0);
+    applyViewTransform();
+    updateLabels();
+  }
+  function resetView() {
+    viewState.zoom = 1;
+    viewState.panX = 0;
+    viewState.panY = 0;
+    applyViewTransform();
+    updateLabels();
+  }
+  function bindInteraction() {
+    overlay.addEventListener('mousedown', function(e) {
+      if (panMode) return;
+      e.preventDefault();
+      pushUndo();
+      painting = true;
+      lastPt = null;
+      paintAt(e.clientX, e.clientY);
+      setStatus('影を描いています…', true);
+    });
+    overlay.addEventListener('mousemove', function(e) {
+      if (!painting || panMode) return;
+      e.preventDefault();
+      paintAt(e.clientX, e.clientY);
+    });
+    window.addEventListener('mouseup', function() {
+      if (!painting) return;
+      painting = false;
+      lastPt = null;
+      rebuildCharacterMaskPad();
+      eraseCharacterFromPad();
+      refreshShadowDisplay();
+      setStatus('キャラの上には影が付きません。保存する で確定', true);
+    });
+    overlay.addEventListener('touchstart', function(e) {
+      if (panMode) return;
+      e.preventDefault();
+      pushUndo();
+      painting = true;
+      lastPt = null;
+      paintAt(e.touches[0].clientX, e.touches[0].clientY);
+    }, { passive: false });
+    overlay.addEventListener('touchmove', function(e) {
+      if (!painting || panMode) return;
+      e.preventDefault();
+      paintAt(e.touches[0].clientX, e.touches[0].clientY);
+    }, { passive: false });
+    window.addEventListener('touchend', function() {
+      if (!painting) return;
+      painting = false;
+      lastPt = null;
+      rebuildCharacterMaskPad();
+      eraseCharacterFromPad();
+      refreshShadowDisplay();
+    });
+    viewport.addEventListener('mousedown', function(e) {
+      if (!panMode || e.button !== 0) return;
+      panDrag = { x0: e.clientX, y0: e.clientY, panX: viewState.panX, panY: viewState.panY };
+      viewport.classList.add('is-panning');
+      e.preventDefault();
+    });
+    window.addEventListener('mousemove', function(e) {
+      if (!panDrag) return;
+      viewState.panX = panDrag.panX + (e.clientX - panDrag.x0);
+      viewState.panY = panDrag.panY + (e.clientY - panDrag.y0);
+      applyViewTransform();
+    });
+    window.addEventListener('mouseup', function() {
+      if (panDrag) {
+        panDrag = null;
+        viewport.classList.remove('is-panning');
+      }
+    });
+    viewport.addEventListener('wheel', function(e) {
+      e.preventDefault();
+      var delta = e.deltaY > 0 ? -0.08 : 0.08;
+      setZoom(viewState.zoom + delta, e.clientX, e.clientY);
+    }, { passive: false });
+  }
+  function loadPreviewVideo(src) {
+    if (!src) return;
+    var vid = document.getElementById('previewVideo');
+    vid.src = '../' + src + '?t=' + Date.now();
+    function onReady() {
+      layoutVideoBox();
+      rebuildCharacterMaskPad();
+      vid.play().catch(function() {});
+    }
+    vid.onloadedmetadata = onReady;
+    vid.onloadeddata = onReady;
+    vid.addEventListener('seeked', function() { rebuildCharacterMaskPad(); refreshShadowDisplay(); });
+    setInterval(function() {
+      if (vid.readyState >= 2) rebuildCharacterMaskPad();
+    }, 800);
+  }
+  function loadScene(sid) {
+    sceneId = sid;
+    showEmptyGuide(false);
+    resetView();
+    return fetch('/api/hi-res-peek?scene=' + encodeURIComponent(sid) + '&_=' + Date.now())
+      .then(function(r) { return r.json(); })
+      .then(function(j) {
+        if (!j.ok || !j.hiResPeek) throw new Error(j.error || 'hiResPeek なし');
+        peekCfg = j.hiResPeek;
+        applyCfg(peekCfg.footShadowConfig);
+        savedShadowImage = peekCfg.footShadowImage || '';
+        hasPaint = false;
+        undoStack = [];
+        pctx.clearRect(0, 0, PW, PH);
+        resizePadForImage();
+        var img = document.getElementById('eosImg');
+        img.hidden = false;
+        img.onload = function() {
+          imgNat.w = img.naturalWidth;
+          imgNat.h = img.naturalHeight;
+          resizePadForImage();
+          layoutPhotoInStage();
+          if (savedShadowImage) {
+            var im = new Image();
+            im.onload = function() {
+              pctx.drawImage(im, 0, 0, PW, PH);
+              rebuildCharacterMaskPad();
+              eraseCharacterFromPad();
+              hasPaint = true;
+              btnSave.disabled = false;
+              pushUndo();
+              refreshShadowDisplay();
+            };
+            im.src = '../' + savedShadowImage + '?t=' + Date.now();
+          }
+        };
+        img.onerror = function() { setStatus('EOS画像が見つかりません: ' + peekCfg.imageSrc, false); };
+        img.src = '../' + peekCfg.imageSrc + '?t=' + Date.now();
+        loadPreviewVideo(peekCfg.videoSrc);
+        setStatus('拡大して足元の地面をなぞってください（キャラの上には付きません）', true);
+      });
+  }
+  document.getElementById('btnPaintMode').onclick = function() { setPanMode(false); };
+  document.getElementById('btnPanMode').onclick = function() { setPanMode(true); };
+  document.getElementById('zoomSlider').oninput = function() {
+    setZoom(+this.value / 100);
+  };
+  document.getElementById('btnResetView').onclick = resetView;
+  document.getElementById('sceneSel').onchange = function() {
+    loadScene(this.value).catch(function(e) { setStatus(e.message, false); });
+  };
+  document.getElementById('colorRow').onclick = function(ev) {
+    var btn = ev.target.closest('button[data-color]');
+    if (!btn) return;
+    brushColor = btn.getAttribute('data-color') || 'black';
+    document.querySelectorAll('#colorRow button').forEach(function(b) { b.classList.toggle('on', b === btn); });
+  };
+  document.getElementById('btnErase').onclick = function() {
+    erase = !erase;
+    this.classList.toggle('on', erase);
+    overlay.classList.toggle('erase', erase);
+  };
+  document.getElementById('btnUndo').onclick = function() {
+    if (!undoStack.length) { setStatus('戻せる操作がありません', false); return; }
+    pctx.putImageData(undoStack.pop(), 0, 0);
+    eraseCharacterFromPad();
+    refreshShadowDisplay();
+    setStatus('1手戻しました', true);
+  };
+  document.querySelectorAll('#opacity,#blurPx,#brushSize').forEach(function(inp) {
+    inp.oninput = function() { updateLabels(); refreshShadowDisplay(); };
+  });
+  document.getElementById('btnOpen').onclick = function() {
+    window.open('../viewer.html?id=' + encodeURIComponent(sceneId), '_blank');
+  };
+  document.getElementById('btnDelete').onclick = function() {
+    if (!confirm('このシーンの EOS 影を削除しますか？')) return;
+    fetch('/api/save-hi-res-peek-shadow', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sceneId: sceneId, footShadow: false })
+    }).then(function(r) { return r.json(); }).then(function(j) {
+      if (!j.ok) throw new Error(j.error || '失敗');
+      savedShadowImage = '';
+      hasPaint = false;
+      undoStack = [];
+      pctx.clearRect(0, 0, PW, PH);
+      btnSave.disabled = true;
+      refreshShadowDisplay();
+      setStatus('影を削除しました。viewer で Ctrl+F5', true);
+    }).catch(function(e) { setStatus(e.message, false); });
+  };
+  document.getElementById('btnSave').onclick = function() {
+    rebuildCharacterMaskPad();
+    eraseCharacterFromPad();
+    var data = paintDataUrl();
+    if (!data) { setStatus('先に影を塗ってください', false); return; }
+    setStatus('保存中…', null);
+    fetch('/api/upload-hi-res-peek-shadow-image', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sceneId: sceneId, dataBase64: data, filename: 'eos_foot.png' })
+    }).then(function(r) { return r.json(); }).then(function(j) {
+      if (!j.ok) throw new Error(j.error || '画像保存失敗');
+      return fetch('/api/save-hi-res-peek-shadow', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sceneId: sceneId, footShadow: true,
+          footShadowImage: j.footShadowImage, footShadowConfig: cfgFromUi()
+        })
+      });
+    }).then(function(r) { return r.json(); }).then(function(j) {
+      if (!j.ok) throw new Error(j.error || '失敗');
+      savedShadowImage = j.hiResPeek && j.hiResPeek.footShadowImage || '';
+      setStatus('保存しました。viewer で Ctrl+F5', true);
+    }).catch(function(e) { setStatus(e.message, false); });
+  };
+  bindInteraction();
+  window.addEventListener('resize', layoutPhotoInStage);
+  fetch('/api/hi-res-peek-scenes?_=' + Date.now()).then(function(r) { return r.json(); }).then(function(j) {
+    var sel = document.getElementById('sceneSel');
+    (j.scenes || []).forEach(function(s) {
+      var o = document.createElement('option');
+      o.value = s.id;
+      o.textContent = s.label || s.id;
+      sel.appendChild(o);
+    });
+    if (!sel.options.length) {
+      showEmptyGuide(true);
+      setStatus('EOS写真のあるシーンがありません', false);
+      return;
+    }
+    return loadScene(sel.value);
+  }).catch(function(e) {
+    setStatus('EOS影設定_起動.vbs で開いてください: ' + e.message, false);
+  });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,1348 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>モデル貼り付け用（2_パノラマに貼る）</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#1a1a22;color:#f0f0f0;font-family:'Segoe UI','Meiryo',sans-serif;height:100vh;display:flex;flex-direction:column;overflow:hidden;font-size:16px}
+header.topbar{background:#12141c;border-bottom:1px solid #3a4a5a;padding:8px 14px;flex-shrink:0}
+#status{font-size:16px;margin-top:0;padding:8px 10px;border-radius:4px;background:#0a1520;border:1px solid #3a5a70;color:#e8f4ff}
+#status.ok{border-color:#3a9a5a;color:#d4ffd4;background:#0a2018}
+#status.warn{border-color:#aa8830;color:#fff0c0;background:#1a1808}
+#status.bad{border-color:#cc4444;color:#ffe0e0;background:#280a10;font-weight:600}
+#diskLine{font-size:15px;color:#e0e0e0;margin-top:6px}
+#previewLive{font-size:15px;margin-top:6px;padding:7px 10px;border-radius:4px;border:1px solid #445}
+#previewLive.ok{border-color:#3a9a5a;color:#d4ffd4;background:#0a2018}
+#previewLive.wait{border-color:#aa8830;color:#fff0c0;background:#1a1808}
+#previewLive.bad{border-color:#cc4444;color:#ffe0e0;background:#280a10}
+.toplinks{margin-top:6px}
+a.vrlink{display:inline-block;margin-right:14px;font-size:15px;color:#9ed0ff;text-decoration:underline}
+.layout{display:flex;flex:1;overflow:hidden;min-height:0}
+.sb{width:328px;min-width:328px;background:#12141c;border-right:1px solid #3a4a5a;overflow-y:auto;padding:10px;position:relative;z-index:5;flex-shrink:0}
+input[type=range]{width:100%;accent-color:#5a9fd4;height:32px;touch-action:none;cursor:pointer}
+.sec{padding:10px;border-bottom:1px solid #3a4a5a;margin-bottom:5px}
+.ttl{font-size:15px;color:#b8e0ff;font-weight:700;margin-bottom:7px}
+label.fl{display:block;padding:10px;border:2px dashed #3a4a5a;border-radius:4px;text-align:center;cursor:pointer;font-size:15px;color:#d8d8d8}
+input[type=file]{display:none}
+.row{margin:7px 0}
+.row span{font-size:16px;display:block;margin-bottom:4px;color:#f0f0f0}
+select.sel{width:100%;background:#1e2a38;border:1px solid #4a5a6a;color:#f5f5f5;padding:8px;font-size:16px}
+input.num{width:76px;background:#1e2a38;border:1px solid #4a5a6a;color:#f5f5f5;padding:6px;font-size:16px}
+input.wide{width:100%;background:#1e2a38;border:1px solid #4a5a6a;color:#f5f5f5;padding:6px;font-size:16px}
+button.b{width:100%;padding:13px;margin-top:8px;border-radius:4px;border:none;background:#2a7a4a;color:#fff;cursor:pointer;font-size:18px;font-weight:600}
+button.b.unsaved{background:#b8860b}
+button.b2{width:100%;padding:10px;margin-top:7px;border-radius:4px;border:1px solid #4a5a6a;background:#1e2a38;color:#f0f0f0;cursor:pointer;font-size:15px}
+.note{font-size:15px;color:#d8d8d8;line-height:1.55;margin-top:7px}
+.note.em{color:#fff0c0}
+.saveBox{background:#0e1824;border:1px solid #3a6a8a;border-radius:6px;padding:10px;margin-bottom:8px;font-size:15px;line-height:1.6;color:#f0f0f0}
+.saveBox strong{color:#fff8e0}
+#saveState{margin-top:8px;padding:8px;border-radius:4px;background:#1a2430;color:#e8f4ff;font-size:15px}
+#saveState.ok{background:#0a2818;color:#d4ffd4;border:1px solid #3a9a5a}
+#saveState.warn{background:#2a2010;color:#fff0c0;border:1px solid #aa8830}
+details.adv summary{cursor:pointer;font-size:15px;color:#b8d8f0;margin-bottom:6px}
+details.saveExtra{margin-top:10px;border-top:1px dashed #3a4a5a;padding-top:8px}
+details.saveExtra summary{font-size:14px;color:#a0b0c0}
+details.saveExtra .b2{margin-top:6px;font-size:14px;color:#c0c0c0}
+.helpBox{background:#0e1824;border:1px solid #3a5a70;border-radius:6px;padding:10px;margin-top:8px}
+.helpBox h3{font-size:15px;color:#c8f0d8;margin:8px 0 4px}
+.helpBox h3:first-child{margin-top:0}
+.helpBox p,.helpBox li{font-size:15px;color:#d8d8d8;line-height:1.55}
+.helpBox ul{margin:4px 0 8px 16px}
+.helpBox a{color:#9ed0ff}
+.main{flex:1;display:flex;flex-direction:column;background:#080a10;min-width:0}
+.previewBar{display:flex;align-items:center;flex-wrap:wrap;gap:10px;padding:8px 12px;background:#12141c;border-bottom:1px solid #3a4a5a;font-size:16px;color:#f0f0f0}
+.previewBar button{padding:8px 14px;border-radius:4px;border:1px solid #4a5a6a;background:#1e2a38;color:#f5f5f5;cursor:pointer;font-size:15px}
+.previewBar button:hover{background:#2a3a50}
+.previewBar .look{background:#2a4a70;border-color:#5a8ab0}
+.previewBar strong{color:#b8e0ff}
+#vrFrame{flex:1;width:100%;min-height:320px;border:0;background:#000}
+#vp{display:none}
+.outWrap{border-top:1px solid #3a4a5a;background:#0a1018;flex-shrink:0}
+.outLabel{font-size:14px;color:#d0d0d0;padding:6px 10px 0}
+.out{font-size:13px;font-family:Consolas,monospace;color:#c8d8e8;padding:6px 10px 8px;max-height:88px;overflow:auto;white-space:pre-wrap}
+footer.pagefoot{flex-shrink:0;background:#12141c;border-top:1px solid #3a4a5a;padding:10px 14px 12px}
+footer.pagefoot h1{font-size:18px;color:#f5f5f5;font-weight:700}
+footer.pagefoot .steps{color:#fff8e0;margin-top:6px;font-size:15px;line-height:1.6}
+footer.pagefoot .steps2{color:#d8e8ff;margin-top:4px;font-size:15px;line-height:1.55}
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div id="status">data.js を読み込んでいます…</div>
+  <div id="previewLive" class="wait">VRプレビュー: 接続待ち…（モデルVR貼り付け_起動.vbs から開いてください）</div>
+  <div id="diskLine"></div>
+  <div class="toplinks">
+    <a class="vrlink" id="vrLink" href="viewer.html?id=25-cc003" target="_blank" rel="noopener">▶ VRで確認（保存後は Ctrl+F5）</a>
+  </div>
+</header>
+<div class="layout">
+<div class="sb">
+  <div class="sec">
+    <div class="ttl">① どのシーンに貼るか</div>
+    <label class="fl">📂 data.js を選ぶ<input type="file" id="dataIn" accept=".js"></label>
+    <div class="row" style="margin-top:10px">
+      <span><strong>シーン</strong>（★動画＝設定済み）</span>
+      <select class="sel" id="sceneSel"><option value="">── 読込後に表示 ──</option></select>
+    </div>
+    <p class="note em">スライダーは<strong>①で選んだシーンだけ</strong>に効きます（女性＝25-cc003／将校＝18-aa019）。別シーンには影響しません。</p>
+    <p class="note em" id="mapReachNote">map.html の「花畑」は 23-cc001 です。女性ガイドは<strong>その先の C3（25-cc003）</strong>で出ます。将校は 18-aa019（登山コース側）です。</p>
+    <p class="note" id="sceneNote"></p>
+    <details class="adv">
+      <summary>同じシーンに2人目を追加（通常は不要）</summary>
+      <div class="row" style="margin-top:8px">
+        <select class="sel" id="hotspotSel"><option value="0">1人目</option></select>
+      </div>
+    </details>
+  </div>
+  <div class="sec">
+    <div class="ttl">② 動画を選ぶ</div>
+    <div class="row"><span>PC用（透過 WebM）</span>
+      <select class="sel" id="srcSel"><option value="">── 動画一覧を読込中 ──</option></select>
+    </div>
+    <div class="row"><span>iPad用（透過 H.265）</span>
+      <select class="sel" id="srcHevcSel"><option value="">── 動画一覧を読込中 ──</option></select>
+    </div>
+    <input class="wide" id="src" value="video/guide_alpha.webm" style="display:none">
+    <input class="wide" id="srcHevc" value="video/ipad.mp4" style="display:none">
+    <p class="note" id="videoNote">女性＝guide_alpha.webm ＋ ipad.mp4／将校＝海軍.webm ＋ ipad2.mp4</p>
+    <p class="note em" id="repairWarn" style="display:none">⚠ guide_alpha.repair.webm は半透明になりやすいです。通常は guide_alpha.webm を選んでください。</p>
+    <p class="note">ここでは「できあがった動画ファイル」を選ぶだけ。透過の作り方は 1_透過を作る を見てください。</p>
+  </div>
+  <div class="sec">
+    <div class="ttl">③ 位置・大きさ（data.js）</div>
+    <div class="row"><span>X: <b id="xV">0</b></span><input type="range" id="xR" min="-1500" max="1500" value="0"></div>
+    <div class="row"><span>Y: <b id="yV">0</b>（上へ＝マイナス）</span><input type="range" id="yR" min="-500" max="300" value="0"></div>
+    <div class="row"><span>大きさ: <b id="scV">1.00</b></span><input type="range" id="scR" min="0.25" max="2.5" step="0.01" value="1"></div>
+    <p class="note">大きさを変えたら必ず<strong>④保存</strong>。保存すると⑥の幅・高さに書き込まれ、次回起動時もその数値が使われます（スライダー表示は1.00に戻るのが正常です）。</p>
+  </div>
+  <div class="sec">
+    <div class="ttl">④ 立ち方・足元・明るさ（浮き感の改善）</div>
+    <div class="row"><span><strong>立ち方プリセット</strong></span>
+      <select class="sel" id="poseMode">
+        <option value="full">全身（標準）</option>
+        <option value="bust">半身（上半身だけ見せる）</option>
+        <option value="azalea">つつじ向け（足元を自然に消す）</option>
+        <option value="custom">カスタム（下を手動調整）</option>
+      </select>
+    </div>
+    <p class="note em">全身動画でも「半身」で上半身だけ表示できます。</p>
+    <div class="row"><span>下フェード（足元を溶かす）: <b id="fbV">10</b>%</span>
+      <input type="range" id="fbR" min="0" max="40" value="10"></div>
+    <div class="row"><span>映像の縦位置: <b id="opYV">50</b>%（小＝上寄り・半身向け）</span>
+      <input type="range" id="opYR" min="0" max="100" value="50"></div>
+    <div class="row"><span>明るさ: <b id="brV">0.95</b></span>
+      <input type="range" id="brR" min="75" max="110" step="1" value="95"></div>
+    <div class="row"><span>コントラスト: <b id="ctV">1.00</b></span>
+      <input type="range" id="ctR" min="88" max="112" step="1" value="100"></div>
+    <p class="note">浮き感は pitch（⑥）で足元を地面の高さに合わせるのがいちばん効きます。下フェードは 8〜12 程度が目安です。</p>
+  </div>
+  <div class="sec">
+    <div class="ttl">④-b 黒背景の切り抜き（輪郭・髪）</div>
+    <div class="row">
+      <label style="font-size:16px;color:#f0f0f0"><input type="checkbox" id="canvasBlackKey"> Canvas黒抜き（cc003は通常オフ＝GitHubと同じ）</label>
+    </div>
+    <div class="row"><span>黒除去の強さ: <b id="bkThrV">18</b>（小＝髪を守る／大＝黒縁を消す）</span>
+      <input type="range" id="bkThrR" min="8" max="36" value="18"></div>
+    <div class="row"><span>縁のぼかし: <b id="bkSoftV">24</b>（大＝髪が透けやすい）</span>
+      <input type="range" id="bkSoftR" min="10" max="48" value="24"></div>
+    <p class="note em">cc003は④-b「オフ」＝GitHubと同じ。位置・pitch・明るさは②③⑤⑥のスライダー。④-bは真っ黒背景の動画だけオン。</p>
+  </div>
+  <div class="sec">
+    <div class="ttl">⑤ 再生タイミング</div>
+    <div class="row">
+      <label style="font-size:16px;color:#f0f0f0"><input type="checkbox" id="playOnView" checked> この方向を向いたら再生（おすすめ）</label>
+    </div>
+    <div class="row"><span>再生する角度の幅: <b id="pvrV">35</b>°</span>
+      <input type="range" id="pvrR" min="15" max="60" value="35"></div>
+    <p class="note">再生の<strong>中心</strong>は下の⑥ yaw（ガイドを置いた向き）。<strong>幅</strong>はこのスライダー。本番VRだけ有効（ここはループ）。</p>
+  </div>
+  <div class="sec">
+    <div class="ttl">⑥ 数値（上のスライダーと連動）</div>
+    <div class="row">yaw <input class="num" id="yaw" value="0"></div>
+    <div class="row">pitch <input class="num" id="pitch" value="-12" title="-5〜25 推奨。60超は見えません"></div>
+    <p class="note">pitch が 60 を超えるとガイドが画面外になります（86 などは誤入力）。</p>
+    <div class="row">width <input class="num" id="w" value="280"></div>
+    <div class="row">height <input class="num" id="h" value="380"></div>
+    <div class="row">radius <input class="num" id="radius" value="850" title="800前後推奨"></div>
+  </div>
+  <details class="sec adv">
+    <summary class="ttl" style="cursor:pointer">📖 詳しい説明（必要なときだけ開く）</summary>
+    <div class="helpBox">
+      <h3>全体の流れ</h3>
+      <p>元動画 → <strong>ガイド透過動画_起動.vbs</strong> → Shutter Encoder（iPad用）→ <strong>ここで位置保存</strong> → GitHub</p>
+      <h3>② 動画の選び方（万年山）</h3>
+      <ul>
+        <li>女性 … guide_alpha.webm ＋ ipad.mp4</li>
+        <li>将校 … 海軍.webm ＋ ipad2.mp4</li>
+      </ul>
+      <p>原本は必ず <strong>万年山\video\</strong> に残す。GitHub へはコピー（移動しない）。</p>
+      <h3>緑背景のとき（透過メーカー）</h3>
+      <ul>
+        <li>AIで緑を付けた … rembg「全部実行」。うまくいかなければグレー/白向けを試す</li>
+        <li>白い制服＋黒い帽子 … 緑 or 中グレーで撮影。真白・真黒は避ける</li>
+        <li>上下に黒帯 … 「黒帯カット＋白背景透過（おすすめ）」ボタン</li>
+      </ul>
+      <h3>iPad用 Shutter Encoder で選ぶ項目</h3>
+      <ul>
+        <li>入力 … 透過 WebM（海軍.webm など）</li>
+        <li>コーデック … <strong>H.265 / HEVC</strong></li>
+        <li>★ <strong>アルファチャンネルを有効</strong>（Enable alpha channel）</li>
+        <li>出力名 … ipad.mp4 / ipad2.mp4</li>
+      </ul>
+      <h3>④ 浮き感・立ち方</h3>
+      <ul>
+        <li><strong>半身</strong> … 全身動画から上半身だけ切り出し（つつじのつなぎに不向きな場面向け）</li>
+        <li><strong>つつじ向け</strong> … 下フェード＋足元の接地感。向こうに草や株がある位置に pitch を合わせる</li>
+        <li>pitch（⑥）で足元を実景の地面・草むらの高さに合わせるのがいちばん効く</li>
+      </ul>
+      <h3>⑤ 向いたら再生</h3>
+      <p>中心＝⑥の yaw。幅＝⑤のスライダー。「👁 ガイドの方を向く」で確認。</p>
+      <h3>別シーンに貼る</h3>
+      <p>①のシーンを変えて保存するだけ（cc003 と aa019 など）。</p>
+      <p><a href="ガイド動画貼り付け_まとめ.txt" target="_blank" rel="noopener">📄 詳しい手順書（メモ帳で開く）</a></p>
+    </div>
+  </details>
+  <div class="sec">
+    <div class="ttl">④ 保存（作業はここで完了）</div>
+    <div class="saveBox">
+      <p><strong>④ 保存</strong>を押すと、いまの位置・動画の設定が<br><strong>万年山フォルダの data.js</strong> に書き込まれます。</p>
+      <p>次にVRを見るときも、この保存した内容が使われます。<br>GitHub に上げるときは <strong>data.js もコピー</strong>してください。</p>
+      <div id="saveState" class="warn">まだ保存していません（③まで終わったら④を押す）</div>
+    </div>
+    <button class="b" id="btnSave">④ この内容を data.js に保存</button>
+    <p class="note" style="margin-top:8px;text-align:center">↑ 作業はこのボタンで完了です</p>
+    <details class="saveExtra">
+      <summary>保存できないときだけ（通常は開かない）</summary>
+      <button class="b2" id="btnDlJs">data.js をダウンロード</button>
+      <button class="b2" id="btnCopy">JSONだけコピー</button>
+    </details>
+  </div>
+</div>
+<div class="main">
+  <div class="previewBar">
+    <strong style="color:#e94560">VRプレビュー</strong>
+    <span id="previewHint">花畑など、実際のVR画面</span>
+    <button type="button" id="btnLookAt" class="look">👁 ガイドの方を向く</button>
+    <button type="button" id="btnReloadVr">🔄 プレビュー更新</button>
+  </div>
+  <iframe id="vrFrame" title="VRプレビュー" src="about:blank"></iframe>
+  <div id="vp"><img id="bg" alt=""><div id="ov"><video id="vid" playsinline muted loop></video></div></div>
+  <div class="outWrap">
+    <div class="outLabel">いま編集中の設定（参考・上級者用。保存は左の④ボタン）</div>
+    <pre class="out" id="jsonOut"></pre>
+  </div>
+</div>
+</div>
+<footer class="pagefoot">
+  <h1>2_パノラマに貼る</h1>
+  <p class="steps">①シーン → ②動画 → ③位置を直す → <strong>④保存</strong>（服の色の説明は「1_透過を作る」）</p>
+  <p class="steps2">右＝本物のVR。プレビュー中は動画が<strong>ループ</strong>。本番では「向いたら再生」。</p>
+</footer>
+<script>
+'use strict';
+const bg = document.getElementById('bg');
+const vid = document.getElementById('vid');
+const ov = document.getElementById('ov');
+const vp = document.getElementById('vp');
+const vrFrame = document.getElementById('vrFrame');
+const statusEl = document.getElementById('status');
+const sceneSel = document.getElementById('sceneSel');
+const hotspotSel = document.getElementById('hotspotSel');
+const DEFAULT_SCENE = '25-cc003';
+const LS_LAST_SCENE = 'vrPlacerLastSceneId';
+let currentHotspotIndex = 0;
+const POSE_PRESETS = {
+  full:   { fadeBottom: 10, objectFit: 'contain', objectPositionY: 50 },
+  bust:   { fadeBottom: 6,  objectFit: 'cover',   objectPositionY: 26 },
+  azalea: { fadeBottom: 18, objectFit: 'contain', objectPositionY: 58 }
+};
+const state = {
+  x: 0, y: 0, sc: 1,
+  fadeBottom: 10, brightness: 0.96, contrast: 0.94,
+  objectFit: 'contain', objectPositionY: 50, poseMode: 'full',
+  canvasBlackKey: false, blackKeyThreshold: 18, blackKeySoft: 24
+};
+let anchor = { yaw:0, pitch:-12, w:280, h:380, radius:850 };
+let originalData = null;
+let dataJsHistoryPrefix = '';
+let currentSceneId = DEFAULT_SCENE;
+let serverMode = false;
+let projectRootPath = '';
+let projectDataJsPath = '';
+let diskHotspotJson = '';
+let userAdjustedSliders = false;
+let lastVrPreviewScene = '';
+let refreshPending = false;
+let previewPending = false;
+let vrPreviewReady = false;
+let lastPreviewSentKey = '';
+const btnSave = document.getElementById('btnSave');
+const saveStateEl = document.getElementById('saveState');
+const previewLiveEl = document.getElementById('previewLive');
+const SLIDER_REF_W = 400;
+const SLIDER_REF_H = 300;
+const HEVC_PRESETS = {
+  'guide_alpha.webm': 'video/ipad.mp4',
+  '海軍.webm': 'video/ipad2.mp4'
+};
+/** .repair.webm は黒抜き修復用。半透明の幽霊のように見えやすいので通常は使わない */
+function isRepairWebmPath(path) {
+  return /\.repair\.webm$/i.test(String(path || ''));
+}
+function normalizeGuideWebmPath(path) {
+  const s = String(path || '').trim();
+  if (!isRepairWebmPath(s)) return s;
+  return s.replace(/\.repair\.webm$/i, '.webm');
+}
+/** 動画ファイルと設定シーンは1対1（取り違え防止） */
+const VIDEO_SCENE_MAP = {
+  'video/guide_alpha.webm': '25-cc003',
+  'video/海軍.webm': '18-aa019'
+};
+let videoFileList = { webm: [], hevc: [] };
+
+function setStatus(msg, kind){
+  statusEl.textContent = msg;
+  statusEl.className = kind === 'ok' ? 'ok' : (kind === 'warn' ? 'warn' : (kind === 'bad' ? 'bad' : ''));
+}
+
+function setPreviewLive(msg, kind){
+  if (!previewLiveEl) return;
+  previewLiveEl.textContent = msg;
+  previewLiveEl.className = kind === 'ok' ? 'ok' : (kind === 'bad' ? 'bad' : 'wait');
+}
+
+function sceneReachHint(sceneId){
+  if (sceneId === '25-cc003') {
+    return 'map.html「花畑」から入り、C1→C2→C3 と進むと女性ガイド（cc003）が出ます。';
+  }
+  if (sceneId === '18-aa019') {
+    return '将校は map の花畑からは行けません。上の「VRで確認」か viewer.html?id=18-aa019 で見てください。';
+  }
+  return 'map.html から入った場所とシーン ID が違うと、ガイドは出ません。';
+}
+
+function updateVrConfirmLink(sceneId){
+  const vlink = document.getElementById('vrLink');
+  if (!vlink || !sceneId) return;
+  const enc = encodeURIComponent(sceneId);
+  vlink.href = 'viewer.html?id=' + enc + '&_=' + Date.now();
+  vlink.textContent = '▶ 本番VRで確認（' + sceneId + '・保存後にクリック）';
+  const mapNote = document.getElementById('mapReachNote');
+  if (mapNote) mapNote.textContent = sceneReachHint(sceneId);
+}
+
+function saveDoneMessage(sceneId, hotspot, extra){
+  extra = extra || {};
+  const lines = [
+    '保存できました（ディスクに書き込み済み）。',
+    '',
+    '保存先: ' + (extra.dataJsPath || projectDataJsPath || '万年山フォルダ/data.js'),
+    '時刻: ' + (extra.savedAt || '─'),
+    '',
+    '書き込んだ数値:',
+    '  yaw=' + hotspot.yaw + ' pitch=' + hotspot.pitch +
+      ' 大きさ=' + hotspot.width + '×' + hotspot.height,
+    '',
+    '【本番で確認】',
+    sceneReachHint(sceneId),
+    '→ 上の「▶ 本番VRで確認」をクリック',
+    '',
+    '※ map_generator で map を再生成すると、古い data.js で',
+    '  上書きされることがあります。生成前に data.js を読み直してください。'
+  ];
+  return lines.join('\n');
+}
+
+function rememberLastScene(sceneId){
+  try { localStorage.setItem(LS_LAST_SCENE, sceneId); } catch (e) {}
+}
+
+function recallLastScene(){
+  try {
+    const id = localStorage.getItem(LS_LAST_SCENE);
+    if (id && originalData && originalData.scenes.some(function(s){ return s.id === id; })) {
+      return id;
+    }
+  } catch (e) {}
+  return '';
+}
+
+function hotspotKey(o){
+  var k = {
+    src: o.src, srcHevc: o.srcHevc, yaw: o.yaw, pitch: o.pitch,
+    width: o.width, height: o.height, radius: o.radius,
+    fadeBottom: o.fadeBottom,
+    tone: o.tone, objectFit: o.objectFit, objectPositionY: o.objectPositionY
+  };
+  if (o.canvasBlackKey === true) {
+    k.canvasBlackKey = true;
+    k.blackKeyThreshold = o.blackKeyThreshold;
+    k.blackKeySoft = o.blackKeySoft;
+  }
+  return JSON.stringify(k);
+}
+
+function updateUnsavedUi(){
+  const cur = hotspotKey(buildHotspotObject());
+  const dirty = diskHotspotJson && cur !== diskHotspotJson;
+  btnSave.classList.toggle('unsaved', !!dirty);
+  btnSave.textContent = dirty
+    ? '④ 未保存の変更を data.js に書き込む'
+    : '④ この内容を data.js に保存';
+  if (saveStateEl) {
+    if (dirty) {
+      saveStateEl.className = 'warn';
+      saveStateEl.textContent = '変更あり — ④を押すと data.js に書き込まれます';
+    } else if (diskHotspotJson) {
+      saveStateEl.className = 'ok';
+      saveStateEl.textContent = '保存済み（disk の data.js と一致）';
+    }
+  }
+}
+
+async function reloadOriginalDataFromServer(label){
+  if (!serverMode) return false;
+  try {
+    const r = await fetch('data.js?' + Date.now(), { cache: 'no-store' });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const text = await r.text();
+    originalData = parseDataJsText(text);
+    fillSceneSelect();
+    return true;
+  } catch (e) {
+    setStatus((label || 'data.js') + ' の再読込に失敗: ' + e.message, 'warn');
+    return false;
+  }
+}
+
+function updateProjectPathLine(extra){
+  const disk = document.getElementById('diskLine');
+  if (!disk) return;
+  const base = projectDataJsPath || (projectRootPath ? projectRootPath + '/data.js' : '');
+  if (!base) return;
+  const tail = extra ? ' ｜ ' + extra : '';
+  disk.textContent = '保存先フォルダ: ' + base + tail;
+}
+
+function setDiskLine(h, label){
+  const extra = h
+    ? (label || 'VRファイル（data.js）') + ': yaw=' + h.yaw + ' width=' + h.width + ' height=' + h.height + ' radius=' + h.radius
+    : (label || 'VRファイル: このシーンに動画設定なし');
+  if (!h) {
+    diskHotspotJson = '';
+    updateProjectPathLine(extra);
+    return;
+  }
+  diskHotspotJson = hotspotKey(h);
+  updateProjectPathLine(extra);
+}
+
+async function refreshDiskFromServer(sceneId, index){
+  if (!serverMode) return;
+  const idx = index != null ? index : currentHotspotIndex;
+  try {
+    const res = await fetch('/api/hotspot?scene=' + encodeURIComponent(sceneId || currentSceneId) + '&index=' + idx);
+    const data = await res.json();
+    if (data.ok && data.hotspot) {
+      setDiskLine(data.hotspot, 'VRファイル（保存済み・' + (idx + 1) + '人目）');
+    } else if (data.ok) {
+      setDiskLine(null, 'VRファイル: 未設定（' + (idx + 1) + '人目）');
+    }
+    updateUnsavedUi();
+  } catch (e) {}
+}
+
+function fillHotspotSelect(sceneId){
+  if (!hotspotSel) return;
+  const scene = originalData && originalData.scenes
+    ? originalData.scenes.find(function(s){ return s.id === sceneId; })
+    : null;
+  const n = scene && scene.videoHotspots ? scene.videoHotspots.length : 0;
+  hotspotSel.innerHTML = '';
+  const count = Math.max(n, currentHotspotIndex + 1);
+  for (let i = 0; i < count; i++) {
+    const opt = document.createElement('option');
+    opt.value = String(i);
+    const hs = scene && scene.videoHotspots && scene.videoHotspots[i];
+    opt.textContent = (i + 1) + '人目' + (hs && hs.src ? '（' + hs.src.split('/').pop() + '）' : '（新規）');
+    hotspotSel.appendChild(opt);
+  }
+  const addOpt = document.createElement('option');
+  addOpt.value = 'new';
+  addOpt.textContent = '＋ 新しいガイドを追加';
+  hotspotSel.appendChild(addOpt);
+  if (currentHotspotIndex >= count) currentHotspotIndex = count - 1;
+  hotspotSel.value = String(currentHotspotIndex);
+}
+
+function imageKeyFromSceneId(id){
+  const m = String(id||'').match(/-([a-z]{2}\d{3})$/i);
+  if (m) return m[1].toLowerCase();
+  const m2 = String(id||'').match(/^(?:\d+-)?([a-z]{2}\d{3})$/i);
+  return m2 ? m2[1].toLowerCase() : '';
+}
+
+function parseDataJsText(content){
+  let hist = '';
+  const hm = content.match(/^\/\/ GENERATOR_HISTORY: .+\r?\n/m);
+  if (hm) {
+    dataJsHistoryPrefix = hm[0];
+    hist = dataJsHistoryPrefix;
+    content = content.slice(hist.length);
+  } else {
+    dataJsHistoryPrefix = '';
+  }
+  content = content.replace(/^\/\/[^\n]*\n?/gm, '');
+  content = content.replace(/var\s+APP_DATA\s*=\s*/, '').replace(/;\s*$/, '');
+  content = content.replace(/,(\s*[}\]])/g, '$1');
+  return JSON.parse(content);
+}
+
+function guessHevcForWebm(webmPath){
+  const name = (webmPath || '').split('/').pop() || '';
+  return HEVC_PRESETS[name] || 'video/ipad.mp4';
+}
+
+function selectsStillLoading(){
+  const srcSel = document.getElementById('srcSel');
+  if (!srcSel || !srcSel.options.length) return true;
+  if (srcSel.options.length === 1 && !srcSel.options[0].value) return true;
+  return /読込中/.test(srcSel.options[0].textContent);
+}
+
+function ensureVideoSelectsReady(){
+  if (selectsStillLoading() || srcSelNeedsRefill()) {
+    fillVideoSelects();
+  } else {
+    syncVideoSelectsFromHidden();
+  }
+}
+
+function srcSelNeedsRefill(){
+  const srcSel = document.getElementById('srcSel');
+  if (!srcSel) return false;
+  return /読込中/.test(srcSel.options[0] && srcSel.options[0].textContent || '');
+}
+
+function fillVideoSelects(){
+  const srcSel = document.getElementById('srcSel');
+  const hevcSel = document.getElementById('srcHevcSel');
+  if (!srcSel || !hevcSel) return;
+  srcSel.innerHTML = '';
+  hevcSel.innerHTML = '';
+  const webmAll = videoFileList.webm.length ? videoFileList.webm : [
+    { path: 'video/guide_alpha.webm', name: 'guide_alpha.webm' },
+    { path: 'video/海軍.webm', name: '海軍.webm' }
+  ];
+  const webms = webmAll.filter(function(f){ return !isRepairWebmPath(f.path); });
+  const hevcs = videoFileList.hevc.length ? videoFileList.hevc : [
+    { path: 'video/ipad.mp4', name: 'ipad.mp4' },
+    { path: 'video/ipad2.mp4', name: 'ipad2.mp4' }
+  ];
+  webms.forEach(function(f){
+    const o = document.createElement('option');
+    o.value = f.path;
+    o.textContent = f.name;
+    srcSel.appendChild(o);
+  });
+  hevcs.forEach(function(f){
+    const o = document.createElement('option');
+    o.value = f.path;
+    o.textContent = f.name;
+    hevcSel.appendChild(o);
+  });
+  syncVideoSelectsFromHidden();
+}
+
+function syncVideoSelectsFromHidden(){
+  const src = document.getElementById('src').value.trim();
+  const hevc = document.getElementById('srcHevc').value.trim();
+  const srcSel = document.getElementById('srcSel');
+  const hevcSel = document.getElementById('srcHevcSel');
+  if (srcSel) {
+    let found = false;
+    for (let i = 0; i < srcSel.options.length; i++) {
+      if (srcSel.options[i].value === src) { srcSel.selectedIndex = i; found = true; break; }
+    }
+    if (!found && src) {
+      const o = document.createElement('option');
+      o.value = src;
+      o.textContent = src.split('/').pop() + '（フォルダ外）';
+      srcSel.appendChild(o);
+      srcSel.value = src;
+    }
+  }
+  if (hevcSel) {
+    let found = false;
+    for (let i = 0; i < hevcSel.options.length; i++) {
+      if (hevcSel.options[i].value === hevc) { hevcSel.selectedIndex = i; found = true; break; }
+    }
+    if (!found && hevc) {
+      const o = document.createElement('option');
+      o.value = hevc;
+      o.textContent = hevc.split('/').pop() + '（フォルダ外）';
+      hevcSel.appendChild(o);
+      hevcSel.value = hevc;
+    }
+  }
+  const note = document.getElementById('videoNote');
+  const repairWarn = document.getElementById('repairWarn');
+  if (repairWarn) repairWarn.style.display = isRepairWebmPath(src) ? 'block' : 'none';
+  if (note) {
+    const inFolder = videoFileList.webm.some(function(f){ return f.path === src; });
+    const fname = src.split('/').pop();
+    if (!src) {
+      note.textContent = '動画を選んでください';
+      note.className = 'note em';
+    } else if (isRepairWebmPath(src)) {
+      note.textContent = '⚠ ' + fname + ' は修復用です。半透明になることがあります → guide_alpha.webm に変更してください';
+      note.className = 'note em';
+    } else if (inFolder) {
+      note.textContent = 'video フォルダから選択中: ' + fname;
+      note.className = 'note';
+    } else if (videoFileList.webm.length) {
+      note.textContent = '⚠ ' + fname + ' が video フォルダに見つかりません（一覧に無い）';
+      note.className = 'note em';
+    } else {
+      note.textContent = '動画一覧未取得 — VBSで開き直すと直ります';
+      note.className = 'note em';
+    }
+  }
+}
+
+function onVideoSelectChange(){
+  const srcSel = document.getElementById('srcSel');
+  const hevcSel = document.getElementById('srcHevcSel');
+  if (srcSel) {
+    document.getElementById('src').value = srcSel.value;
+    const guess = guessHevcForWebm(srcSel.value);
+    document.getElementById('srcHevc').value = guess;
+    if (hevcSel) {
+      for (let i = 0; i < hevcSel.options.length; i++) {
+        if (hevcSel.options[i].value === guess) { hevcSel.selectedIndex = i; break; }
+      }
+    }
+    const targetScene = VIDEO_SCENE_MAP[srcSel.value];
+    if (targetScene && targetScene !== currentSceneId) {
+      sceneSel.value = targetScene;
+      loadSceneHotspot(targetScene);
+      setStatus('動画に合わせてシーンを ' + targetScene + ' に切り替えました', 'ok');
+      return;
+    }
+  }
+  if (hevcSel) document.getElementById('srcHevc').value = hevcSel.value;
+  userAdjustedSliders = true;
+  syncVideoSelectsFromHidden();
+  reloadVrPreview(true);
+}
+
+async function loadVideoFileList(){
+  if (!serverMode) return false;
+  try {
+    const res = await fetch('/api/video-files');
+    const data = await res.json();
+    if (data.ok) {
+      videoFileList = { webm: data.webm || [], hevc: data.hevc || [] };
+      fillVideoSelects();
+      syncVideoSelectsFromHidden();
+      if (data.hint) setStatus(data.hint, 'warn');
+      return true;
+    }
+  } catch (e) {}
+  fillVideoSelects();
+  return false;
+}
+
+function fillSceneSelect(){
+  if (!originalData || !originalData.scenes) return;
+  const keepId = currentSceneId;
+  sceneSel.innerHTML = '';
+  originalData.scenes.forEach(function(s, idx){
+    const opt = document.createElement('option');
+    opt.value = s.id;
+    const hs = s.videoHotspots && s.videoHotspots.length;
+    const label = s.id.replace(/^\d+-/, '');
+    opt.textContent = (idx+1) + ' │ ' + label + '（' + s.id + '）' + (hs ? ' ★動画' : '');
+    sceneSel.appendChild(opt);
+  });
+  if (keepId && originalData.scenes.some(function(s){ return s.id === keepId; })) {
+    currentSceneId = keepId;
+  } else if (originalData.scenes.some(function(s){ return s.id === DEFAULT_SCENE; })) {
+    currentSceneId = DEFAULT_SCENE;
+  } else if (originalData.scenes[0]) {
+    currentSceneId = originalData.scenes[0].id;
+  }
+  sceneSel.value = currentSceneId;
+}
+
+function writeVrFields(f){
+  document.getElementById('yaw').value = f.yaw;
+  document.getElementById('pitch').value = f.pitch;
+  document.getElementById('w').value = f.width;
+  document.getElementById('h').value = f.height;
+  document.getElementById('radius').value = f.radius;
+}
+
+function readVrFields(){
+  return {
+    yaw: parseFloat(document.getElementById('yaw').value) || 0,
+    pitch: parseFloat(document.getElementById('pitch').value) || 0,
+    width: parseInt(document.getElementById('w').value, 10) || 200,
+    height: parseInt(document.getElementById('h').value, 10) || 270,
+    radius: parseInt(document.getElementById('radius').value, 10) || 850
+  };
+}
+
+function bakeScaleIntoAnchor(){
+  const f = fieldsFromSliders();
+  anchor.yaw = f.yaw;
+  anchor.pitch = f.pitch;
+  anchor.w = f.width;
+  anchor.h = f.height;
+  state.x = 0;
+  state.y = 0;
+  state.sc = 1;
+  document.getElementById('xR').value = 0;
+  document.getElementById('yR').value = 0;
+  document.getElementById('scR').value = 1;
+  document.getElementById('xV').textContent = '0';
+  document.getElementById('yV').textContent = '0';
+  document.getElementById('scV').textContent = '1.00';
+  writeVrFields({
+    yaw: anchor.yaw,
+    pitch: anchor.pitch,
+    width: anchor.w,
+    height: anchor.h,
+    radius: anchor.radius
+  });
+}
+
+function applyHotspotToUi(h, skipPreview){
+  if (!h || !h.src) {
+    if (!h || !h.src) {
+      setStatus('このスロットは未設定です。調整して保存すると追加されます。', 'warn');
+    }
+    h = h || {};
+  }
+  let srcPath = h.src || 'video/guide_alpha.webm';
+  if (isRepairWebmPath(srcPath)) {
+    const fixed = normalizeGuideWebmPath(srcPath);
+    setStatus('⚠ ' + srcPath.split('/').pop() + ' は半透明になりやすい修復用です → ' + fixed.split('/').pop() + ' に切り替えました', 'warn');
+    srcPath = fixed;
+  }
+  document.getElementById('src').value = srcPath;
+  document.getElementById('srcHevc').value = h.srcHevc || guessHevcForWebm(srcPath);
+  ensureVideoSelectsReady();
+  const playOn = h.playOnView !== false && (h.playOnView === true || h.autoplay === false || Math.abs(parseFloat(h.yaw) || 0) > 12);
+  document.getElementById('playOnView').checked = playOn;
+  const pvr = h.playYawRange != null ? h.playYawRange : 35;
+  document.getElementById('pvrR').value = pvr;
+  document.getElementById('pvrV').textContent = pvr;
+  anchor = {
+    yaw: h.yaw != null ? h.yaw : 0,
+    pitch: h.pitch != null ? h.pitch : -9,
+    w: h.width || 200,
+    h: h.height || 270,
+    radius: h.radius != null ? h.radius : 850
+  };
+  writeVrFields({
+    yaw: anchor.yaw,
+    pitch: anchor.pitch,
+    width: anchor.w,
+    height: anchor.h,
+    radius: anchor.radius
+  });
+  state.fadeBottom = h.fadeBottom != null ? h.fadeBottom : 10;
+  state.objectFit = h.objectFit === 'cover' ? 'cover' : 'contain';
+  state.objectPositionY = h.objectPositionY != null ? h.objectPositionY : (state.objectFit === 'cover' ? 28 : 50);
+  state.poseMode = detectPoseMode(state);
+  const tone = h.tone || {};
+  state.brightness = tone.brightness != null ? tone.brightness : 0.95;
+  state.contrast = tone.contrast != null ? tone.contrast : 1.0;
+  document.getElementById('poseMode').value = state.poseMode;
+  document.getElementById('fbR').value = state.fadeBottom;
+  document.getElementById('fbV').textContent = state.fadeBottom;
+  document.getElementById('opYR').value = state.objectPositionY;
+  document.getElementById('opYV').textContent = state.objectPositionY;
+  document.getElementById('brR').value = Math.round(state.brightness * 100);
+  document.getElementById('brV').textContent = state.brightness.toFixed(2);
+  document.getElementById('ctR').value = Math.round(state.contrast * 100);
+  document.getElementById('ctV').textContent = state.contrast.toFixed(2);
+  state.canvasBlackKey = h.canvasBlackKey === true;
+  state.blackKeyThreshold = h.blackKeyThreshold != null ? parseInt(h.blackKeyThreshold, 10) : 18;
+  state.blackKeySoft = h.blackKeySoft != null ? parseInt(h.blackKeySoft, 10) : 24;
+  document.getElementById('canvasBlackKey').checked = state.canvasBlackKey;
+  document.getElementById('bkThrR').value = state.blackKeyThreshold;
+  document.getElementById('bkThrV').textContent = String(state.blackKeyThreshold);
+  document.getElementById('bkSoftR').value = state.blackKeySoft;
+  document.getElementById('bkSoftV').textContent = String(state.blackKeySoft);
+  state.x = 0;
+  state.y = 0;
+  state.sc = 1;
+  document.getElementById('xR').value = 0;
+  document.getElementById('yR').value = 0;
+  document.getElementById('scR').value = 1;
+  document.getElementById('xV').textContent = '0';
+  document.getElementById('yV').textContent = '0';
+  document.getElementById('scV').textContent = '1.00';
+  if (srcPath) vid.src = srcPath;
+  refresh();
+  lastPreviewSentKey = '';
+  if (!skipPreview) schedulePreviewToVr();
+}
+
+function loadSceneHotspot(sceneId, hotspotIndex){
+  currentSceneId = sceneId;
+  rememberLastScene(sceneId);
+  if (hotspotIndex != null) currentHotspotIndex = hotspotIndex;
+  if (!originalData) return;
+  fillHotspotSelect(sceneId);
+  const scene = originalData.scenes.find(function(s){ return s.id === sceneId; });
+  const h = scene && scene.videoHotspots && scene.videoHotspots[currentHotspotIndex];
+  userAdjustedSliders = false;
+  applyHotspotToUi(h);
+  if (h) setDiskLine(h, 'メモリ上の data.js（' + (currentHotspotIndex + 1) + '人目）');
+  else setDiskLine(null, '未設定（' + (currentHotspotIndex + 1) + '人目）');
+  const n = scene && scene.videoHotspots ? scene.videoHotspots.length : 0;
+  const who = sceneId === '18-aa019' ? '将校' : (sceneId === '25-cc003' ? '女性' : '');
+  document.getElementById('sceneNote').textContent =
+    '【保存先】' + sceneId + (who ? '（' + who + '）' : '') +
+    (n ? ' — ガイド' + n + '件' : ' — 未設定→調整して④保存');
+  updateVrConfirmLink(sceneId);
+  reloadVrPreview(true);
+  if (serverMode) refreshDiskFromServer(sceneId, currentHotspotIndex);
+}
+
+function tryAutoBackground(sceneId){
+  const key = imageKeyFromSceneId(sceneId);
+  if (!key || bg.naturalWidth) return;
+  const paths = [
+    'scene_captures/' + key + '.jpg',
+    'captures/' + key + '.jpg',
+    'capture/' + key + '.jpg',
+    key + '.jpg'
+  ];
+  let i = 0;
+  function tryNext(){
+    if (i >= paths.length) return;
+    const img = new Image();
+    img.onload = function(){
+      bg.src = paths[i];
+      bg.onload = function(){ layoutOverlay(); refresh(); };
+    };
+    img.onerror = function(){ i++; tryNext(); };
+    img.src = paths[i];
+  }
+  tryNext();
+}
+
+function ingestDataJsContent(content, label){
+  try {
+    originalData = parseDataJsText(content);
+    const recalled = recallLastScene();
+    if (recalled) currentSceneId = recalled;
+    fillSceneSelect();
+    loadSceneHotspot(currentSceneId);
+    setStatus('✅ ' + label + ' を読み込みました（' + originalData.scenes.length + ' シーン）', 'ok');
+  } catch (e) {
+    setStatus('data.js の読み込みに失敗: ' + e.message, 'warn');
+    alert('data.js の読み込みに失敗しました: ' + e.message);
+  }
+}
+
+/** スライダー → VR用数値（data.js に保存される値） */
+function fieldsFromSliders(){
+  const yaw = anchor.yaw + state.x * (90 / SLIDER_REF_W);
+  const pitch = anchor.pitch + state.y * (50 / SLIDER_REF_H);
+  let width = Math.max(100, Math.round(anchor.w * state.sc));
+  let height = Math.max(120, Math.round(anchor.h * state.sc));
+  if (width < 200 || height < 260) {
+    width = Math.max(width, 260);
+    height = Math.max(height, 350);
+  }
+  return {
+    yaw: Math.round(yaw * 10) / 10,
+    pitch: Math.round(pitch * 10) / 10,
+    width: width,
+    height: height,
+    radius: anchor.radius
+  };
+}
+
+function layoutOverlay(){
+  if(!bg.naturalWidth) return;
+  const r = vp.getBoundingClientRect();
+  const bw = bg.clientWidth, bh = bg.clientHeight;
+  const ox = (r.width - bw) / 2, oy = (r.height - bh) / 2;
+  const f = fieldsFromSliders();
+  const sw = f.width, sh = f.height;
+  ov.style.cssText = [
+    'left:'+(ox + bw/2 - sw/2 + state.x)+'px',
+    'top:'+(oy + bh - sh + state.y)+'px',
+    'width:'+sw+'px',
+    'height:'+sh+'px'
+  ].join('');
+}
+
+function detectPoseMode(s){
+  for (const key of ['full', 'bust', 'azalea']) {
+    const p = POSE_PRESETS[key];
+    if (s.fadeBottom === p.fadeBottom &&
+        s.objectFit === p.objectFit && s.objectPositionY === p.objectPositionY) return key;
+  }
+  return 'custom';
+}
+
+function applyPosePreset(mode){
+  const p = POSE_PRESETS[mode];
+  if (!p) return;
+  state.poseMode = mode;
+  state.fadeBottom = p.fadeBottom;
+  state.objectFit = p.objectFit;
+  state.objectPositionY = p.objectPositionY;
+  document.getElementById('poseMode').value = mode;
+  document.getElementById('fbR').value = state.fadeBottom;
+  document.getElementById('fbV').textContent = state.fadeBottom;
+  document.getElementById('opYR').value = state.objectPositionY;
+  document.getElementById('opYV').textContent = state.objectPositionY;
+  scheduleRefresh();
+}
+
+function markPoseCustom(){
+  state.poseMode = 'custom';
+  document.getElementById('poseMode').value = 'custom';
+}
+
+function buildHotspotObject(){
+  const f = fieldsFromSliders();
+  const fb = Math.max(0, Math.min(40, state.fadeBottom));
+  const scene = originalData && originalData.scenes
+    ? originalData.scenes.find(function(s){ return s.id === currentSceneId; })
+    : null;
+  const prev = scene && scene.videoHotspots && scene.videoHotspots[currentHotspotIndex];
+  const srcHevcVal = document.getElementById('srcHevc').value.trim();
+  const out = {
+    src: document.getElementById('src').value.trim(),
+    yaw: f.yaw,
+    pitch: f.pitch,
+    width: f.width,
+    height: f.height,
+    radius: f.radius,
+    fade: 0,
+    fadeBottom: fb,
+    fullscreen: false,
+    objectFit: state.objectFit || 'contain',
+    objectPositionY: state.objectPositionY,
+    tone: {
+      brightness: Math.round(state.brightness * 100) / 100,
+      contrast: Math.round(state.contrast * 100) / 100,
+      saturate: 0.88
+    },
+    loop: false,
+    fadeInMs: 0
+  };
+  const playOnView = document.getElementById('playOnView').checked;
+  out.autoplay = !playOnView;
+  if (playOnView) {
+    out.playOnView = true;
+    out.playYawRange = parseInt(document.getElementById('pvrR').value, 10) || 35;
+  } else {
+    out.playOnView = false;
+  }
+  if (prev && prev.srcIos) out.srcIos = prev.srcIos;
+  else out.srcIos = 'video/guide_alpha_ios.mp4';
+  if (srcHevcVal) out.srcHevc = srcHevcVal;
+  else if (prev && prev.srcHevc) out.srcHevc = prev.srcHevc;
+  if (prev && prev.footShadow === true) {
+    out.footShadow = true;
+    if (prev.footShadowImage) out.footShadowImage = prev.footShadowImage;
+    if (prev.footShadowConfig) out.footShadowConfig = JSON.parse(JSON.stringify(prev.footShadowConfig));
+  } else {
+    out.footShadow = false;
+  }
+  if (document.getElementById('canvasBlackKey').checked) {
+    out.canvasBlackKey = true;
+    out.blackKeyThreshold = state.blackKeyThreshold;
+    out.blackKeySoft = state.blackKeySoft;
+  }
+  if (prev && prev.guideRestFrame != null) out.guideRestFrame = prev.guideRestFrame;
+  else if (currentSceneId === '25-cc003') out.guideRestFrame = 'first';
+  return out;
+}
+
+function buildJson(){
+  return JSON.stringify(buildHotspotObject(), null, 2);
+}
+
+function sendPreviewHotspotDirect(hotspot){
+  if (!hotspot) return;
+  const key = hotspotKey(hotspot);
+  lastPreviewSentKey = key;
+
+  if (vrFrame && vrFrame.contentWindow) {
+    try {
+      vrFrame.contentWindow.postMessage({
+        type: 'placerPreviewHotspot',
+        sceneId: currentSceneId,
+        hotspot: hotspot
+      }, '*');
+      if (vrPreviewReady) {
+        setPreviewLive('VRプレビュー: 連動中（保存内容を反映しました）', 'ok');
+      }
+    } catch (e) {
+      setPreviewLive('VRプレビュー: 送信失敗 — プレビュー更新ボタンを押してください', 'bad');
+    }
+  }
+
+  if (!serverMode) return;
+  fetch('/api/preview-hotspot', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sceneId: currentSceneId, hotspot: hotspot })
+  }).catch(function(){});
+}
+
+function sendPreviewToVr(){
+  sendPreviewHotspotDirect(buildHotspotObject());
+  if (!serverMode) {
+    setPreviewLive('VRプレビュー: 未接続 — 必ず「モデルVR貼り付け_起動.vbs」で開く', 'bad');
+    return;
+  }
+  if (vrPreviewReady) {
+    setPreviewLive('VRプレビュー: 連動中（スライダーで右のガイドが動きます）', 'ok');
+  } else if (vrFrame && vrFrame.contentWindow) {
+    setPreviewLive('VRプレビュー: 読み込み中…（表示されたらスライダーを動かす）', 'wait');
+  } else {
+    setPreviewLive('VRプレビュー: iframe 未準備 — 読み込み完了までお待ちください', 'wait');
+  }
+}
+
+function schedulePreviewToVr(){
+  if (previewPending) return;
+  previewPending = true;
+  requestAnimationFrame(function(){
+    previewPending = false;
+    sendPreviewToVr();
+  });
+}
+
+function reloadVrPreview(forceReload){
+  if (!vrFrame) return;
+  const sid = currentSceneId || DEFAULT_SCENE;
+  if (!forceReload && sid === lastVrPreviewScene && vrFrame.src && vrFrame.src !== 'about:blank') {
+    schedulePreviewToVr();
+    return;
+  }
+  lastVrPreviewScene = sid;
+  const enc = encodeURIComponent(sid);
+  vrFrame.src = 'viewer.html?id=' + enc + '&embed=1&placer=3&_=' + Date.now();
+  vrPreviewReady = false;
+  setPreviewLive('VRプレビュー: 読み込み中…（表示されたらスライダーを動かす）', 'wait');
+  document.getElementById('previewHint').textContent = 'シーン: ' + sid;
+  const vlink = document.getElementById('vrLink');
+  if (vlink) vlink.href = 'viewer.html?id=' + enc;
+}
+
+if (vrFrame) {
+  vrFrame.addEventListener('load', function(){
+    lastPreviewSentKey = '';
+    setTimeout(sendPreviewToVr, 400);
+    setTimeout(sendPreviewToVr, 1500);
+    setTimeout(sendPreviewToVr, 3500);
+  });
+}
+
+window.addEventListener('message', function(ev){
+  const d = ev.data;
+  if (!d || d.type !== 'placerViewerReady') return;
+  vrPreviewReady = true;
+  setPreviewLive('VRプレビュー: 準備完了 — スライダーを動かしてください', 'ok');
+  lastPreviewSentKey = '';
+  sendPreviewToVr();
+});
+
+function refresh(){
+  const f = fieldsFromSliders();
+  writeVrFields(f);
+  if (Math.abs(f.pitch) > 45) {
+    setStatus('⚠ pitch=' + f.pitch + ' は画面外になりやすいです。8〜15 前後に直してください。', 'warn');
+  }
+  document.getElementById('jsonOut').textContent =
+    'シーン「' + (currentSceneId || '─') + '」の videoHotspots[' + currentHotspotIndex + ']:\n\n' + buildJson();
+  updateUnsavedUi();
+}
+
+function scheduleRefresh(){
+  if (refreshPending) return;
+  refreshPending = true;
+  requestAnimationFrame(function(){
+    refreshPending = false;
+    refresh();
+    schedulePreviewToVr();
+  });
+}
+
+function bind(id, key, fmt){
+  const el = document.getElementById(id);
+  const lab = document.getElementById(id.replace('R','V'));
+  el.addEventListener('input', function(){
+    userAdjustedSliders = true;
+    state[key] = +el.value;
+    if (lab) lab.textContent = fmt ? fmt(state[key]) : String(state[key]);
+    scheduleRefresh();
+  });
+}
+
+bind('xR','x');
+bind('yR','y');
+bind('scR','sc', v=>v.toFixed(2));
+bind('fbR','fadeBottom');
+document.getElementById('fbR').addEventListener('input', markPoseCustom);
+document.getElementById('poseMode').addEventListener('change', function(){
+  userAdjustedSliders = true;
+  applyPosePreset(this.value);
+});
+document.getElementById('opYR').addEventListener('input', function(){
+  userAdjustedSliders = true;
+  state.objectPositionY = +this.value;
+  document.getElementById('opYV').textContent = String(state.objectPositionY);
+  markPoseCustom();
+  scheduleRefresh();
+});
+document.getElementById('brR').addEventListener('input', function(){
+  userAdjustedSliders = true;
+  state.brightness = +this.value / 100;
+  document.getElementById('brV').textContent = state.brightness.toFixed(2);
+  scheduleRefresh();
+});
+document.getElementById('ctR').addEventListener('input', function(){
+  userAdjustedSliders = true;
+  state.contrast = +this.value / 100;
+  document.getElementById('ctV').textContent = state.contrast.toFixed(2);
+  scheduleRefresh();
+});
+document.getElementById('canvasBlackKey').addEventListener('change', function(){
+  userAdjustedSliders = true;
+  state.canvasBlackKey = this.checked;
+  reloadVrPreview(true);
+});
+document.getElementById('bkThrR').addEventListener('input', function(){
+  userAdjustedSliders = true;
+  state.blackKeyThreshold = +this.value;
+  document.getElementById('bkThrV').textContent = String(state.blackKeyThreshold);
+  scheduleRefresh();
+});
+document.getElementById('bkSoftR').addEventListener('input', function(){
+  userAdjustedSliders = true;
+  state.blackKeySoft = +this.value;
+  document.getElementById('bkSoftV').textContent = String(state.blackKeySoft);
+  scheduleRefresh();
+});
+
+document.getElementById('srcSel').addEventListener('change', onVideoSelectChange);
+document.getElementById('srcHevcSel').addEventListener('change', onVideoSelectChange);
+document.getElementById('playOnView').addEventListener('change', scheduleRefresh);
+document.getElementById('pvrR').addEventListener('input', function(){
+  document.getElementById('pvrV').textContent = this.value;
+  scheduleRefresh();
+});
+document.getElementById('btnLookAt').addEventListener('click', function(){
+  const yaw = parseFloat(document.getElementById('yaw').value) || 0;
+  const pitch = parseFloat(document.getElementById('pitch').value) || 0;
+  if (!vrFrame || !vrFrame.contentWindow) return;
+  try {
+    vrFrame.contentWindow.postMessage({ type: 'placerLookAtGuide', yaw: yaw, pitch: pitch }, '*');
+  } catch (e) {}
+});
+['yaw','pitch','w','h','radius'].forEach(id=>{
+  document.getElementById(id).addEventListener('change', ()=>{
+    userAdjustedSliders = true;
+    const f = readVrFields();
+    anchor.yaw = f.yaw;
+    anchor.pitch = f.pitch;
+    anchor.w = f.width;
+    anchor.h = f.height;
+    anchor.radius = f.radius;
+    state.x = 0;
+    state.y = 0;
+    state.sc = 1;
+    document.getElementById('xR').value = 0;
+    document.getElementById('yR').value = 0;
+    document.getElementById('scR').value = 1;
+    document.getElementById('xV').textContent = '0';
+    document.getElementById('yV').textContent = '0';
+    document.getElementById('scV').textContent = '1.00';
+    scheduleRefresh();
+  });
+});
+
+document.getElementById('dataIn').addEventListener('change', e=>{
+  const f = e.target.files[0];
+  if (!f) return;
+  const reader = new FileReader();
+  reader.onload = function(ev){
+    ingestDataJsContent(ev.target.result, f.name);
+  };
+  reader.readAsText(f, 'UTF-8');
+});
+
+sceneSel.addEventListener('change', async ()=>{
+  if (sceneSel.value) {
+    currentHotspotIndex = 0;
+    await loadVideoFileList();
+    loadSceneHotspot(sceneSel.value);
+  }
+});
+
+hotspotSel.addEventListener('change', function(){
+  if (hotspotSel.value === 'new') {
+    const scene = originalData && originalData.scenes
+      ? originalData.scenes.find(function(s){ return s.id === currentSceneId; })
+      : null;
+    currentHotspotIndex = scene && scene.videoHotspots ? scene.videoHotspots.length : 0;
+    fillHotspotSelect(currentSceneId);
+    hotspotSel.value = String(currentHotspotIndex);
+    applyHotspotToUi(null);
+    setDiskLine(null, '新規（' + (currentHotspotIndex + 1) + '人目）');
+    document.getElementById('src').value = 'video/guide_alpha.webm';
+    document.getElementById('srcHevc').value = 'video/ipad.mp4';
+    syncVideoSelectsFromHidden();
+    userAdjustedSliders = false;
+    scheduleRefresh();
+    return;
+  }
+  currentHotspotIndex = parseInt(hotspotSel.value, 10) || 0;
+  loadSceneHotspot(currentSceneId, currentHotspotIndex);
+});
+
+document.getElementById('btnReloadVr').addEventListener('click', function(){ reloadVrPreview(true); });
+
+function applyHotspotToOriginalData(){
+  if (!originalData) throw new Error('先に data.js を読み込んでください');
+  bakeScaleIntoAnchor();
+  const hotspot = buildHotspotObject();
+  const scene = originalData.scenes.find(function(s){ return s.id === currentSceneId; });
+  if (!scene) throw new Error('シーンが見つかりません: ' + currentSceneId);
+  if (!scene.videoHotspots) scene.videoHotspots = [];
+  while (scene.videoHotspots.length <= currentHotspotIndex) {
+    scene.videoHotspots.push({});
+  }
+  scene.videoHotspots[currentHotspotIndex] = hotspot;
+  return hotspot;
+}
+
+btnSave.onclick = async function(){
+  if (!originalData) {
+    alert('先に data.js を読み込んでください。\n必ず「モデルVR貼り付け_起動.vbs」で開いてください。');
+    return;
+  }
+  if (!serverMode) {
+    setStatus('⚠ 起動方法が違います。VBSで開かないと万年山フォルダには保存されません。', 'bad');
+    if (!confirm('今は通常のHTMLで開いています。\n保存すると「ダウンロード」だけになり、万年山フォルダは変わりません。\nそれでもダウンロードしますか？')) return;
+    downloadDataJsFile();
+    alert('ダウンロードした data.js を\n万年山フォルダの data.js に上書きしてから VR を Ctrl+F5 してください。');
+    return;
+  }
+  let hotspot;
+  try { hotspot = applyHotspotToOriginalData(); } catch (e) { alert(e.message); return; }
+  btnSave.disabled = true;
+  try {
+    const res = await fetch('/api/save-hotspot', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sceneId: currentSceneId, hotspot: hotspot, hotspotIndex: currentHotspotIndex })
+    });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || '保存失敗');
+    const saved = data.hotspot;
+    if (!saved || hotspotKey(saved) !== hotspotKey(hotspot)) {
+      throw new Error('保存後の確認に失敗しました（ディスクの内容が一致しません）');
+    }
+    rememberLastScene(currentSceneId);
+    await reloadOriginalDataFromServer('保存後の data.js');
+    setDiskLine(saved, 'VRファイル（保存済み）');
+    applyHotspotToUi(saved, true);
+    userAdjustedSliders = false;
+    diskHotspotJson = hotspotKey(saved);
+    setStatus('✅ data.js に保存しました（シーン ' + currentSceneId + '）', 'ok');
+    if (saveStateEl) {
+      saveStateEl.className = 'ok';
+      saveStateEl.textContent =
+        '保存完了: ' + currentSceneId + ' / yaw=' + saved.yaw + ' / 大きさ=' + saved.width + '×' + saved.height;
+    }
+    if (data.dataJsPath) {
+      projectDataJsPath = data.dataJsPath;
+      updateProjectPathLine('VRファイル（保存済み）: yaw=' + saved.yaw + ' width=' + saved.width);
+    }
+    sendPreviewHotspotDirect(saved);
+    alert(saveDoneMessage(currentSceneId, saved, data));
+  } catch (e) {
+    setStatus('保存失敗: ' + e.message, 'bad');
+    alert('保存に失敗: ' + e.message);
+  } finally {
+    btnSave.disabled = false;
+    updateUnsavedUi();
+  }
+};
+
+function downloadDataJsFile(){
+  applyHotspotToOriginalData();
+  const output = dataJsHistoryPrefix + 'var APP_DATA = ' + JSON.stringify(originalData, null, 2) + ';';
+  const blob = new Blob([output], { type: 'text/javascript' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'data.js';
+  a.click();
+  setStatus('✅ data.js をダウンロードしました。元のファイルと差し替えてください。', 'ok');
+}
+
+document.getElementById('btnDlJs').onclick = function(){
+  if (!originalData) { alert('先に data.js を読み込んでください'); return; }
+  downloadDataJsFile();
+};
+
+document.getElementById('btnCopy').onclick = async ()=>{
+  try{
+    await navigator.clipboard.writeText(buildJson());
+    alert('JSONをコピーしました（手動貼り付け用）。通常は「data.js に保存」を使ってください。');
+  }catch(e){ alert(buildJson()); }
+};
+
+async function bootFromServer(){
+  const on8765 = location.hostname === '127.0.0.1' && location.port === '8765';
+  if (!on8765) {
+    serverMode = false;
+    setStatus('⚠ file:// または別ポートで開いています。ガイドVR貼り付け_起動.vbs で開いてください。', 'bad');
+    setPreviewLive('VRプレビュー: 未接続 — VBSから開くとスライダーが右に反映されます', 'bad');
+    return;
+  }
+  serverMode = true;
+  setPreviewLive('VRプレビュー: サーバー接続済み。右のVR読込後にスライダーが効きます', 'wait');
+  try {
+    const infoRes = await fetch('/api/project-info');
+    const info = await infoRes.json();
+    if (info.ok) {
+      projectRootPath = info.root || '';
+      projectDataJsPath = info.dataJs || '';
+      updateProjectPathLine('接続済み');
+    }
+    await loadVideoFileList();
+    const r = await fetch('data.js?' + Date.now(), { cache: 'no-store' });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const text = await r.text();
+    ingestDataJsContent(text, 'data.js（自動）');
+    ensureVideoSelectsReady();
+    await refreshDiskFromServer(currentSceneId, currentHotspotIndex);
+    schedulePreviewToVr();
+  } catch (e) {
+    serverMode = false;
+    setStatus('読込失敗: ' + e.message + ' — ガイドVR貼り付け_起動.vbs を使ってください', 'bad');
+  }
+}
+
+bootFromServer();
+</script>
+</body>
+</html>

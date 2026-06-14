@@ -1,0 +1,920 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>高画質覗き設定</title>
+<style>
+* { box-sizing: border-box; }
+body { margin: 0; font-family: "Meiryo", sans-serif; background: #141820; color: #e8ecf4; line-height: 1.65; }
+header { padding: 8px 14px 10px; background: #222; border-bottom: 2px solid #00d4ff; flex-shrink: 0; }
+.header-top { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; margin-bottom: 8px; }
+h1 { margin: 0; font-size: 18px; color: #00d4ff; }
+.lead { margin: 0; font-size: 12px; color: #a8b4d0; line-height: 1.45; flex: 1 1 260px; }
+.toolbar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px;
+  padding: 7px 10px; background: #1a2030; border-radius: 8px; border: 1px solid #404870;
+}
+.tb { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #c0c8e0; margin: 0; white-space: nowrap; }
+.tb input[type=file] { width: auto; max-width: 200px; font-size: 11px; padding: 3px 4px; background: #0e1018; border: 1px solid #555; color: #fff; border-radius: 6px; }
+.tb input[type=text] { width: 96px; padding: 4px 6px; font-size: 12px; }
+.tb select { width: auto; min-width: 130px; max-width: 240px; padding: 4px 6px; font-size: 12px; }
+.status.inline { margin: 0; padding: 3px 8px; display: inline-block; }
+body { min-height: 100vh; display: flex; flex-direction: column; }
+main.workbench {
+  flex: 1; display: flex; min-height: 0; width: 100%; max-width: none; margin: 0; padding: 0;
+}
+.controls-left {
+  width: 340px; min-width: 280px; max-width: 380px; flex-shrink: 0;
+  overflow-y: auto; overflow-x: hidden; padding: 6px 8px 14px;
+  border-right: 1px solid #404870; background: #141820;
+  line-height: 1.35;
+}
+.controls-left .panel { padding: 7px 9px; margin-bottom: 5px; }
+.controls-left .panel h2 { margin: 0 0 5px; font-size: 12px; }
+.controls-left label { margin: 1px 0 0; font-size: 11px; }
+.controls-left input, .controls-left select { padding: 4px 6px; font-size: 12px; }
+.controls-left .hint { font-size: 10px; margin: 1px 0 2px; line-height: 1.35; }
+.controls-left .row2 { grid-template-columns: 1fr 1fr; gap: 5px; }
+.controls-left .nudge-row { margin: 1px 0 3px; gap: 4px; }
+.controls-left .nudge-row button { padding: 3px 7px; font-size: 11px; }
+.controls-left .btn-row { margin: 4px 0 2px; gap: 5px; }
+.controls-left button { padding: 6px 10px; font-size: 12px; margin: 0; }
+.slider-block { margin-bottom: 2px; }
+.slider-line { display: flex; gap: 5px; align-items: center; margin-bottom: 1px; }
+.slider-line input[type=range] { flex: 1; margin: 0; height: 14px; }
+.num-mini { width: 48px !important; flex-shrink: 0; padding: 2px 4px !important; font-size: 11px !important; text-align: center; }
+.preview-right {
+  flex: 1; min-width: 0; display: flex; flex-direction: column;
+  padding: 10px 14px 14px; background: #0a0c10;
+}
+.panel { background: #1e2430; border: 1px solid #404870; border-radius: 10px; padding: 12px; margin: 0 0 10px; }
+.panel-compact { padding: 10px 12px; }
+.panel h2 { margin: 0 0 10px; font-size: 14px; color: #00d4ff; }
+label { display: block; font-size: 12px; color: #c0c8e0; margin: 8px 0 4px; }
+input, select { width: 100%; background: #0e1018; border: 1px solid #555; color: #fff; border-radius: 6px; padding: 8px; font-size: 14px; }
+.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+button { border: 0; border-radius: 8px; padding: 9px 14px; font-weight: bold; cursor: pointer; background: #00d4ff; color: #111; margin: 4px 8px 4px 0; font-size: 13px; }
+button.sub { background: #444; color: #fff; }
+button.danger { background: #c44; color: #fff; }
+.status { font-size: 12px; padding: 6px 10px; border-radius: 6px; margin-top: 8px; }
+.status.ok { background: #2e6b3a; }
+.status.err { background: #8b2e2e; }
+.status.info { background: #2a4a7a; }
+.hint { font-size: 12px; color: #8899bb; margin-top: 6px; line-height: 1.6; }
+code { color: #ffcc80; }
+.preview-wrap {
+  position: relative; flex: 1; min-height: 280px; margin: 0;
+  border-radius: 8px; overflow: hidden; border: 1px solid #404870;
+}
+#previewPano { width: 100%; height: 100%; min-height: 280px; background: #000; }
+.preview-right .steps { margin: 0 0 8px; flex-shrink: 0; }
+.preview-right #previewAngles { flex-shrink: 0; margin: 8px 0 6px; }
+.preview-right .btn-row { flex-shrink: 0; margin: 0 0 4px; }
+.preview-cross {
+  position: absolute; left: 50%; top: 50%; width: 32px; height: 32px;
+  transform: translate(-50%, -50%); pointer-events: none; z-index: 5;
+}
+.preview-cross::before, .preview-cross::after {
+  content: ''; position: absolute; background: rgba(255,255,255,0.8);
+}
+.preview-cross::before { left: 50%; top: 0; width: 2px; height: 100%; transform: translateX(-50%); }
+.preview-cross::after { top: 50%; left: 0; height: 2px; width: 100%; transform: translateY(-50%); }
+#previewAngles { font-size: 12px; color: #ffe566; margin: 0; }
+.preview-toolbar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px;
+  margin: 6px 0 4px; flex-shrink: 0;
+}
+.preview-toolbar .zoom-hint { font-size: 11px; color: #8899bb; margin-left: auto; }
+.preview-toolbar button { padding: 5px 10px; font-size: 12px; margin: 0; }
+.steps { font-size: 12px; color: #c8d4e8; background: #1a2230; border-radius: 8px; padding: 10px 12px; margin: 8px 0; line-height: 1.75; }
+.steps b { color: #00d4ff; }
+.btn-row { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+.btn-row button { margin: 0; }
+.btn-main { background: #f5c518; color: #111; font-size: 14px; padding: 10px 16px; }
+.nudge-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 6px 0; }
+.nudge-row button { padding: 6px 10px; font-size: 12px; margin: 0; }
+input[type=range] { width: 100%; accent-color: #00d4ff; }
+.slider-val { font-size: 12px; color: #ffe566; }
+.hires-peek-zone-host { position: relative; box-sizing: border-box; pointer-events: auto; }
+.hires-peek-soft-zone { position: relative; width: 100%; height: 100%; overflow: visible; }
+.hires-peek-soft-fill { position: absolute; inset: 0; pointer-events: none; }
+.mask-softRect .hires-peek-soft-fill { -webkit-mask-image: linear-gradient(to right, transparent, #000 14%, #000 86%, transparent), linear-gradient(to bottom, transparent, #000 12%, #000 88%, transparent); -webkit-mask-composite: source-in; mask-image: linear-gradient(to right, transparent, #000 14%, #000 86%, transparent), linear-gradient(to bottom, transparent, #000 12%, #000 88%, transparent); mask-composite: intersect; background: rgba(255,255,255,0.17); box-shadow: inset 0 0 70px 24px rgba(255,255,255,0.1); }
+.mask-softEllipse .hires-peek-soft-fill { mask-image: radial-gradient(ellipse 88% 88% at 50% 50%, #000 22%, transparent 72%); background: rgba(255,255,255,0.14); }
+.mask-softCircle .hires-peek-soft-fill { mask-image: radial-gradient(circle at 50% 50%, #000 28%, transparent 70%); background: rgba(255,255,255,0.13); }
+.mask-fadeLight .hires-peek-soft-fill { mask-image: radial-gradient(ellipse 92% 92% at 50% 50%, #000 12%, transparent 78%); background: rgba(255,255,255,0.22); }
+.mask-fadeDark .hires-peek-soft-fill { mask-image: radial-gradient(ellipse 90% 90% at 50% 50%, #000 18%, transparent 74%); background: rgba(0,0,0,0.24); }
+.hires-peek-zone-host.mode-macro { width: 56px !important; height: 56px !important; }
+.hires-peek-zone-host.mode-macro .hires-peek-magnifier { right: auto; bottom: auto; left: 50%; top: 50%; transform: translate(-50%, -50%); }
+.hires-peek-magnifier { position: absolute; width: 50px; height: 50px; z-index: 4; right: -8px; bottom: -8px; left: auto; top: auto; }
+.hires-peek-magnifier svg { width: 100%; height: 100%; display: block; filter: drop-shadow(0 2px 8px rgba(0,0,0,0.55)); }
+.hires-peek-magnifier.color-pink { color: #ff4da6; }
+.hires-peek-magnifier.color-green { color: #4de67a; }
+.hires-peek-magnifier.color-gold { color: #f5c518; }
+.scene-card { background: #252b38; border: 1px solid #505878; border-radius: 8px; padding: 12px; margin-bottom: 10px; }
+.scene-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; }
+.scene-head h3 { margin: 0; font-size: 14px; color: #ffcc80; }
+.eos-panel { border-color: #f5c518; }
+.eos-panel h2 { color: #f5c518; }
+.eos-check { font-size: 11px; margin-top: 4px; padding: 4px 6px; border-radius: 5px; }
+.eos-check.ok { background: #2e6b3a; color: #e8f4ea; }
+.eos-check.err { background: #8b2e2e; color: #ffe8e8; }
+.eos-check.info { background: #2a4a7a; color: #e0ecff; }
+.eos-thumb-wrap { margin-top: 4px; text-align: center; background: #0a0c10; border-radius: 6px; padding: 4px; min-height: 48px; }
+.eos-thumb { max-width: 100%; max-height: 72px; object-fit: contain; display: block; margin: 0 auto; }
+.controls-left .eos-panel input[type=file] { font-size: 11px; padding: 3px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="header-top">
+    <h1>高画質覗き設定</h1>
+    <p class="lead">
+      虫眼鏡タップで EOS 画像を全画面表示。範囲撮影＝ぼかし四角、接写＝虫眼鏡のみ。
+    </p>
+  </div>
+  <div class="toolbar">
+    <label class="tb">data.js<input type="file" id="dataJsFile" accept=".js"></label>
+    <label class="tb">タイル<input type="text" id="tilesBase" value="tiles1024"></label>
+    <label class="tb">シーン<select id="previewScene" disabled><option value="">読み込み後に選択</option></select></label>
+    <div id="fileStatus" class="status inline" style="display:none"></div>
+  </div>
+</header>
+<main class="workbench">
+  <aside class="controls-left">
+  <div class="panel panel-compact eos-panel">
+    <h2>EOS画像（虫眼鏡で表示する写真）</h2>
+    <label>ファイル名（viewer と同じフォルダに置く）</label>
+    <input id="editImageSrc" placeholder="例: aa003eos.jpg" disabled>
+    <label style="margin-top:4px">画像を選んでファイル名を入れる</label>
+    <input type="file" id="eosImagePick" accept="image/jpeg,image/jpg,image/png" disabled>
+    <div id="eosImageCheck" class="eos-check info" style="display:none"></div>
+    <div class="eos-thumb-wrap"><img id="eosThumb" class="eos-thumb" alt="" hidden></div>
+    <p class="hint">※ 選んだ画像は <strong>viewer.html と同じフォルダ</strong> にコピーしてください。名前は上の欄と一致させます。</p>
+  </div>
+
+  <div class="panel panel-compact">
+    <h2>枠の調整</h2>
+    <div class="row2">
+      <div>
+        <label>中心ヨー（°）</label>
+        <div class="nudge-row">
+          <button type="button" class="sub" onclick="nudgeField('pYaw',-1)">−1</button>
+          <input id="pYaw" type="number" step="1" value="0" style="flex:1">
+          <button type="button" class="sub" onclick="nudgeField('pYaw',1)">+1</button>
+        </div>
+      </div>
+      <div>
+        <label>中心ピッチ（°）</label>
+        <div class="nudge-row">
+          <button type="button" class="sub" onclick="nudgeField('pPitch',-1)">−1</button>
+          <input id="pPitch" type="number" step="1" value="0" style="flex:1">
+          <button type="button" class="sub" onclick="nudgeField('pPitch',1)">+1</button>
+        </div>
+      </div>
+    </div>
+    <div class="slider-block">
+      <label>撮影範囲・左右（°） <span class="slider-val" id="pRangeYawVal">22</span></label>
+      <div class="slider-line">
+        <input id="pRangeYawR" type="range" min="8" max="55" step="1" value="22">
+        <input id="pRangeYaw" class="num-mini" type="number" min="8" max="55" step="1" value="22">
+      </div>
+      <p class="hint">小さいほど狭い（EOSの撮影エリア）</p>
+    </div>
+    <div class="slider-block">
+      <label>撮影範囲・上下（°） <span class="slider-val" id="pRangePitchVal">14</span></label>
+      <div class="slider-line">
+        <input id="pRangePitchR" type="range" min="6" max="40" step="1" value="14">
+        <input id="pRangePitch" class="num-mini" type="number" min="6" max="40" step="1" value="14">
+      </div>
+    </div>
+    <div class="slider-block">
+      <label>表示角度・左右（°） <span class="slider-val" id="pShowYawVal">12</span></label>
+      <div class="slider-line">
+        <input id="pShowYawR" type="range" min="4" max="35" step="1" value="12">
+        <input id="pShowYaw" class="num-mini" type="number" min="4" max="35" step="1" value="12">
+      </div>
+      <p class="hint">中心から何度向くとマスクが出るか</p>
+    </div>
+    <div class="slider-block">
+      <label>表示角度・上下（°） <span class="slider-val" id="pShowPitchVal">9</span></label>
+      <div class="slider-line">
+        <input id="pShowPitchR" type="range" min="3" max="25" step="1" value="9">
+        <input id="pShowPitch" class="num-mini" type="number" min="3" max="25" step="1" value="9">
+      </div>
+    </div>
+    <div class="row2">
+      <div class="slider-block">
+        <label>枠幅（px） <span class="slider-val" id="pWidthVal">520</span></label>
+        <div class="slider-line">
+          <input id="pWidthR" type="range" min="160" max="900" step="10" value="520">
+          <input id="pWidth" class="num-mini" type="number" step="10" value="520">
+        </div>
+      </div>
+      <div class="slider-block">
+        <label>枠高（px） <span class="slider-val" id="pHeightVal">340</span></label>
+        <div class="slider-line">
+          <input id="pHeightR" type="range" min="120" max="700" step="10" value="340">
+          <input id="pHeight" class="num-mini" type="number" step="10" value="340">
+        </div>
+      </div>
+    </div>
+    <div class="row2">
+      <div><label>奥行 radius</label><input id="pRadius" type="number" step="10" value="900"></div>
+      <div>
+        <label>マスク</label>
+        <select id="pMask">
+          <option value="softRect">ぼかし四角</option>
+          <option value="softEllipse">ぼかし楕円</option>
+          <option value="softCircle">ぼかし円</option>
+          <option value="fadeLight">明るめ</option>
+          <option value="fadeDark">暗め</option>
+        </select>
+      </div>
+    </div>
+    <div class="slider-block">
+      <label>マスク強さ <span class="slider-val" id="pMaskStrVal">65</span></label>
+      <div class="slider-line">
+        <input id="pMaskStrR" type="range" min="15" max="100" step="5" value="65">
+        <input id="pMaskStr" class="num-mini" type="number" min="15" max="100" step="5" value="65">
+      </div>
+      <p class="hint">見えにくければ 70〜85 付近</p>
+    </div>
+    <div class="row2">
+      <div>
+        <label>撮影の種類</label>
+        <select id="pShootMode">
+          <option value="range">範囲（四角＋虫眼鏡）</option>
+          <option value="macro">接写（虫眼鏡のみ）</option>
+        </select>
+      </div>
+      <div>
+        <label>虫眼鏡の色</label>
+        <select id="pMagColor">
+          <option value="pink">ピンク</option>
+          <option value="green">グリーン</option>
+          <option value="gold">ゴールド</option>
+        </select>
+      </div>
+    </div>
+    <div class="btn-row">
+      <button type="button" onclick="applyPreviewToScene()">このシーンに反映</button>
+    </div>
+  </div>
+
+  <div class="panel panel-compact">
+    <h2>シーン一覧</h2>
+    <button type="button" class="sub" id="addBtn" disabled onclick="addOrEditScene()">上のシーンをプレビューで開く</button>
+    <div id="cards"></div>
+  </div>
+
+  <div class="panel panel-compact">
+    <h2>保存</h2>
+    <div class="btn-row">
+      <button type="button" onclick="exportDataJs()">data.js を出力</button>
+      <button type="button" class="sub" onclick="resetAll()">リセット</button>
+    </div>
+  </div>
+  </aside>
+
+  <section class="preview-right">
+    <div class="steps">
+      <b>合わせ方</b>
+      1. 右をドラッグして花畑を中央 <b>＋</b> に合わせる（ホイール／下のボタンでズーム）
+      2. <b>「今の向きを枠の中心に」</b>
+      3. <b>「枠の中心へ視点を移動」</b> で確認
+      4. 左のスライダーで調整 →「このシーンに反映」
+    </div>
+    <div class="preview-wrap">
+      <div id="previewPano"></div>
+      <div class="preview-cross" aria-hidden="true"></div>
+    </div>
+    <div id="previewAngles">向き: ヨー --° / ピッチ --° / ズーム --°</div>
+    <div class="preview-toolbar">
+      <button type="button" class="sub" onclick="previewZoomIn()">＋ 寄る</button>
+      <button type="button" class="sub" onclick="previewZoomOut()">－ 引く</button>
+      <button type="button" class="sub" onclick="previewZoomWide()">広角表示</button>
+      <span class="zoom-hint">プレビュー上でマウスホイールでもズーム</span>
+    </div>
+    <div class="btn-row">
+      <button type="button" class="btn-main" onclick="frameCenterFromView()">① 今の向きを枠の中心に</button>
+      <button type="button" class="sub" onclick="lookAtFrameCenter()">② 枠の中心へ視点を移動</button>
+      <button type="button" class="sub" onclick="pullPreviewFromViewer()">viewer の向きを取得</button>
+    </div>
+  </section>
+</main>
+<script src="vendor/marzipano.js"></script>
+<script>
+var loadedData = null;
+var sceneIds = [];
+var previewViewer = null;
+var previewScene = null;
+var previewView = null;
+var previewHotspot = null;
+var PREVIEW_FOV_WIDE = 1.75;
+var PREVIEW_FOV_MIN = 0.45;
+var PREVIEW_FOV_MAX = 2.05;
+var previewScenes = {};
+var TILES_BASE = 'tiles1024';
+var eosThumbBlobUrl = '';
+
+function setEosImageCheck(msg, type) {
+  var el = document.getElementById('eosImageCheck');
+  if (!msg) { el.style.display = 'none'; el.textContent = ''; return; }
+  el.style.display = 'block';
+  el.textContent = msg;
+  el.className = 'eos-check ' + (type || 'info');
+}
+
+function showEosThumbFromUrl(url) {
+  var img = document.getElementById('eosThumb');
+  if (!url) { img.hidden = true; img.removeAttribute('src'); return; }
+  img.hidden = false;
+  img.src = url;
+}
+
+function checkEosImageFromFolder(name) {
+  name = String(name || '').trim();
+  if (!name) {
+    setEosImageCheck('EOS画像のファイル名を入力するか、下で画像を選んでください', 'info');
+    showEosThumbFromUrl('');
+    return;
+  }
+  setEosImageCheck('確認中… ' + name, 'info');
+  var probe = new Image();
+  probe.onload = function() {
+    setEosImageCheck('OK: ' + name + ' が見つかりました（viewer で表示できます）', 'ok');
+    showEosThumbFromUrl(name + '?t=' + Date.now());
+  };
+  probe.onerror = function() {
+    setEosImageCheck('見つかりません: ' + name + ' — viewer と同じフォルダに置いてください', 'err');
+    showEosThumbFromUrl('');
+  };
+  probe.src = name + '?t=' + Date.now();
+}
+
+function bindEosImagePick() {
+  document.getElementById('eosImagePick').addEventListener('change', function(e) {
+    var file = e.target.files && e.target.files[0];
+    if (!file) return;
+    if (eosThumbBlobUrl) URL.revokeObjectURL(eosThumbBlobUrl);
+    document.getElementById('editImageSrc').value = file.name;
+    eosThumbBlobUrl = URL.createObjectURL(file);
+    showEosThumbFromUrl(eosThumbBlobUrl);
+    setEosImageCheck('選択: ' + file.name + ' — このファイルを viewer フォルダにコピーしてください', 'info');
+    checkEosImageFromFolder(file.name);
+    updatePreviewHotspot();
+  });
+  document.getElementById('editImageSrc').addEventListener('input', function() {
+    checkEosImageFromFolder(this.value);
+    updatePreviewHotspot();
+  });
+}
+
+function showStatus(msg, type) {
+  var el = document.getElementById('fileStatus');
+  el.style.display = msg ? 'block' : 'none';
+  el.textContent = msg || '';
+  el.className = 'status inline' + (type ? ' ' + type : '');
+}
+
+function sceneKeyFromId(id) {
+  var m = String(id || '').match(/-([a-z]{2}\d{3})$/i);
+  return m ? m[1].toLowerCase() : '';
+}
+
+function findScene(id) {
+  return loadedData && loadedData.scenes.find(function(s) { return s.id === id; });
+}
+
+function esc(s) { return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;'); }
+function escAttr(s) { return esc(s).replace(/'/g,'&#39;'); }
+function num(v, d) { var n = parseFloat(v); return isFinite(n) ? n : d; }
+
+function degToRadPreview(d) { return d * Math.PI / 180; }
+
+function peekEffectiveFrameSize(f) {
+  var r = f.frameRadius != null ? f.frameRadius : 900;
+  var fw = f.frameWidth != null ? f.frameWidth : 520;
+  var fh = f.frameHeight != null ? f.frameHeight : 340;
+  if (f.rangeAngleYaw != null && isFinite(Number(f.rangeAngleYaw))) {
+    fw = Math.max(80, Math.round(2 * r * Math.tan(degToRadPreview(Number(f.rangeAngleYaw)) / 2)));
+  }
+  if (f.rangeAnglePitch != null && isFinite(Number(f.rangeAnglePitch))) {
+    fh = Math.max(60, Math.round(2 * r * Math.tan(degToRadPreview(Number(f.rangeAnglePitch)) / 2)));
+  }
+  return { width: fw, height: fh };
+}
+
+function frameSizeToRangeAngles(f) {
+  var r = f.frameRadius != null ? f.frameRadius : 900;
+  var fw = f.frameWidth != null ? f.frameWidth : 520;
+  var fh = f.frameHeight != null ? f.frameHeight : 340;
+  return {
+    yaw: Math.max(8, Math.round(2 * Math.atan((fw * 0.5) / r) * 180 / Math.PI)),
+    pitch: Math.max(6, Math.round(2 * Math.atan((fh * 0.5) / r) * 180 / Math.PI))
+  };
+}
+
+function syncRangePxFromAngles() {
+  var f = readPreviewFields();
+  var size = peekEffectiveFrameSize(f);
+  document.getElementById('pWidth').value = size.width;
+  document.getElementById('pHeight').value = size.height;
+  document.getElementById('pWidthR').value = size.width;
+  document.getElementById('pHeightR').value = size.height;
+  document.getElementById('pWidthVal').textContent = size.width;
+  document.getElementById('pHeightVal').textContent = size.height;
+}
+
+function readPreviewFields() {
+  return {
+    yawCenter: num(document.getElementById('pYaw').value, 0),
+    pitchCenter: num(document.getElementById('pPitch').value, 0),
+    frameRadius: num(document.getElementById('pRadius').value, 900),
+    frameWidth: num(document.getElementById('pWidth').value, 520),
+    frameHeight: num(document.getElementById('pHeight').value, 340),
+    rangeAngleYaw: num(document.getElementById('pRangeYaw').value, 22),
+    rangeAnglePitch: num(document.getElementById('pRangePitch').value, 14),
+    showAngleYaw: num(document.getElementById('pShowYaw').value, 12),
+    showAnglePitch: num(document.getElementById('pShowPitch').value, 9),
+    shootMode: document.getElementById('pShootMode').value || 'range',
+    maskType: document.getElementById('pMask').value || 'softRect',
+    maskStrength: num(document.getElementById('pMaskStr').value, 65),
+    magnifierColor: document.getElementById('pMagColor').value || 'green',
+    imageSrc: document.getElementById('editImageSrc').value.trim()
+  };
+}
+
+function fillPreviewFields(p) {
+  if (!p) return;
+  document.getElementById('pYaw').value = p.yawCenter != null ? p.yawCenter : 0;
+  document.getElementById('pPitch').value = p.pitchCenter != null ? p.pitchCenter : 0;
+  document.getElementById('pRadius').value = p.frameRadius != null ? p.frameRadius : 900;
+  var ang = frameSizeToRangeAngles(p);
+  var ry = p.rangeAngleYaw != null ? p.rangeAngleYaw : ang.yaw;
+  var rp = p.rangeAnglePitch != null ? p.rangeAnglePitch : ang.pitch;
+  document.getElementById('pRangeYaw').value = ry;
+  document.getElementById('pRangeYawR').value = ry;
+  document.getElementById('pRangeYawVal').textContent = ry;
+  document.getElementById('pRangePitch').value = rp;
+  document.getElementById('pRangePitchR').value = rp;
+  document.getElementById('pRangePitchVal').textContent = rp;
+  var sy = p.showAngleYaw != null ? p.showAngleYaw : 12;
+  var sp = p.showAnglePitch != null ? p.showAnglePitch : 9;
+  document.getElementById('pShowYaw').value = sy;
+  document.getElementById('pShowYawR').value = sy;
+  document.getElementById('pShowYawVal').textContent = sy;
+  document.getElementById('pShowPitch').value = sp;
+  document.getElementById('pShowPitchR').value = sp;
+  document.getElementById('pShowPitchVal').textContent = sp;
+  syncRangePxFromAngles();
+  document.getElementById('pShootMode').value = p.shootMode || 'range';
+  document.getElementById('pMask').value = p.maskType || 'softRect';
+  var ms = p.maskStrength != null ? p.maskStrength : 65;
+  document.getElementById('pMaskStr').value = ms;
+  document.getElementById('pMaskStrR').value = ms;
+  document.getElementById('pMaskStrVal').textContent = ms;
+  document.getElementById('pMagColor').value = p.magnifierColor || (p.shootMode === 'macro' ? 'pink' : 'green');
+}
+
+function nudgeField(id, delta) {
+  var el = document.getElementById(id);
+  el.value = num(el.value, 0) + delta;
+  updatePreviewHotspot();
+  updatePreviewAngles();
+}
+
+function frameCenterFromView() {
+  if (!previewView) { showStatus('先にプレビューのシーンを読み込んでください', 'err'); return; }
+  var p = previewView.parameters();
+  document.getElementById('pYaw').value = Math.round(p.yaw * 180 / Math.PI);
+  document.getElementById('pPitch').value = Math.round(p.pitch * 180 / Math.PI);
+  updatePreviewHotspot();
+  updatePreviewAngles();
+  showStatus('今の向きを枠の中心に設定しました。次に「枠の中心へ視点を移動」で確認してください', 'ok');
+}
+
+function lookAtFrameCenter() {
+  if (!previewView) return;
+  var f = readPreviewFields();
+  previewView.setParameters({
+    yaw: f.yawCenter * Math.PI / 180,
+    pitch: f.pitchCenter * Math.PI / 180,
+    fov: previewView.parameters().fov
+  });
+  updatePreviewAngles();
+  showStatus('枠の中心へ視点を移動しました。枠が画面中央（＋）付近に来ていればOKです', 'info');
+}
+
+function destroyPreviewHotspot() {
+  if (previewHotspot && previewScene) {
+    try { previewScene.hotspotContainer().destroyHotspot(previewHotspot); } catch (e) {}
+    previewHotspot = null;
+  }
+}
+
+function hiResPeekMaskClass(cfg) {
+  var m = cfg.maskType || 'softRect';
+  if (m === 'softEllipse' || m === 'softCircle' || m === 'fadeLight' || m === 'fadeDark') return 'mask-' + m;
+  return 'mask-softRect';
+}
+
+function hiResPeekMagnifierSvg() {
+  return '<svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="27" cy="27" r="17" fill="none" stroke="currentColor" stroke-width="4.5"/><line x1="40" y1="40" x2="56" y2="56" stroke="currentColor" stroke-width="5" stroke-linecap="round"/></svg>';
+}
+
+function hiResPeekMaskStrengthRatio(cfg) {
+  var s = cfg.maskStrength != null ? Number(cfg.maskStrength) : 65;
+  if (!isFinite(s)) s = 65;
+  return Math.max(15, Math.min(100, s)) / 100;
+}
+
+function applyHiResPeekMaskStyle(fill, cfg) {
+  if (!fill || !cfg) return;
+  var k = hiResPeekMaskStrengthRatio(cfg);
+  var mask = hiResPeekMaskClass(cfg);
+  if (mask === 'mask-fadeDark') {
+    fill.style.background = 'rgba(0, 0, 0, ' + (0.1 + k * 0.38).toFixed(3) + ')';
+    fill.style.boxShadow = 'none';
+  } else if (mask === 'mask-fadeLight') {
+    fill.style.background = 'rgba(255, 255, 255, ' + (0.08 + k * 0.42).toFixed(3) + ')';
+    fill.style.boxShadow = 'none';
+  } else {
+    fill.style.background = 'rgba(255, 255, 255, ' + (0.06 + k * 0.36).toFixed(3) + ')';
+    fill.style.boxShadow = 'inset 0 0 ' + Math.round(36 + k * 100) + 'px ' +
+      Math.round(10 + k * 34) + 'px rgba(255, 255, 255, ' + (0.03 + k * 0.22).toFixed(3) + ')';
+  }
+}
+
+function buildPreviewHiResZone(f) {
+  var isMacro = (f.shootMode || 'range') === 'macro';
+  var size = peekEffectiveFrameSize(f);
+  var host = document.createElement('div');
+  host.className = 'hires-peek-zone-host ' + (isMacro ? 'mode-macro' : 'mode-range');
+  if (!isMacro) {
+    host.style.width = Math.max(120, size.width) + 'px';
+    host.style.height = Math.max(80, size.height) + 'px';
+    var zone = document.createElement('div');
+    zone.className = 'hires-peek-soft-zone ' + hiResPeekMaskClass(f);
+    var fill = document.createElement('div');
+    fill.className = 'hires-peek-soft-fill';
+    applyHiResPeekMaskStyle(fill, f);
+    zone.appendChild(fill);
+    host.appendChild(zone);
+  } else {
+    host.style.width = '56px';
+    host.style.height = '56px';
+  }
+  var magColor = f.magnifierColor || (isMacro ? 'pink' : 'green');
+  var mag = document.createElement('div');
+  mag.className = 'hires-peek-magnifier color-' + magColor;
+  mag.innerHTML = hiResPeekMagnifierSvg();
+  host.appendChild(mag);
+  return host;
+}
+
+function updatePreviewHotspot() {
+  destroyPreviewHotspot();
+  if (!previewScene) return;
+  var f = readPreviewFields();
+  var wrap = buildPreviewHiResZone(f);
+  previewHotspot = previewScene.hotspotContainer().createHotspot(
+    wrap,
+    { yaw: f.yawCenter * Math.PI / 180, pitch: f.pitchCenter * Math.PI / 180 },
+    { perspective: { radius: f.frameRadius } }
+  );
+}
+
+function setPreviewFov(fovRad) {
+  if (!previewView) return;
+  var fov = Math.max(PREVIEW_FOV_MIN, Math.min(PREVIEW_FOV_MAX, fovRad));
+  var p = previewView.parameters();
+  p.fov = fov;
+  previewView.setParameters(p);
+  updatePreviewAngles();
+}
+
+function previewZoomIn() {
+  if (!previewView) return;
+  setPreviewFov(previewView.parameters().fov - 0.12);
+}
+function previewZoomOut() {
+  if (!previewView) return;
+  setPreviewFov(previewView.parameters().fov + 0.12);
+}
+function previewZoomWide() {
+  if (!previewView) return;
+  setPreviewFov(PREVIEW_FOV_WIDE);
+}
+
+function bindPreviewWheelZoom() {
+  var wrap = document.querySelector('.preview-wrap');
+  if (!wrap || wrap._wheelBound) return;
+  wrap._wheelBound = true;
+  wrap.addEventListener('wheel', function(e) {
+    if (!previewView) return;
+    e.preventDefault();
+    var delta = e.deltaY > 0 ? 0.1 : -0.1;
+    setPreviewFov(previewView.parameters().fov + delta);
+  }, { passive: false });
+}
+
+function updatePreviewAngles() {
+  if (!previewView) return;
+  var p = previewView.parameters();
+  var y = Math.round(p.yaw * 180 / Math.PI);
+  var pt = Math.round(p.pitch * 180 / Math.PI);
+  var fv = Math.round(p.fov * 180 / Math.PI);
+  document.getElementById('previewAngles').textContent =
+    '現在の向き: ヨー ' + y + '° / ピッチ ' + pt + '° / ズーム ' + fv + '°';
+}
+
+function fixSceneLevels(scene) {
+  scene.levels = scene.levels.filter(function(l) { return l.size <= 1024; });
+  scene.levels.forEach(function(l) { if (!l.fallbackOnly) l.tileSize = l.size; });
+}
+
+function loadPreviewScene(sceneId, opts) {
+  opts = opts || {};
+  if (!loadedData || !sceneId) return;
+  var sd = findScene(sceneId);
+  if (!sd) return;
+  TILES_BASE = document.getElementById('tilesBase').value.trim() || 'tiles1024';
+  var pano = document.getElementById('previewPano');
+  if (previewViewer) {
+    try { previewViewer.destroy(); } catch (e) {}
+    previewViewer = null;
+  }
+  previewViewer = new Marzipano.Viewer(pano);
+  if (typeof previewViewer.updateSize === 'function') {
+    setTimeout(function() { previewViewer.updateSize(); }, 50);
+  }
+  previewScenes = {};
+  loadedData.scenes.forEach(function(s) {
+    fixSceneLevels(s);
+    var source = Marzipano.ImageUrlSource.fromString(TILES_BASE + '/' + s.id + '/{z}/{f}/{y}/{x}.jpg');
+    var geometry = new Marzipano.CubeGeometry(s.levels);
+    var limiter = Marzipano.RectilinearView.limit.traditional(s.faceSize, 100 * Math.PI / 180, 120 * Math.PI / 180);
+    var view = new Marzipano.RectilinearView(s.initialViewParameters || { yaw: 0, pitch: 0, fov: 1.1 }, limiter);
+    var scene = previewViewer.createScene({ source: source, geometry: geometry, view: view });
+    previewScenes[s.id] = { scene: scene, view: view, data: s };
+  });
+  var obj = previewScenes[sceneId];
+  if (!obj) return;
+  previewScene = obj.scene;
+  previewView = obj.view;
+  previewScene.switchTo({ transitionDuration: 0 });
+  var cur = previewView.parameters();
+  cur.fov = PREVIEW_FOV_WIDE;
+  previewView.setParameters(cur);
+  previewView.addEventListener('change', updatePreviewAngles);
+  updatePreviewAngles();
+  var p = sd.hiResPeek || {};
+  fillPreviewFields(p);
+  document.getElementById('editImageSrc').disabled = false;
+  document.getElementById('eosImagePick').disabled = false;
+  document.getElementById('editImageSrc').value = p.imageSrc || (sceneKeyFromId(sceneId) + 'eos.jpg');
+  checkEosImageFromFolder(document.getElementById('editImageSrc').value);
+  updatePreviewHotspot();
+  if (!opts.skipLookAt && p.yawCenter != null && p.pitchCenter != null) {
+    setTimeout(lookAtFrameCenter, 300);
+  }
+}
+
+function syncWidthFromSlider() {
+  var v = document.getElementById('pWidthR').value;
+  document.getElementById('pWidth').value = v;
+  document.getElementById('pWidthVal').textContent = v;
+  updatePreviewHotspot();
+}
+function syncHeightFromSlider() {
+  var v = document.getElementById('pHeightR').value;
+  document.getElementById('pHeight').value = v;
+  document.getElementById('pHeightVal').textContent = v;
+  updatePreviewHotspot();
+}
+
+function bindAngleField(numId, rangeId, valId, syncPx) {
+  function syncFromNum() {
+    document.getElementById(rangeId).value = document.getElementById(numId).value;
+    document.getElementById(valId).textContent = document.getElementById(numId).value;
+    if (syncPx) syncRangePxFromAngles();
+    updatePreviewHotspot();
+  }
+  function syncFromRange() {
+    document.getElementById(numId).value = document.getElementById(rangeId).value;
+    document.getElementById(valId).textContent = document.getElementById(rangeId).value;
+    if (syncPx) syncRangePxFromAngles();
+    updatePreviewHotspot();
+  }
+  document.getElementById(numId).addEventListener('input', syncFromNum);
+  document.getElementById(rangeId).addEventListener('input', syncFromRange);
+}
+
+function bindPreviewInputs() {
+  ['pYaw','pPitch','pRadius','pWidth','pHeight','pMask','pMaskStr','pShootMode','pMagColor'].forEach(function(id) {
+    document.getElementById(id).addEventListener('input', function() {
+      if (id === 'pWidth') {
+        document.getElementById('pWidthR').value = document.getElementById('pWidth').value;
+        document.getElementById('pWidthVal').textContent = document.getElementById('pWidth').value;
+      }
+      if (id === 'pHeight') {
+        document.getElementById('pHeightR').value = document.getElementById('pHeight').value;
+        document.getElementById('pHeightVal').textContent = document.getElementById('pHeight').value;
+      }
+      if (id === 'pMaskStr') {
+        document.getElementById('pMaskStrR').value = document.getElementById('pMaskStr').value;
+        document.getElementById('pMaskStrVal').textContent = document.getElementById('pMaskStr').value;
+      }
+      if (id === 'pRadius') syncRangePxFromAngles();
+      updatePreviewHotspot();
+      updatePreviewAngles();
+    });
+  });
+  bindAngleField('pRangeYaw', 'pRangeYawR', 'pRangeYawVal', true);
+  bindAngleField('pRangePitch', 'pRangePitchR', 'pRangePitchVal', true);
+  bindAngleField('pShowYaw', 'pShowYawR', 'pShowYawVal', false);
+  bindAngleField('pShowPitch', 'pShowPitchR', 'pShowPitchVal', false);
+  document.getElementById('pWidthR').addEventListener('input', syncWidthFromSlider);
+  document.getElementById('pHeightR').addEventListener('input', syncHeightFromSlider);
+  document.getElementById('pMaskStrR').addEventListener('input', function() {
+    document.getElementById('pMaskStr').value = document.getElementById('pMaskStrR').value;
+    document.getElementById('pMaskStrVal').textContent = document.getElementById('pMaskStrR').value;
+    updatePreviewHotspot();
+  });
+}
+
+function pullPreviewFromViewer() {
+  try {
+    var yaw = parseFloat(localStorage.getItem('hs_yaw'));
+    var pitch = parseFloat(localStorage.getItem('hs_pitch'));
+    var sid = localStorage.getItem('hs_sceneId') || '';
+    if (!isFinite(yaw) || !isFinite(pitch)) {
+      showStatus('viewer でシーンを開き、向きを変えてからお試しください', 'err');
+      return;
+    }
+    var applyViewerView = function() {
+      if (!previewView) return;
+      previewView.setParameters({
+        yaw: yaw,
+        pitch: pitch,
+        fov: previewView.parameters().fov
+      });
+      frameCenterFromView();
+      showStatus('viewer の向きを取得し、枠の中心に設定しました（シーン: ' + sid + '）', 'ok');
+    };
+    if (sid && sceneIds.indexOf(sid) >= 0) {
+      document.getElementById('previewScene').value = sid;
+      loadPreviewScene(sid, { skipLookAt: true });
+      setTimeout(applyViewerView, 350);
+    } else if (previewView) {
+      applyViewerView();
+    } else {
+      showStatus('先にプレビューのシーンを選んでください', 'err');
+    }
+  } catch (e) {
+    showStatus('取得できませんでした', 'err');
+  }
+}
+
+function applyPreviewToScene() {
+  var id = document.getElementById('previewScene').value;
+  if (!id) { showStatus('プレビューのシーンを選んでください', 'err'); return; }
+  var scene = findScene(id);
+  if (!scene) return;
+  var f = readPreviewFields();
+  var size = peekEffectiveFrameSize(f);
+  scene.hiResPeek = {
+    imageSrc: document.getElementById('editImageSrc').value.trim() || (sceneKeyFromId(id) + 'eos.jpg'),
+    yawCenter: f.yawCenter,
+    pitchCenter: f.pitchCenter,
+    frameWidth: size.width,
+    frameHeight: size.height,
+    frameRadius: f.frameRadius,
+    rangeAngleYaw: f.rangeAngleYaw,
+    rangeAnglePitch: f.rangeAnglePitch,
+    showAngleYaw: f.showAngleYaw,
+    showAnglePitch: f.showAnglePitch,
+    shootMode: f.shootMode,
+    maskType: f.maskType,
+    maskStrength: f.maskStrength,
+    magnifierColor: f.magnifierColor
+  };
+  renderCards();
+  showStatus(id + ' に反映しました', 'ok');
+}
+
+function renderCards() {
+  var container = document.getElementById('cards');
+  container.innerHTML = '';
+  if (!loadedData) return;
+  var rows = loadedData.scenes.filter(function(s) { return s.hiResPeek && s.hiResPeek.imageSrc; });
+  if (!rows.length) {
+    container.innerHTML = '<p class="hint">まだ設定がありません。「このシーンに反映」で追加できます。</p>';
+    return;
+  }
+  rows.forEach(function(scene) {
+    var p = scene.hiResPeek;
+    var div = document.createElement('div');
+    div.className = 'scene-card';
+    div.innerHTML = '<div class="scene-head"><h3>' + esc(scene.id) + '</h3>' +
+      '<button type="button" class="danger" onclick="removePeek(\'' + escAttr(scene.id) + '\')">削除</button></div>' +
+      '<p class="hint">' + esc(p.imageSrc) + ' / ' + (p.shootMode === 'macro' ? '接写' : '範囲') +
+      ' / 範囲' + (p.rangeAngleYaw != null ? p.rangeAngleYaw : '?') + '×' + (p.rangeAnglePitch != null ? p.rangeAnglePitch : '?') + '°' +
+      ' / 表示' + (p.showAngleYaw != null ? p.showAngleYaw : '?') + '×' + (p.showAnglePitch != null ? p.showAnglePitch : '?') + '°</p>' +
+      '<button type="button" class="sub" onclick="openPreviewFor(\'' + escAttr(scene.id) + '\')">プレビューで開く</button>';
+    container.appendChild(div);
+  });
+}
+
+function openPreviewFor(id) {
+  document.getElementById('previewScene').value = id;
+  loadPreviewScene(id);
+}
+
+function addOrEditScene() {
+  var id = document.getElementById('previewScene').value;
+  if (!id) { showStatus('上の欄でシーンを選んでください', 'err'); return; }
+  loadPreviewScene(id);
+  showStatus(id + ' をプレビューに読み込みました', 'ok');
+}
+
+function removePeek(id) {
+  var scene = findScene(id);
+  if (scene) delete scene.hiResPeek;
+  renderCards();
+}
+
+function exportDataJs() {
+  if (!loadedData) return;
+  applyPreviewToScene();
+  var js = 'var APP_DATA = ' + JSON.stringify(loadedData, null, 2) + ';';
+  downloadText(js, 'data.js');
+  var ts = new Date();
+  var stamp = '' + ts.getFullYear() + String(ts.getMonth()+1).padStart(2,'0') + String(ts.getDate()).padStart(2,'0') + String(ts.getHours()).padStart(2,'0') + String(ts.getMinutes()).padStart(2,'0');
+  downloadText(js, 'data' + stamp + '.js.txt', 'text/plain');
+  showStatus('data.js を出力しました', 'ok');
+}
+
+function downloadText(content, filename, mime) {
+  var blob = new Blob([content], { type: mime || 'text/javascript' });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function resetAll() {
+  loadedData = null;
+  sceneIds = [];
+  document.getElementById('dataJsFile').value = '';
+  document.getElementById('cards').innerHTML = '';
+  document.getElementById('previewPano').innerHTML = '';
+  showStatus('リセットしました', 'info');
+}
+
+document.getElementById('dataJsFile').addEventListener('change', function(e) {
+  var file = e.target.files[0];
+  if (!file) return;
+  var reader = new FileReader();
+  reader.onload = function(ev) {
+    try {
+      var m = ev.target.result.match(/var\s+APP_DATA\s*=\s*(\{[\s\S]*\})\s*;?\s*$/);
+      if (!m) throw new Error('APP_DATA が見つかりません');
+      loadedData = JSON.parse(m[1]);
+      sceneIds = loadedData.scenes.map(function(s) { return s.id; });
+      var opts = '<option value="">シーンを選ぶ</option>' + sceneIds.map(function(id) {
+        return '<option value="' + escAttr(id) + '">' + esc(id) + '</option>';
+      }).join('');
+      document.getElementById('previewScene').innerHTML = opts;
+      document.getElementById('previewScene').disabled = false;
+      document.getElementById('addBtn').disabled = false;
+      renderCards();
+      showStatus('読み込み: ' + file.name, 'ok');
+    } catch (err) {
+      showStatus('読み込み失敗: ' + err.message, 'err');
+    }
+  };
+  reader.readAsText(file, 'UTF-8');
+});
+
+document.getElementById('previewScene').addEventListener('change', function() {
+  if (this.value) loadPreviewScene(this.value);
+});
+
+bindPreviewInputs();
+bindPreviewWheelZoom();
+bindEosImagePick();
+
+window.addEventListener('resize', function() {
+  if (previewViewer && typeof previewViewer.updateSize === 'function') {
+    previewViewer.updateSize();
+  }
+});
+</script>
+</body>
+</html>

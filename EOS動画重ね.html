@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EOS動画重ね</title>
+<style>
+* { box-sizing: border-box; }
+body { margin: 0; font-family: "Meiryo", sans-serif; background: #141820; color: #e8ecf4; line-height: 1.65; }
+header { padding: 14px 18px; background: #222; border-bottom: 2px solid #f5c518; }
+h1 { margin: 0; font-size: 20px; color: #f5c518; }
+.lead { margin: 8px 0 0; font-size: 13px; color: #a8b4d0; max-width: 1100px; }
+.layout { display: flex; flex-wrap: wrap; min-height: calc(100vh - 72px); }
+.sb { width: 340px; min-width: 300px; padding: 14px; border-right: 1px solid #404870; overflow-y: auto; }
+.main { flex: 1; min-width: 320px; padding: 14px; display: flex; flex-direction: column; }
+.panel { background: #1e2430; border: 1px solid #404870; border-radius: 10px; padding: 12px; margin-bottom: 12px; }
+.panel h2 { margin: 0 0 8px; font-size: 14px; color: #f5c518; }
+label { display: block; font-size: 12px; color: #c0c8e0; margin: 8px 0 4px; }
+input, select { width: 100%; background: #0e1018; border: 1px solid #555; color: #fff; border-radius: 6px; padding: 8px; font-size: 14px; }
+input[type=range] { accent-color: #f5c518; }
+button { border: 0; border-radius: 8px; padding: 9px 14px; font-weight: bold; cursor: pointer; background: #f5c518; color: #111; margin: 4px 8px 4px 0; font-size: 13px; }
+button.sub { background: #444; color: #fff; }
+button.danger { background: #c44; color: #fff; }
+.status { font-size: 12px; padding: 6px 10px; border-radius: 6px; margin-top: 8px; }
+.status.ok { background: #2e6b3a; }
+.status.err { background: #8b2e2e; }
+.status.info { background: #2a4a7a; }
+.hint { font-size: 12px; color: #8899bb; margin-top: 6px; line-height: 1.6; }
+code { color: #ffcc80; }
+.slider-val { font-size: 12px; color: #ffe566; }
+.preview-box {
+  position: relative; flex: 1; min-height: 420px; background: #000; border-radius: 10px;
+  overflow: hidden; border: 1px solid #505878; touch-action: none;
+}
+#eosImg {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  max-width: 100%; max-height: 100%; pointer-events: none; user-select: none;
+}
+#videoBox {
+  position: absolute; border: 2px dashed #f5c518; cursor: move; touch-action: none;
+  box-shadow: 0 0 0 9999px rgba(0,0,0,0.35);
+  background: rgba(0,0,0,0.15);
+}
+#videoBox.hidden { display: none; }
+#previewVideo {
+  display: block; width: 100%; height: 100%; object-fit: contain;
+  mix-blend-mode: lighten; pointer-events: none;
+}
+#previewVideo.matte-none { mix-blend-mode: normal; }
+.resize-handle {
+  position: absolute; right: -6px; bottom: -6px; width: 14px; height: 14px;
+  background: #f5c518; border-radius: 3px; cursor: nwse-resize;
+}
+.toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; align-items: center; }
+.build { font-size: 11px; color: #888; margin-top: 6px; }
+a.link { color: #9ed0ff; }
+</style>
+</head>
+<body>
+<header>
+  <h1>EOS動画重ね</h1>
+  <p class="lead">
+    虫眼鏡タップで開く <strong>EOS写真</strong> の上に、妖精などの <strong>透過動画</strong> を重ねます。
+    位置を合わせて <strong>data.js に保存</strong> → viewer で虫眼鏡だけ操作（別ボタンなし）。
+  </p>
+  <div class="build">build eosOverlay1</div>
+</header>
+<div class="layout">
+  <aside class="sb">
+    <div class="panel">
+      <h2>① data.js</h2>
+      <input type="file" id="dataIn" accept=".js">
+      <div id="loadStatus" class="status info" style="display:none"></div>
+    </div>
+    <div class="panel">
+      <h2>② シーン</h2>
+      <select id="sceneSel" disabled><option value="">data.js を読み込んでください</option></select>
+      <p class="hint">先に <code>高画質覗き設定.html</code> で EOS 写真と虫眼鏡の角度を入れておいてください。</p>
+    </div>
+    <div class="panel">
+      <h2>③ 動画ファイル（viewer フォルダからの相対パス）</h2>
+      <label>PC用（透過 WebM）</label>
+      <input id="videoSrc" type="text" placeholder="video/fairy.webm">
+      <label>スマホ・iPad用（透過 MP4）</label>
+      <input id="videoSrcIos" type="text" placeholder="video/fairy_ios.mp4">
+      <label>動画を選ぶ（video フォルダ内のファイル）</label>
+      <input type="file" id="previewFile" accept="video/*">
+      <p class="hint">選ぶと <code>video/ファイル名</code> が上の PC用・iOS用欄に自動入力されます（video フォルダに置いたファイルを選んでください）。</p>
+      <p class="hint">黒背景なら「黒抜き lighten」。透過済み WebM/MP4 なら「透過そのまま」。</p>
+      <label>合成モード</label>
+      <select id="videoMatte">
+        <option value="lighten">黒抜き（lighten・真っ黒背景向け）</option>
+        <option value="none">透過そのまま（rembg 済み）</option>
+      </select>
+      <label><input type="checkbox" id="videoLoop" checked> ループ再生</label>
+    </div>
+    <div class="panel">
+      <h2>④ 位置（写真に対する％）</h2>
+      <label>横位置 X <span class="slider-val" id="xVal">50</span>%</label>
+      <input type="range" id="videoX" min="0" max="100" step="0.5" value="50">
+      <label>縦位置 Y <span class="slider-val" id="yVal">50</span>%</label>
+      <input type="range" id="videoY" min="0" max="100" step="0.5" value="50">
+      <label>幅 <span class="slider-val" id="wVal">18</span>%</label>
+      <input type="range" id="videoW" min="3" max="60" step="0.5" value="18">
+      <p class="hint">右のプレビューで枠をドラッグ／右下を引っ張っても調整できます。</p>
+    </div>
+    <div class="panel">
+      <h2>⑤ 保存</h2>
+      <p class="hint"><strong>保存のしかた：</strong>「反映」→「data.js をダウンロード」→ ダウンロードしたファイルを <strong>この HTML と同じフォルダ</strong> の <code>data.js</code> に上書き。</p>
+      <button type="button" id="btnApply">このシーンに反映</button>
+      <button type="button" class="sub" id="btnClear">動画設定を削除</button>
+      <button type="button" id="btnSave">data.js をダウンロード</button>
+      <div id="saveStatus" class="status" style="display:none"></div>
+    </div>
+  </aside>
+  <main class="main">
+    <div class="toolbar">
+      <span id="eosName" class="hint">EOS: —</span>
+      <a class="link" id="viewerLink" href="viewer.html" target="_blank" rel="noopener">▶ viewer で確認</a>
+    </div>
+    <div class="preview-box" id="previewBox">
+      <img id="eosImg" alt="" hidden>
+      <div id="videoBox" class="hidden">
+        <video id="previewVideo" playsinline muted loop></video>
+        <div class="resize-handle" id="resizeHandle"></div>
+      </div>
+    </div>
+    <p class="hint">プレビュー：黄色枠＝動画の位置。保存後 viewer で該当シーンを向いて虫眼鏡をタップ。</p>
+  </main>
+</div>
+<script>
+var APP_BUILD = 'eosOverlay1';
+var loadedData = null;
+var loadedName = 'data.js';
+var currentSceneId = '';
+var imgNat = { w: 0, h: 0 };
+var imgDisplay = { w: 0, h: 0, left: 0, top: 0 };
+var dragState = null;
+
+function showStatus(el, text, kind) {
+  el.textContent = text;
+  el.className = 'status ' + (kind || 'info');
+  el.style.display = 'block';
+}
+
+function parseDataJs(text) {
+  var m = text.match(/var\s+APP_DATA\s*=\s*(\{[\s\S]*\})\s*;?\s*$/);
+  if (!m) throw new Error('APP_DATA が見つかりません');
+  return JSON.parse(m[1]);
+}
+
+function sceneKeyFromId(id) {
+  var p = String(id || '').split('-');
+  return p.length > 1 ? p[p.length - 1] : id;
+}
+
+function findScene(id) {
+  if (!loadedData || !loadedData.scenes) return null;
+  for (var i = 0; i < loadedData.scenes.length; i++) {
+    if (loadedData.scenes[i].id === id) return loadedData.scenes[i];
+  }
+  return null;
+}
+
+function readFields() {
+  return {
+    videoSrc: document.getElementById('videoSrc').value.trim(),
+    videoSrcIos: document.getElementById('videoSrcIos').value.trim(),
+    videoX: parseFloat(document.getElementById('videoX').value),
+    videoY: parseFloat(document.getElementById('videoY').value),
+    videoWidth: parseFloat(document.getElementById('videoW').value),
+    videoMatte: document.getElementById('videoMatte').value,
+    videoLoop: document.getElementById('videoLoop').checked
+  };
+}
+
+function writeFields(f) {
+  document.getElementById('videoSrc').value = f.videoSrc || '';
+  document.getElementById('videoSrcIos').value = f.videoSrcIos || '';
+  document.getElementById('videoX').value = f.videoX != null ? f.videoX : 50;
+  document.getElementById('videoY').value = f.videoY != null ? f.videoY : 50;
+  document.getElementById('videoW').value = f.videoWidth != null ? f.videoWidth : 18;
+  document.getElementById('videoMatte').value = f.videoMatte === 'none' ? 'none' : 'lighten';
+  document.getElementById('videoLoop').checked = f.videoLoop !== false;
+  updateSliderLabels();
+}
+
+function updateSliderLabels() {
+  document.getElementById('xVal').textContent = document.getElementById('videoX').value;
+  document.getElementById('yVal').textContent = document.getElementById('videoY').value;
+  document.getElementById('wVal').textContent = document.getElementById('videoW').value;
+}
+
+function layoutImageInPreview() {
+  var box = document.getElementById('previewBox');
+  var img = document.getElementById('eosImg');
+  if (!imgNat.w || !box) return;
+  var bw = box.clientWidth;
+  var bh = box.clientHeight;
+  var scale = Math.min(bw / imgNat.w, bh / imgNat.h);
+  var dw = imgNat.w * scale;
+  var dh = imgNat.h * scale;
+  imgDisplay.w = dw;
+  imgDisplay.h = dh;
+  imgDisplay.left = (bw - dw) / 2;
+  imgDisplay.top = (bh - dh) / 2;
+  img.style.width = dw + 'px';
+  img.style.height = dh + 'px';
+  layoutVideoBoxFromFields();
+}
+
+function layoutVideoBoxFromFields() {
+  var f = readFields();
+  var box = document.getElementById('videoBox');
+  var vid = document.getElementById('previewVideo');
+  if (!f.videoSrc && !vid.src && !previewBlobUrl) {
+    box.classList.add('hidden');
+    return;
+  }
+  box.classList.remove('hidden');
+  var iw = imgDisplay.w || 1;
+  var ih = imgDisplay.h || 1;
+  var w = iw * f.videoWidth / 100;
+  var ar = vid.videoWidth > 0 ? vid.videoHeight / vid.videoWidth : 1.35;
+  var h = w * ar;
+  var x = imgDisplay.left + iw * f.videoX / 100 - w / 2;
+  var y = imgDisplay.top + ih * f.videoY / 100 - h / 2;
+  box.style.left = x + 'px';
+  box.style.top = y + 'px';
+  box.style.width = w + 'px';
+  box.style.height = h + 'px';
+  vid.className = f.videoMatte === 'none' ? 'matte-none' : '';
+}
+
+function fieldsFromVideoBox() {
+  var box = document.getElementById('videoBox');
+  var vid = document.getElementById('previewVideo');
+  var iw = imgDisplay.w || 1;
+  var ih = imgDisplay.h || 1;
+  var bw = parseFloat(box.style.width) || 1;
+  var bh = parseFloat(box.style.height) || 1;
+  var bl = parseFloat(box.style.left) || 0;
+  var bt = parseFloat(box.style.top) || 0;
+  var cx = bl + bw / 2 - imgDisplay.left;
+  var cy = bt + bh / 2 - imgDisplay.top;
+  document.getElementById('videoX').value = Math.max(0, Math.min(100, (cx / iw) * 100)).toFixed(1);
+  document.getElementById('videoY').value = Math.max(0, Math.min(100, (cy / ih) * 100)).toFixed(1);
+  document.getElementById('videoW').value = Math.max(3, Math.min(60, (bw / iw) * 100)).toFixed(1);
+  updateSliderLabels();
+}
+
+var previewBlobUrl = '';
+function loadPreviewVideoFile(file) {
+  if (previewBlobUrl) URL.revokeObjectURL(previewBlobUrl);
+  previewBlobUrl = URL.createObjectURL(file);
+  var vid = document.getElementById('previewVideo');
+  vid.src = previewBlobUrl;
+  vid.onloadedmetadata = function() { layoutVideoBoxFromFields(); vid.play().catch(function(){}); };
+}
+
+function loadScene(id) {
+  currentSceneId = id;
+  var scene = findScene(id);
+  if (!scene) return;
+  document.getElementById('viewerLink').href = 'viewer.html?id=' + encodeURIComponent(id);
+  var peek = scene.hiResPeek || {};
+  var imgName = peek.imageSrc || (sceneKeyFromId(id) + 'eos.jpg');
+  document.getElementById('eosName').textContent = 'EOS: ' + imgName;
+  var img = document.getElementById('eosImg');
+  img.hidden = false;
+  img.onload = function() {
+    imgNat.w = img.naturalWidth;
+    imgNat.h = img.naturalHeight;
+    layoutImageInPreview();
+  };
+  img.onerror = function() {
+    showStatus(document.getElementById('loadStatus'), 'EOS画像が見つかりません: ' + imgName + '（viewer と同じフォルダに置いてください）', 'err');
+    img.hidden = true;
+  };
+  img.src = imgName + '?t=' + Date.now();
+  writeFields({
+    videoSrc: peek.videoSrc || '',
+    videoSrcIos: peek.videoSrcIos || '',
+    videoX: peek.videoX,
+    videoY: peek.videoY,
+    videoWidth: peek.videoWidth,
+    videoMatte: peek.videoMatte,
+    videoLoop: peek.videoLoop
+  });
+  if (peek.videoSrc) loadPreviewVideoFromPath(peek.videoSrc);
+}
+
+function loadPreviewVideoFromPath(src) {
+  if (!src) return;
+  var vid = document.getElementById('previewVideo');
+  vid.src = src + '?t=' + Date.now();
+  vid.onloadedmetadata = function() {
+    layoutVideoBoxFromFields();
+    vid.play().catch(function() {});
+  };
+  vid.onerror = function() {
+    showStatus(document.getElementById('loadStatus'), '動画が見つかりません: ' + src + '（viewer と同じフォルダ構成で置いてください）', 'err');
+  };
+}
+
+function populateScenes() {
+  var sel = document.getElementById('sceneSel');
+  sel.innerHTML = '';
+  if (!loadedData || !loadedData.scenes) return;
+  loadedData.scenes.forEach(function(s) {
+    var opt = document.createElement('option');
+    opt.value = s.id;
+    var mark = s.hiResPeek && s.hiResPeek.imageSrc ? ' ★' : '';
+    opt.textContent = s.id + mark;
+    sel.appendChild(opt);
+  });
+  sel.disabled = false;
+  if (sel.options.length) {
+    var prefer = '';
+    for (var j = 0; j < sel.options.length; j++) {
+      var sc = findScene(sel.options[j].value);
+      if (sc && sc.hiResPeek && sc.hiResPeek.imageSrc) {
+        prefer = sel.options[j].value;
+        break;
+      }
+    }
+    sel.value = prefer || sel.options[0].value;
+    loadScene(sel.value);
+  }
+}
+
+document.getElementById('dataIn').addEventListener('change', function(ev) {
+  var f = ev.target.files && ev.target.files[0];
+  if (!f) return;
+  loadedName = f.name;
+  var reader = new FileReader();
+  reader.onload = function() {
+    try {
+      loadedData = parseDataJs(reader.result);
+      populateScenes();
+      showStatus(document.getElementById('loadStatus'), loadedName + ' を読み込みました', 'ok');
+    } catch (e) {
+      showStatus(document.getElementById('loadStatus'), e.message, 'err');
+    }
+  };
+  reader.readAsText(f, 'UTF-8');
+});
+
+document.getElementById('sceneSel').addEventListener('change', function() {
+  loadScene(this.value);
+});
+
+['videoX', 'videoY', 'videoW'].forEach(function(id) {
+  document.getElementById(id).addEventListener('input', function() {
+    updateSliderLabels();
+    layoutVideoBoxFromFields();
+  });
+});
+
+document.getElementById('videoMatte').addEventListener('change', layoutVideoBoxFromFields);
+function applyPreviewFilePaths(f) {
+  if (!f || !f.name) return;
+  var rel = 'video/' + f.name.replace(/\\/g, '/').split('/').pop();
+  if (/\.webm$/i.test(f.name)) {
+    document.getElementById('videoSrc').value = rel;
+  } else if (/\.mp4$/i.test(f.name)) {
+    document.getElementById('videoSrcIos').value = rel;
+    if (!document.getElementById('videoSrc').value.trim()) {
+      document.getElementById('videoSrc').value = rel;
+    }
+  } else if (!document.getElementById('videoSrc').value.trim()) {
+    document.getElementById('videoSrc').value = rel;
+  }
+}
+
+document.getElementById('previewFile').addEventListener('change', function(ev) {
+  var f = ev.target.files && ev.target.files[0];
+  if (!f) return;
+  applyPreviewFilePaths(f);
+  loadPreviewVideoFile(f);
+});
+
+document.getElementById('btnApply').addEventListener('click', function() {
+  if (!loadedData || !currentSceneId) return;
+  var scene = findScene(currentSceneId);
+  if (!scene) return;
+  if (!scene.hiResPeek || !scene.hiResPeek.imageSrc) {
+    showStatus(document.getElementById('saveStatus'), '先に高画質覗き設定で EOS 写真を設定してください', 'err');
+    return;
+  }
+  var f = readFields();
+  if (!f.videoSrc) {
+    showStatus(document.getElementById('saveStatus'), 'PC用動画パスを入力してください', 'err');
+    return;
+  }
+  scene.hiResPeek.videoSrc = f.videoSrc;
+  if (f.videoSrcIos) scene.hiResPeek.videoSrcIos = f.videoSrcIos;
+  else delete scene.hiResPeek.videoSrcIos;
+  scene.hiResPeek.videoX = f.videoX;
+  scene.hiResPeek.videoY = f.videoY;
+  scene.hiResPeek.videoWidth = f.videoWidth;
+  scene.hiResPeek.videoMatte = f.videoMatte;
+  scene.hiResPeek.videoLoop = f.videoLoop;
+  showStatus(document.getElementById('saveStatus'), currentSceneId + ' に動画設定を反映しました', 'ok');
+});
+
+document.getElementById('btnClear').addEventListener('click', function() {
+  if (!loadedData || !currentSceneId) return;
+  var scene = findScene(currentSceneId);
+  if (!scene || !scene.hiResPeek) return;
+  ['videoSrc', 'videoSrcIos', 'videoX', 'videoY', 'videoWidth', 'videoMatte', 'videoLoop'].forEach(function(k) {
+    delete scene.hiResPeek[k];
+  });
+  writeFields({});
+  document.getElementById('videoBox').classList.add('hidden');
+  showStatus(document.getElementById('saveStatus'), '動画設定を削除しました', 'ok');
+});
+
+document.getElementById('btnSave').addEventListener('click', function() {
+  if (!loadedData) return;
+  var body = 'var APP_DATA = ' + JSON.stringify(loadedData, null, 2) + ';\n';
+  var blob = new Blob([body], { type: 'application/javascript' });
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = loadedName;
+  a.click();
+  showStatus(document.getElementById('saveStatus'), loadedName + ' をダウンロードしました → この HTML と同じフォルダの data.js に上書きしてください（自動保存ではありません）', 'ok');
+});
+
+(function bindDrag() {
+  var box = document.getElementById('videoBox');
+  var handle = document.getElementById('resizeHandle');
+  function pt(ev) {
+    if (ev.touches && ev.touches.length) return { x: ev.touches[0].clientX, y: ev.touches[0].clientY };
+    return { x: ev.clientX, y: ev.clientY };
+  }
+  function startDrag(mode, ev) {
+    ev.preventDefault();
+    var p = pt(ev);
+    dragState = {
+      mode: mode,
+      x0: p.x, y0: p.y,
+      left: parseFloat(box.style.left) || 0,
+      top: parseFloat(box.style.top) || 0,
+      width: parseFloat(box.style.width) || 80,
+      height: parseFloat(box.style.height) || 80
+    };
+  }
+  box.addEventListener('mousedown', function(ev) {
+    if (ev.target === handle) return;
+    startDrag('move', ev);
+  });
+  handle.addEventListener('mousedown', function(ev) { startDrag('resize', ev); });
+  box.addEventListener('touchstart', function(ev) {
+    if (ev.target === handle) startDrag('resize', ev);
+    else startDrag('move', ev);
+  }, { passive: false });
+  handle.addEventListener('touchstart', function(ev) { startDrag('resize', ev); }, { passive: false });
+  window.addEventListener('mousemove', function(ev) {
+    if (!dragState) return;
+    var p = pt(ev);
+    var dx = p.x - dragState.x0;
+    var dy = p.y - dragState.y0;
+    if (dragState.mode === 'move') {
+      box.style.left = (dragState.left + dx) + 'px';
+      box.style.top = (dragState.top + dy) + 'px';
+    } else {
+      var nw = Math.max(24, dragState.width + dx);
+      var ar = dragState.height / dragState.width;
+      box.style.width = nw + 'px';
+      box.style.height = (nw * ar) + 'px';
+    }
+    fieldsFromVideoBox();
+  });
+  window.addEventListener('touchmove', function(ev) {
+    if (!dragState) return;
+    ev.preventDefault();
+    var p = pt(ev);
+    var dx = p.x - dragState.x0;
+    var dy = p.y - dragState.y0;
+    if (dragState.mode === 'move') {
+      box.style.left = (dragState.left + dx) + 'px';
+      box.style.top = (dragState.top + dy) + 'px';
+    } else {
+      var nw = Math.max(24, dragState.width + dx);
+      var ar = dragState.height / dragState.width;
+      box.style.width = nw + 'px';
+      box.style.height = (nw * ar) + 'px';
+    }
+    fieldsFromVideoBox();
+  }, { passive: false });
+  window.addEventListener('mouseup', function() { dragState = null; });
+  window.addEventListener('touchend', function() { dragState = null; });
+})();
+
+window.addEventListener('resize', layoutImageInPreview);
+
+fetch('data.js?init=' + Date.now())
+  .then(function(r) { return r.ok ? r.text() : Promise.reject(); })
+  .then(function(text) {
+    loadedData = parseDataJs(text);
+    loadedName = 'data.js';
+    populateScenes();
+    showStatus(document.getElementById('loadStatus'), 'data.js を自動読み込みしました', 'ok');
+  })
+  .catch(function() {
+    showStatus(document.getElementById('loadStatus'), 'data.js を選ぶか、Live Server で開いてください', 'info');
+  });
+</script>
+</body>
+</html>

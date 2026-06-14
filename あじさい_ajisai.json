@@ -1,0 +1,71 @@
+{
+  "lineName": "あじさい",
+  "lineId": "ajisai",
+  "flipDirection": false,
+  "courses": [
+    {
+      "name": "aa",
+      "dir": "aa",
+      "startScene": 0,
+      "sceneCount": 3,
+      "color": "#e8453c"
+    }
+  ],
+  "pins": [
+    {
+      "courseIndex": 0,
+      "sceneNum": "0-aa001",
+      "lat": 33.520345,
+      "lng": 131.21794,
+      "name": "スモークツリー",
+      "pinColor": "#e8453c",
+      "flip": false,
+      "mapOffsetX": 0,
+      "mapOffsetY": 0,
+      "greenArrows": [],
+      "blueArrows": []
+    },
+    {
+      "courseIndex": 0,
+      "sceneNum": "1-aa002",
+      "lat": 33.520525,
+      "lng": 131.21764,
+      "name": "アジサイ",
+      "pinColor": "#00ff40",
+      "flip": false,
+      "mapOffsetX": 0,
+      "mapOffsetY": 0,
+      "greenArrows": [],
+      "blueArrows": []
+    }
+  ],
+  "tlLat": "33.520930",
+  "tlLng": "131.217184",
+  "brLat": "33.520168",
+  "brLng": "131.218755",
+  "mainTitle": "アジサイの妖精",
+  "descText": "アジサイの妖精が現れます。",
+  "mainTitleSize": "57",
+  "mainTitleColor": "#80ffff",
+  "mainTitleShadow": "95",
+  "mainTitleFont": "'Yu Mincho','YuMincho','Hiragino Mincho ProN','MS PMincho',serif",
+  "descSize": "29",
+  "descColor": "#ffff00",
+  "descShadow": "0",
+  "descFont": "'Meiryo',sans-serif",
+  "textLeftOffset": "2",
+  "textTopOffset": "3",
+  "descLeftOffset": "24",
+  "descTopOffset": "79",
+  "textHorizontalPos": "left",
+  "dataJSContent": "var APP_DATA = {\n  \"scenes\": [\n    {\n      \"id\": \"0-aa001\",\n      \"name\": \"aa001\",\n      \"levels\": [\n        {\n          \"tileSize\": 256,\n          \"size\": 256,\n          \"fallbackOnly\": true\n        },\n        {\n          \"tileSize\": 512,\n          \"size\": 512\n        },\n        {\n          \"tileSize\": 1024,\n          \"size\": 1024\n        }\n      ],\n      \"faceSize\": 2048,\n      \"initialViewParameters\": {\n        \"yaw\": 0,\n        \"pitch\": 0,\n        \"fov\": 1.1479251634083179\n      },\n      \"linkHotspots\": [\n        {\n          \"yaw\": 0,\n          \"pitch\": 0,\n          \"rotation\": 0,\n          \"target\": \"0-aa001\"\n        }\n      ],\n      \"infoHotspots\": [],\n      \"position\": 1,\n      \"course\": \"aa\"\n    },\n    {\n      \"id\": \"1-aa002\",\n      \"name\": \"aa002\",\n      \"levels\": [\n        {\n          \"tileSize\": 256,\n          \"size\": 256,\n          \"fallbackOnly\": true\n        },\n        {\n          \"tileSize\": 512,\n          \"size\": 512\n        },\n        {\n          \"tileSize\": 1024,\n          \"size\": 1024\n        }\n      ],\n      \"faceSize\": 2048,\n      \"initialViewParameters\": {\n        \"yaw\": 0,\n        \"pitch\": 0,\n        \"fov\": 1.1479251634083179\n      },\n      \"linkHotspots\": [\n        {\n          \"yaw\": 0,\n          \"pitch\": 0,\n          \"rotation\": 0,\n          \"target\": \"1-aa002\"\n        }\n      ],\n      \"infoHotspots\": [],\n      \"position\": 2,\n      \"course\": \"aa\"\n    },\n    {\n      \"id\": \"2-aa003\",\n      \"name\": \"aa003\",\n      \"levels\": [\n        {\n          \"tileSize\": 256,\n          \"size\": 256,\n          \"fallbackOnly\": true\n        },\n        {\n          \"tileSize\": 512,\n          \"size\": 512\n        },\n        {\n          \"tileSize\": 1024,\n          \"size\": 1024\n        }\n      ],\n      \"faceSize\": 2048,\n      \"initialViewParameters\": {\n        \"yaw\": 0,\n        \"pitch\": 0,\n        \"fov\": 1.1479251634083179\n      },\n      \"linkHotspots\": [\n        {\n          \"yaw\": 0,\n          \"pitch\": 0,\n          \"rotation\": 0,\n          \"target\": \"2-aa003\"\n        }\n      ],\n      \"infoHotspots\": [],\n      \"position\": 3,\n      \"course\": \"aa\"\n    }\n  ],\n  \"name\": \"Local 1024tiles\"\n};\n",
+  "yellowAutoMoveRanges": [],
+  "saveDate": "2026-06-13T12:19:17.362Z",
+  "mapInsetLeft": "0",
+  "mapInsetTop": "0",
+  "mapInsetRight": "0",
+  "mapInsetBottom": "0",
+  "mapPinOffsetX": "0",
+  "mapPinOffsetY": "0",
+  "mapTwoPoint": ""
+}
