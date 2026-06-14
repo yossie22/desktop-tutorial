@@ -123,6 +123,7 @@ var APP_DATA = {
         "maskStrength": 65,
         "magnifierColor": "pink",
         "videoSrc": "video/fairy.webm",
+        "videoSrcIos": "video/fairy.mp4",
         "videoX": 16.5,
         "videoY": 85.5,
         "videoWidth": 24,

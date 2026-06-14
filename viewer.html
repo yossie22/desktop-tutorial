@@ -1361,11 +1361,20 @@ function getHiResPeekConfig(sceneData) {
   return p;
 }
 
+function hiResPeekIosVideoSrc(cfg) {
+  if (!cfg) return '';
+  if (cfg.videoSrcIos) return String(cfg.videoSrcIos);
+  var s = String(cfg.videoSrc || '');
+  if (!s) return '';
+  if (/\.webm$/i.test(s)) return s.replace(/\.webm$/i, '.mp4');
+  return s;
+}
+
 function hiResPeekVideoConfig(cfg) {
   if (!cfg || !cfg.videoSrc) return null;
   return {
     src: String(cfg.videoSrc),
-    srcIos: cfg.videoSrcIos ? String(cfg.videoSrcIos) : '',
+    srcIos: hiResPeekIosVideoSrc(cfg),
     xPct: cfg.videoX != null && isFinite(cfg.videoX) ? Number(cfg.videoX) : 50,
     yPct: cfg.videoY != null && isFinite(cfg.videoY) ? Number(cfg.videoY) : 50,
     widthPct: cfg.videoWidth != null && isFinite(cfg.videoWidth) ? Number(cfg.videoWidth) : 18,
@@ -1455,7 +1464,11 @@ function syncHiResPeekVideoLayout(cfg) {
     return;
   }
   wrap.hidden = false;
-  wrap.className = 'hi-res-peek-video-wrap matte-' + (vc.matte === 'none' ? 'normal' : vc.matte);
+  var matte = vc.matte === 'none' ? 'normal' : vc.matte;
+  if (matte === 'normal' && typeof guideDeviceIsIosSafari === 'function' && guideDeviceIsIosSafari() && vc.srcIos && vc.srcIos !== vc.src) {
+    matte = 'lighten';
+  }
+  wrap.className = 'hi-res-peek-video-wrap matte-' + matte;
   var iw = img.naturalWidth || parseInt(img.style.width, 10) || stage.clientWidth;
   var ih = img.naturalHeight || parseInt(img.style.height, 10) || stage.clientHeight;
   if (!iw || !ih) {
