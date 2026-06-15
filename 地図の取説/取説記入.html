@@ -4,218 +4,93 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>取説記入</title>
+<link rel="stylesheet" href="../help/help.css">
+<script src="../data.js"></script>
+<script src="../help/help-engine.js"></script>
 <script src="取説設定.js"></script>
 <style>
-* { box-sizing: border-box; }
-body {
-  margin: 0;
-  font-family: "Meiryo", sans-serif;
-  color: #f5f5f5;
-  background: #151515;
-}
+body { background: #151515; color: #f5f5f5; }
 header {
-  position: sticky;
-  top: 0;
-  z-index: 5;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 12px 16px;
-  background: #222;
-  border-bottom: 2px solid #ffe26a;
+  position: sticky; top: 0; z-index: 5;
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 16px; background: #222; border-bottom: 2px solid #ffe26a;
 }
 h1 { font-size: 20px; margin: 0; color: #ffe26a; }
 main {
   display: grid;
   grid-template-columns: minmax(420px, 1fr) minmax(360px, 0.9fr);
-  gap: 16px;
-  padding: 16px;
+  gap: 16px; padding: 16px;
 }
-@media (max-width: 900px) {
-  main { grid-template-columns: 1fr; }
-}
+@media (max-width: 900px) { main { grid-template-columns: 1fr; } }
 .panel {
-  background: #222;
-  border: 1px solid #444;
-  border-radius: 12px;
-  padding: 14px;
+  background: #222; border: 1px solid #444; border-radius: 12px; padding: 14px;
 }
 .row {
-  display: grid;
-  grid-template-columns: 120px 1fr;
-  gap: 10px;
-  align-items: center;
-  margin: 8px 0;
+  display: grid; grid-template-columns: 120px 1fr; gap: 10px;
+  align-items: start; margin: 8px 0;
 }
-label { color: #ccc; font-size: 13px; }
-input, textarea, select {
-  width: 100%;
-  background: #111;
-  color: #fff;
-  border: 1px solid #555;
-  border-radius: 6px;
-  padding: 8px;
-  font-family: inherit;
-  font-size: 14px;
+label { color: #ccc; font-size: 13px; padding-top: 8px; }
+input, textarea {
+  width: 100%; background: #111; color: #fff;
+  border: 1px solid #555; border-radius: 6px; padding: 8px;
+  font-family: inherit; font-size: 14px;
 }
 textarea { min-height: 70px; resize: vertical; }
 button, .linkbtn {
-  border: 0;
-  border-radius: 8px;
-  padding: 9px 12px;
-  font-weight: bold;
-  cursor: pointer;
-  color: #111;
-  background: #ffe26a;
-  text-decoration: none;
-  display: inline-block;
+  border: 0; border-radius: 8px; padding: 9px 12px;
+  font-weight: bold; cursor: pointer; color: #111; background: #ffe26a;
+  text-decoration: none; display: inline-block;
 }
 button.sub { background: #444; color: #fff; }
-button.danger { background: #d84b4b; color: #fff; }
-.toolbar { display: flex; gap: 8px; margin-left: auto; }
+.toolbar { display: flex; gap: 8px; margin-left: auto; flex-wrap: wrap; }
 .item {
-  border: 1px solid #444;
-  border-radius: 10px;
-  padding: 12px;
-  margin: 12px 0;
-  background: #1b1b1b;
+  border: 1px solid #444; border-radius: 10px; padding: 12px;
+  margin: 12px 0; background: #1b1b1b;
 }
 .item-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
+  display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap;
 }
 .item-title { color: #ffe26a; font-weight: bold; margin-right: auto; }
-.quick {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 6px;
+.item-id { color: #888; font-size: 12px; }
+.item-mark { flex-shrink: 0; }
+.preview { background: #171717; border-radius: 12px; padding: 14px; }
+.help-note {
+  color: #aaa; font-size: 13px; line-height: 1.6; margin: 8px 0 14px;
 }
-.quick button { padding: 5px 8px; font-size: 12px; }
-.preview {
-  background: #171717;
-  border-radius: 12px;
-  padding: 14px;
+.auto-title {
+  font-size: 18px; color: #ffe26a; margin: 4px 0 12px; font-weight: bold;
 }
-.help-title {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 14px;
-}
-.help-title h2 { margin: 0; color: #ffe26a; font-size: 22px; }
-.card {
-  background: #242424;
-  border: 1px solid #444;
-  border-radius: 14px;
-  padding: 14px;
-  margin: 10px 0;
-}
-.step-preview {
-  display: grid;
-  grid-template-columns: 64px 1fr;
-  gap: 12px;
-  align-items: center;
-}
-.icon {
-  width: 54px;
-  height: 54px;
-  border-radius: 16px;
-  display: grid;
-  place-items: center;
-  font-size: 26px;
-  background: #333;
-  border: 2px solid #666;
-  overflow: hidden;
-  color: #fff;
-}
-.icon img {
-  max-width: 100%;
-  max-height: 100%;
-  object-fit: contain;
-}
-.pin { background: transparent; border-color: transparent; }
-.map-pin-wrap {
-  width: 54px;
-  height: 54px;
-  display: grid;
-  place-items: center;
-}
-.map-pin-shape {
-  width: 36px;
-  height: 36px;
-  border: 3px solid #fff;
-  border-radius: 50% 50% 50% 0;
-  transform: rotate(-45deg);
-  box-shadow: 0 3px 8px rgba(0,0,0,0.5);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  background: #ff8080;
-}
-.map-pin-letter {
-  transform: rotate(45deg);
-  font-size: 14px;
-  font-weight: bold;
-  color: #fff;
-  line-height: 1;
-  font-family: sans-serif;
-}
-.arrow { background: #f0b429; color: #111; }
-.green { background: #1db954; }
-.map { background: #f0b429; color: #111; }
-.blink img { animation: helpArrowBlink 1.7s ease-in-out infinite; }
-@keyframes helpArrowBlink {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.35; }
-}
-.tip { color: #d8d8d8; font-size: 13px; margin-top: 6px; }
-.small { color: #aaa; font-size: 13px; margin-top: 14px; }
-.help {
-  color: #aaa;
-  font-size: 12px;
-  line-height: 1.6;
-}
+.disabled-item { opacity: 0.45; pointer-events: none; }
 </style>
 </head>
 <body>
 <header>
   <h1>取説記入</h1>
   <div class="toolbar">
-    <a class="linkbtn" href="取説表示.html" target="_blank">プレビューを開く</a>
+    <a class="linkbtn" href="取説表示.html" target="_blank">プレビュー</a>
     <button onclick="downloadConfig()">取説設定.jsを書き出し</button>
   </div>
 </header>
 
 <main>
   <section class="panel">
-    <h2>基本設定</h2>
-    <div class="row">
-      <label>タイトル</label>
-      <input id="title" oninput="renderPreview()">
-    </div>
-    <div class="row">
-      <label>戻るボタン</label>
-      <input id="backLabel" oninput="renderPreview()">
-    </div>
-    <div class="row">
-      <label>戻り先</label>
-      <input id="backHref" oninput="renderPreview()">
-    </div>
-    <p class="help">通常は戻り先を <code>../map.html</code> のままで大丈夫です。</p>
+    <h2>自動設定（data.js から）</h2>
+    <p class="help-note">
+      タイトルと表示項目は <code>data.js</code> を読んで自動決まります。<br>
+      ここでは<strong>説明文だけ</strong>を記入してください。
+    </p>
+    <div class="auto-title" id="autoTitle"></div>
+    <div class="feature-tags" id="featureTags"></div>
 
     <h2>説明項目</h2>
     <div id="stepsEditor"></div>
-    <button class="sub" onclick="addStep()">説明項目を追加</button>
 
-    <h2>補足説明</h2>
+    <h2>補足説明（iPad など）</h2>
     <div id="notesEditor"></div>
     <button class="sub" onclick="addNote()">補足を追加</button>
 
     <h2>最後の注意書き</h2>
-    <textarea id="footer" oninput="renderPreview()"></textarea>
+    <textarea id="footer" oninput="syncFooter(); renderPreview();"></textarea>
   </section>
 
   <section class="panel">
@@ -225,54 +100,76 @@ button.danger { background: #d84b4b; color: #fff; }
 </main>
 
 <script>
-var state = structuredClone(window.HELP_CONFIG || {
-  title: 'VRツアーの使い方',
-  backLabel: '地図に戻る',
-  backHref: '../map.html',
-  steps: [],
-  notes: [],
-  footer: ''
-});
+var state = structuredClone(window.HELP_USER || { texts: {}, notes: [], footer: '' });
+if (!state.texts) state.texts = {};
+if (!Array.isArray(state.notes)) state.notes = [];
+
+var builtCfg = HelpEngine.buildHelpConfig(window.APP_DATA, state);
 
 function init() {
-  document.getElementById('title').value = state.title || '';
-  document.getElementById('backLabel').value = state.backLabel || '地図に戻る';
-  document.getElementById('backHref').value = state.backHref || '../map.html';
   document.getElementById('footer').value = state.footer || '';
+  document.getElementById('autoTitle').textContent = builtCfg.title;
+  renderFeatureTags();
   renderEditors();
   renderPreview();
 }
 
-function syncBasic() {
-  state.title = document.getElementById('title').value;
-  state.backLabel = document.getElementById('backLabel').value;
-  state.backHref = document.getElementById('backHref').value;
-  state.footer = document.getElementById('footer').value;
+function renderFeatureTags() {
+  var f = builtCfg.features || {};
+  var tags = [
+    { label: '地図ピン', on: true },
+    { label: '見回し', on: true },
+    { label: '矢印移動', on: f.hasRoute },
+    { label: '脇道', on: f.hasSideBranch },
+    { label: '自動再生', on: f.hasRoute },
+    { label: 'ガイド動画', on: f.hasGuideVideo },
+    { label: '虫眼鏡', on: f.hasHiResPeek },
+    { label: 'VR戻る', on: f.hasHiResPeek },
+    { label: '地図ボタン', on: true }
+  ];
+  document.getElementById('featureTags').innerHTML = tags.map(function(t) {
+    return '<span class="feature-tag ' + (t.on ? 'on' : 'off') + '">' + t.label + (t.on ? '' : '（なし）') + '</span>';
+  }).join('');
+}
+
+function activeStepIds() {
+  return (builtCfg.steps || []).map(function(s) { return s.id; });
 }
 
 function renderEditors() {
-  document.getElementById('stepsEditor').innerHTML = state.steps.map(function(step, idx) {
+  var catalog = HelpEngine.getStepCatalog();
+  var ids = activeStepIds();
+  document.getElementById('stepsEditor').innerHTML = ids.map(function(id) {
+    var def = catalog[id];
+    if (!def) return '';
+    var txt = state.texts[id] || {};
+    var mark = HelpEngine.renderStepMark({
+      id: id,
+      markType: def.markType,
+      imageSrc: def.imageSrc,
+      blink: def.blink,
+      magnifierColor: builtCfg.features.magnifierColor,
+      markIcon: def.markIcon
+    });
     return '<div class="item">' +
-      '<div class="item-head"><span class="item-title">説明 ' + (idx + 1) + '</span>' +
-      '<button class="sub" onclick="moveStep(' + idx + ',-1)">上へ</button>' +
-      '<button class="sub" onclick="moveStep(' + idx + ',1)">下へ</button>' +
-      '<button class="danger" onclick="removeStep(' + idx + ')">削除</button></div>' +
-      field('小アイコン文字', 'step-icon-' + idx, step.icon || '', 'updateStep(' + idx + ',\'icon\',this.value)') +
-      field('画像ファイル名', 'step-img-' + idx, step.imageSrc || '', 'updateStep(' + idx + ',\'imageSrc\',this.value)') +
-      quickImageButtons(idx) +
-      field('色クラス', 'step-class-' + idx, step.colorClass || '', 'updateStep(' + idx + ',\'colorClass\',this.value)') +
-      field('見出し', 'step-title-' + idx, step.title || '', 'updateStep(' + idx + ',\'title\',this.value)') +
-      textarea('本文', 'step-body-' + idx, step.body || '', 'updateStep(' + idx + ',\'body\',this.value)') +
+      '<div class="item-head">' +
+      '<span class="item-mark">' + mark + '</span>' +
+      '<span class="item-title">' + esc(def.defaultTitle) + '</span>' +
+      '<span class="item-id">' + esc(id) + '</span>' +
+      '</div>' +
+      field('見出し', 'step-title-' + id, txt.title || '', "updateText('" + id + "','title',this.value)") +
+      textarea('本文', 'step-body-' + id, txt.body || '', "updateText('" + id + "','body',this.value)") +
+      '<p class="help-note">例文を作品に合わせて書き換えてください。</p>' +
       '</div>';
   }).join('');
 
   document.getElementById('notesEditor').innerHTML = state.notes.map(function(note, idx) {
     return '<div class="item">' +
       '<div class="item-head"><span class="item-title">補足 ' + (idx + 1) + '</span>' +
-      '<button class="danger" onclick="removeNote(' + idx + ')">削除</button></div>' +
-      field('見出し', 'note-title-' + idx, note.title || '', 'updateNote(' + idx + ',\'title\',this.value)') +
-      textarea('本文', 'note-body-' + idx, note.body || '', 'updateNote(' + idx + ',\'body\',this.value)') +
-      textarea('小さい補足', 'note-tip-' + idx, note.tip || '', 'updateNote(' + idx + ',\'tip\',this.value)') +
+      '<button class="sub" onclick="removeNote(' + idx + ')">削除</button></div>' +
+      field('見出し', 'note-title-' + idx, note.title || '', "updateNote(" + idx + ",'title',this.value)") +
+      textarea('本文', 'note-body-' + idx, note.body || '', "updateNote(" + idx + ",'body',this.value)") +
+      textarea('小さい補足', 'note-tip-' + idx, note.tip || '', "updateNote(" + idx + ",'tip',this.value)") +
       '</div>';
   }).join('');
 }
@@ -280,82 +177,27 @@ function renderEditors() {
 function field(label, id, value, handler) {
   return '<div class="row"><label>' + esc(label) + '</label><input id="' + id + '" value="' + escAttr(value) + '" oninput="' + handler + '"></div>';
 }
-
 function textarea(label, id, value, handler) {
   return '<div class="row"><label>' + esc(label) + '</label><textarea id="' + id + '" oninput="' + handler + '">' + esc(value) + '</textarea></div>';
 }
 
-function quickImageButtons(idx) {
-  return '<div class="quick">' +
-    '<button class="sub" onclick="setStepImage(' + idx + ',\'../上-removebg-preview.png\',\'↑\',\'arrow\')">黄色上矢印</button>' +
-    '<button class="sub" onclick="setStepImage(' + idx + ',\'../下-removebg-preview.png\',\'↓\',\'arrow\')">黄色下矢印</button>' +
-    '<button class="sub" onclick="setStepImage(' + idx + ',\'../右-removebg-preview.png\',\'→\',\'arrow blink\')">黄点滅矢印</button>' +
-    '<button class="sub" onclick="setStepImage(' + idx + ',\'../Map戻り-removebg-preview.png\',\'地図\',\'map\')">地図ボタン</button>' +
-    '<button class="sub" onclick="setStepMapPin(' + idx + ')">地図ピン</button>' +
-    '</div>';
-}
-
-function setStepMapPin(idx) {
-  state.steps[idx].iconType = 'mapPin';
-  state.steps[idx].pinColor = '#ff8080';
-  state.steps[idx].imageSrc = '';
-  state.steps[idx].icon = '';
-  state.steps[idx].colorClass = 'pin';
-  renderEditors();
+function updateText(id, key, value) {
+  if (!state.texts[id]) state.texts[id] = {};
+  state.texts[id][key] = value;
   renderPreview();
 }
-
-function updateStep(idx, key, value) {
-  state.steps[idx][key] = value;
-  renderPreview();
-}
-
 function updateNote(idx, key, value) {
   state.notes[idx][key] = value;
   renderPreview();
 }
-
-function setStepImage(idx, imageSrc, icon, colorClass) {
-  state.steps[idx].imageSrc = imageSrc;
-  state.steps[idx].icon = icon;
-  state.steps[idx].colorClass = colorClass;
-  if (colorClass.indexOf('pin') >= 0 && !imageSrc) {
-    state.steps[idx].iconType = 'mapPin';
-    state.steps[idx].pinColor = '#ff8080';
-  } else {
-    delete state.steps[idx].iconType;
-  }
-  renderEditors();
-  renderPreview();
+function syncFooter() {
+  state.footer = document.getElementById('footer').value;
 }
-
-function addStep() {
-  state.steps.push({ iconType: 'mapPin', pinColor: '#ff8080', colorClass: 'pin', imageSrc: '', title: '新しい説明', body: 'ここに説明文を入力します。' });
-  renderEditors();
-  renderPreview();
-}
-
-function removeStep(idx) {
-  state.steps.splice(idx, 1);
-  renderEditors();
-  renderPreview();
-}
-
-function moveStep(idx, delta) {
-  var next = idx + delta;
-  if (next < 0 || next >= state.steps.length) return;
-  var item = state.steps.splice(idx, 1)[0];
-  state.steps.splice(next, 0, item);
-  renderEditors();
-  renderPreview();
-}
-
 function addNote() {
-  state.notes.push({ title: '補足', body: 'ここに補足説明を入力します。', tip: '' });
+  state.notes.push({ title: '補足', body: '', tip: '' });
   renderEditors();
   renderPreview();
 }
-
 function removeNote(idx) {
   state.notes.splice(idx, 1);
   renderEditors();
@@ -363,30 +205,19 @@ function removeNote(idx) {
 }
 
 function renderPreview() {
-  syncBasic();
-  var html = '<div class="help-title"><h2>' + esc(state.title || '') + '</h2></div>';
-  html += state.steps.map(function(step) {
-    var icon = renderStepIcon(step);
-    return '<div class="card step-preview">' +
-      '<div class="icon ' + escAttr(step.colorClass || '') + '">' + icon + '</div>' +
-      '<div><strong>' + esc(step.title || '') + '</strong><br>' + nl2br(step.body || '') + '</div>' +
-      '</div>';
-  }).join('');
-  html += state.notes.map(function(note) {
-    return '<div class="card"><strong>' + esc(note.title || '') + '</strong><br>' +
-      nl2br(note.body || '') +
-      (note.tip ? '<div class="tip">' + nl2br(note.tip) + '</div>' : '') +
-      '</div>';
-  }).join('');
-  html += '<div class="small">' + nl2br(state.footer || '') + '</div>';
-  document.getElementById('preview').innerHTML = html;
+  syncFooter();
+  builtCfg = HelpEngine.buildHelpConfig(window.APP_DATA, state);
+  document.getElementById('autoTitle').textContent = builtCfg.title;
+  HelpEngine.renderHelpPage(document.getElementById('preview'), builtCfg);
 }
 
 function downloadConfig() {
-  syncBasic();
-  var text = '// 現場ごとの使い方説明はここを編集してください。\n' +
-    '// 取説表示.html は共通で使い回せます。\n' +
-    'window.HELP_CONFIG = ' + JSON.stringify(state, null, 2) + ';\n';
+  syncFooter();
+  var text = '// ============================================================\n' +
+    '// 取説 — 説明文の記入用（作品ごとにここだけ編集）\n' +
+    '// タイトル・表示項目は data.js から自動決定されます。\n' +
+    '// ============================================================\n' +
+    'window.HELP_USER = ' + JSON.stringify(state, null, 2) + ';\n';
   var blob = new Blob([text], { type: 'text/javascript' });
   var a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
@@ -397,27 +228,12 @@ function downloadConfig() {
   URL.revokeObjectURL(a.href);
 }
 
-function renderStepIcon(step) {
-  if (step.iconType === 'mapPin' || (step.colorClass === 'pin' && !step.imageSrc)) {
-    var color = step.pinColor || '#ff8080';
-    var letter = step.icon ? esc(step.icon) : '';
-    return '<div class="map-pin-wrap"><div class="map-pin-shape" style="background:' + escAttr(color) + '">' +
-      (letter ? '<span class="map-pin-letter">' + letter + '</span>' : '') +
-      '</div></div>';
-  }
-  if (step.imageSrc) {
-    return '<img src="' + escAttr(step.imageSrc) + '" alt="' + escAttr(step.icon || '') + '" onerror="this.replaceWith(document.createTextNode(this.alt || \'\'));">';
-  }
-  return esc(step.icon || '');
-}
-
 function esc(value) {
   return String(value == null ? '' : value).replace(/[&<>"']/g, function(ch) {
     return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch];
   });
 }
 function escAttr(value) { return esc(value).replace(/`/g, '&#96;'); }
-function nl2br(value) { return esc(value).replace(/\n/g, '<br>'); }
 
 init();
 </script>

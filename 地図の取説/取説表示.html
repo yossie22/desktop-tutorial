@@ -4,186 +4,23 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>取説表示</title>
+<link rel="stylesheet" href="../help/help.css">
+<script src="../data.js"></script>
+<script src="../help/help-engine.js"></script>
 <script src="取説設定.js"></script>
-<style>
-* { box-sizing: border-box; }
-body {
-  margin: 0;
-  font-family: "Meiryo", sans-serif;
-  color: #f8f8f8;
-  background: #171717;
-  line-height: 1.7;
-}
-.wrap {
-  max-width: 860px;
-  margin: 0 auto;
-  padding: 20px 14px 40px;
-}
-.top {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 16px;
-}
-h1 {
-  font-size: 24px;
-  margin: 0;
-  color: #ffe26a;
-}
-.back {
-  margin-left: auto;
-  color: #111;
-  background: #ffe26a;
-  text-decoration: none;
-  font-weight: bold;
-  padding: 8px 14px;
-  border-radius: 999px;
-}
-.card {
-  background: #242424;
-  border: 1px solid #444;
-  border-radius: 14px;
-  padding: 16px;
-  margin: 12px 0;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.25);
-}
-.step {
-  display: grid;
-  grid-template-columns: 64px 1fr;
-  gap: 12px;
-  align-items: center;
-}
-.icon {
-  width: 54px;
-  height: 54px;
-  border-radius: 16px;
-  display: grid;
-  place-items: center;
-  font-size: 28px;
-  background: #333;
-  border: 2px solid #666;
-  overflow: hidden;
-  color: #fff;
-  flex-shrink: 0;
-}
-.icon img {
-  max-width: 100%;
-  max-height: 100%;
-  object-fit: contain;
-  display: block;
-}
-.pin { background: transparent; border-color: transparent; }
-.map-pin-wrap {
-  width: 54px;
-  height: 54px;
-  display: grid;
-  place-items: center;
-}
-.map-pin-shape {
-  width: 36px;
-  height: 36px;
-  border: 3px solid #fff;
-  border-radius: 50% 50% 50% 0;
-  transform: rotate(-45deg);
-  box-shadow: 0 3px 8px rgba(0,0,0,0.5);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  background: #ff8080;
-}
-.map-pin-letter {
-  transform: rotate(45deg);
-  font-size: 14px;
-  font-weight: bold;
-  color: #fff;
-  line-height: 1;
-  font-family: sans-serif;
-}
-.arrow { background: #2f7df6; }
-.green { background: #1db954; }
-.map { background: #f0b429; color: #111; }
-.blink img { animation: helpArrowBlink 1.7s ease-in-out infinite; }
-@keyframes helpArrowBlink {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.35; }
-}
-.tip {
-  color: #d8d8d8;
-  font-size: 14px;
-}
-.small {
-  color: #aaa;
-  font-size: 13px;
-  margin-top: 18px;
-}
-strong { color: #fff; }
-</style>
 </head>
 <body>
-<div class="wrap">
+<div class="wrap" id="helpRoot">
   <div class="top">
-    <h1 id="helpTitle">VRツアーの使い方</h1>
-    <a class="back" id="backLink" href="../map.html">地図に戻る</a>
+    <h1 data-help-title>VRツアーの使い方</h1>
+    <a class="back" data-help-back href="../map.html">地図に戻る</a>
   </div>
-
-  <div id="steps"></div>
-  <div id="notes"></div>
-  <div class="small" id="footerNote"></div>
+  <div data-help-steps></div>
+  <div data-help-notes></div>
+  <div class="small" data-help-footer></div>
 </div>
 <script>
-(function renderHelp() {
-  var cfg = window.HELP_CONFIG || {};
-  document.getElementById('helpTitle').textContent = cfg.title || 'VRツアーの使い方';
-  var back = document.getElementById('backLink');
-  back.textContent = cfg.backLabel || '地図に戻る';
-  back.href = cfg.backHref || '../map.html';
-
-  var steps = Array.isArray(cfg.steps) ? cfg.steps : [];
-  document.getElementById('steps').innerHTML = steps.map(function(step) {
-    var iconInner = renderStepIcon(step);
-    return '<div class="card step">' +
-      '<div class="icon ' + escapeAttr(step.colorClass || '') + '">' + iconInner + '</div>' +
-      '<div><strong>' + escapeHtml(step.title || '') + '</strong><br>' + nl2br(step.body || '') + '</div>' +
-      '</div>';
-  }).join('');
-
-  var notes = Array.isArray(cfg.notes) ? cfg.notes : [];
-  document.getElementById('notes').innerHTML = notes.map(function(note) {
-    return '<div class="card">' +
-      '<strong>' + escapeHtml(note.title || '') + '</strong><br>' +
-      nl2br(note.body || '') +
-      (note.tip ? '<div class="tip">' + nl2br(note.tip) + '</div>' : '') +
-      '</div>';
-  }).join('');
-
-  document.getElementById('footerNote').textContent = cfg.footer || '';
-})();
-
-function renderStepIcon(step) {
-  if (step.iconType === 'mapPin' || (step.colorClass === 'pin' && !step.imageSrc)) {
-    var color = step.pinColor || '#ff8080';
-    var letter = step.icon ? escapeHtml(step.icon) : '';
-    return '<div class="map-pin-wrap"><div class="map-pin-shape" style="background:' + escapeAttr(color) + '">' +
-      (letter ? '<span class="map-pin-letter">' + letter + '</span>' : '') +
-      '</div></div>';
-  }
-  if (step.imageSrc) {
-    return '<img src="' + escapeAttr(step.imageSrc) + '" alt="' + escapeAttr(step.icon || step.title || '') + '" onerror="this.replaceWith(document.createTextNode(this.alt || \'\'));">';
-  }
-  return escapeHtml(step.icon || '');
-}
-
-function escapeHtml(value) {
-  return String(value).replace(/[&<>"']/g, function(ch) {
-    return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch];
-  });
-}
-function escapeAttr(value) {
-  return escapeHtml(value).replace(/`/g, '&#96;');
-}
-function nl2br(value) {
-  return escapeHtml(value).replace(/\n/g, '<br>');
-}
+HelpEngine.initHelpPage('#helpRoot');
 </script>
 </body>
 </html>

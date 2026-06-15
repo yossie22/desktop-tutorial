@@ -1,4 +1,6 @@
 var APP_DATA = {
+  "tourTitle": "アジサイの妖精",
+  "tourDescription": "アジサイの妖精が現れます。",
   "scenes": [
     {
       "id": "0-aa001",
@@ -123,6 +125,7 @@ var APP_DATA = {
         "maskStrength": 70,
         "magnifierColor": "pink",
         "videoSrc": "video/fairy.webm",
+        "videoSrcIos": "video/fairy.mp4",
         "videoX": 15.5,
         "videoY": 79,
         "videoWidth": 24.5,
