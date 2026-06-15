@@ -1,5 +1,5 @@
 /**
- * パノラマ用ジャイロ制御 v12
+ * パノラマ用ジャイロ制御 v13
  * 上下: beta（変更なし）
  * 左右: iPad のコンパス（webkitCompassHeading）優先 → alpha → gamma
  */
@@ -12,7 +12,7 @@
   var YAW_MAX_STEP = 0.040;
   var HEADING_SPIKE_DEG = 55;
   var SENSOR_LP = 0.22;
-  var BUILD = 'v12';
+  var BUILD = 'v13';
 
   function degToRad(d) { return d * Math.PI / 180; }
   function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
@@ -69,12 +69,12 @@
         state.prevHeading = heading;
       }
       if (state.initHeading != null) {
-        yawOff = degToRad(state.initHeading - state.unwrappedHeading);
+        yawOff = degToRad(state.unwrappedHeading - state.initHeading);
         state.headingMode = true;
       }
     } else if (e.gamma != null && state.initGamma != null) {
       state.fGamma = lp(state.fGamma, e.gamma, SENSOR_LP);
-      state.gammaYawDeg = state.initGamma - state.fGamma;
+      state.gammaYawDeg = state.fGamma - state.initGamma;
       yawOff = degToRad(state.gammaYawDeg);
       state.headingMode = false;
     }
