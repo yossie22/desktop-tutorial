@@ -87,6 +87,9 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font
     while (a < -Math.PI) a += 2 * Math.PI;
     return a;
   }
+  function angleDelta(from, to) {
+    return normalizeAngle(to - from);
+  }
 
   var viewer = null;
   var currentView = null;
@@ -95,7 +98,7 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font
   var gyroBase = null;
   var gyroRaf = null;
   var gyroLatestEvent = null;
-  var GYRO_SMOOTH = 0.16;
+  var GYRO_SMOOTH = 0.38;
 
   function screenOrientationAngle() {
     if (window.screen && window.screen.orientation && window.screen.orientation.angle != null) {
@@ -104,27 +107,33 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font
     return window.orientation || 0;
   }
 
-  function deviceTiltStep(e, prevBeta, prevGamma) {
+  function deviceTiltOffsets(e, initBeta, initGamma) {
     var beta = e.beta;
     var gamma = e.gamma;
     if (beta == null || gamma == null) return null;
-    if (prevBeta == null || prevGamma == null) {
-      return { stepYaw: 0, stepPitch: 0, beta: beta, gamma: gamma };
+    if (initBeta == null || initGamma == null) {
+      return { beta: beta, gamma: gamma, ready: false };
     }
-    var dBeta = beta - prevBeta;
-    var dGamma = gamma - prevGamma;
+    var dBeta = beta - initBeta;
+    var dGamma = gamma - initGamma;
     var orient = screenOrientationAngle();
-    var stepYaw;
-    var stepPitch;
-    // 方角（alpha）は使わない。傾き（beta/gamma）だけで追従 → 急回転を防ぐ
+    var yawOff;
+    var pitchOff;
+    // 方角（alpha）は使わない。ジャイロON時の傾きを基準にした相対角度
     if (orient === 90 || orient === -90 || orient === 270) {
-      stepYaw = degToRad(dBeta);
-      stepPitch = degToRad(-dGamma);
+      yawOff = dBeta;
+      pitchOff = -dGamma;
     } else {
-      stepYaw = degToRad(dGamma);
-      stepPitch = degToRad(-dBeta);
+      yawOff = dGamma;
+      pitchOff = -dBeta;
     }
-    return { stepYaw: stepYaw, stepPitch: stepPitch, beta: beta, gamma: gamma };
+    return {
+      beta: beta,
+      gamma: gamma,
+      ready: true,
+      yawOff: degToRad(yawOff),
+      pitchOff: degToRad(pitchOff)
+    };
   }
 
   function setGyroUi(on) {
@@ -157,8 +166,10 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font
     gyroLatestEvent = null;
     var displayYaw = currentView.yaw();
     var displayPitch = currentView.pitch();
-    var prevBeta = null;
-    var prevGamma = null;
+    var initBeta = null;
+    var initGamma = null;
+    var lastTargetYaw = null;
+    var lastTargetPitch = null;
 
     gyroHandler = function(e) {
       gyroLatestEvent = e;
@@ -169,20 +180,29 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font
       if (!gyroEnabled || !currentView) return;
       gyroRaf = requestAnimationFrame(tick);
       if (!gyroLatestEvent) return;
-      var step = deviceTiltStep(gyroLatestEvent, prevBeta, prevGamma);
-      if (!step) return;
-      if (prevBeta === null) {
-        prevBeta = step.beta;
-        prevGamma = step.gamma;
+      var tilt = deviceTiltOffsets(gyroLatestEvent, initBeta, initGamma);
+      if (!tilt) return;
+      if (!tilt.ready) {
+        initBeta = tilt.beta;
+        initGamma = tilt.gamma;
         displayYaw = gyroBase.viewYaw;
         displayPitch = gyroBase.viewPitch;
+        lastTargetYaw = displayYaw;
+        lastTargetPitch = displayPitch;
         return;
       }
-      prevBeta = step.beta;
-      prevGamma = step.gamma;
-      if (Math.abs(step.stepYaw) > 0.45 || Math.abs(step.stepPitch) > 0.45) return;
-      displayYaw = normalizeAngle(displayYaw + GYRO_SMOOTH * step.stepYaw);
-      displayPitch = clamp(displayPitch + GYRO_SMOOTH * step.stepPitch, -Math.PI / 2, Math.PI / 2);
+      var targetYaw = gyroBase.viewYaw + tilt.yawOff;
+      var targetPitch = clamp(gyroBase.viewPitch + tilt.pitchOff, -Math.PI / 2, Math.PI / 2);
+      if (lastTargetYaw != null) {
+        var jumpYaw = Math.abs(angleDelta(lastTargetYaw, targetYaw));
+        var jumpPitch = Math.abs(targetPitch - lastTargetPitch);
+        if (jumpYaw > 0.75 || jumpPitch > 0.75) return;
+      }
+      lastTargetYaw = targetYaw;
+      lastTargetPitch = targetPitch;
+      displayYaw = normalizeAngle(displayYaw + GYRO_SMOOTH * angleDelta(displayYaw, targetYaw));
+      displayPitch = displayPitch + GYRO_SMOOTH * (targetPitch - displayPitch);
+      displayPitch = clamp(displayPitch, -Math.PI / 2, Math.PI / 2);
       currentView.setYaw(displayYaw);
       currentView.setPitch(displayPitch);
     }
