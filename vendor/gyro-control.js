@@ -1,16 +1,16 @@
 /**
- * パノラマ用ジャイロ制御 v7
- * 上下: beta（安定） / 左右: alpha アンラップ（v4 で動いていた方式）
+ * パノラマ用ジャイロ制御 v8
+ * 上下: beta（安定） / 左右: クォータニオン相対回転（alpha 数値の跳ねを回避）
  */
 (function(global) {
   'use strict';
 
   var PITCH_SMOOTH = 0.17;
-  var YAW_SMOOTH = 0.11;
+  var YAW_SMOOTH = 0.10;
   var PITCH_MAX_STEP = 0.032;
-  var YAW_MAX_STEP = 0.024;
-  var ALPHA_SPIKE_DEG = 70;
+  var YAW_MAX_STEP = 0.020;
   var SENSOR_LP = 0.22;
+  var YAW_OFF_MAX_DELTA = 0.035;
 
   function degToRad(d) { return d * Math.PI / 180; }
   function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
@@ -26,30 +26,80 @@
     return prev == null ? next : prev + k * (next - prev);
   }
 
+  function screenOrientationAngle() {
+    if (global.screen && global.screen.orientation && global.screen.orientation.angle != null) {
+      return global.screen.orientation.angle;
+    }
+    return global.orientation || 0;
+  }
+
+  function quatNormalize(q) {
+    var l = Math.sqrt(q.w * q.w + q.x * q.x + q.y * q.y + q.z * q.z) || 1;
+    return { w: q.w / l, x: q.x / l, y: q.y / l, z: q.z / l };
+  }
+
+  function quatMultiply(a, b) {
+    return {
+      w: a.w * b.w - a.x * b.x - a.y * b.y - a.z * b.z,
+      x: a.w * b.x + a.x * b.w + a.y * b.z - a.z * b.y,
+      y: a.w * b.y - a.x * b.z + a.y * b.w + a.z * b.x,
+      z: a.w * b.z + a.x * b.y - a.y * b.x + a.z * b.w
+    };
+  }
+
+  function quatConjugate(q) {
+    return { w: q.w, x: -q.x, y: -q.y, z: -q.z };
+  }
+
+  /** W3C DeviceOrientation → クォータニオン */
+  function quatFromDeviceOrientation(alpha, beta, gamma) {
+    var d = Math.PI / 180;
+    var z = (alpha || 0) * d;
+    var x = (beta || 0) * d;
+    var y = (gamma || 0) * d;
+    var orient = screenOrientationAngle() * d;
+    z -= orient;
+    var cX = Math.cos(x * 0.5), sX = Math.sin(x * 0.5);
+    var cY = Math.cos(y * 0.5), sY = Math.sin(y * 0.5);
+    var cZ = Math.cos(z * 0.5), sZ = Math.sin(z * 0.5);
+    return quatNormalize({
+      w: cX * cY * cZ - sX * sY * sZ,
+      x: sX * cY * cZ - cX * sY * sZ,
+      y: cX * sY * cZ + sX * cY * sZ,
+      z: cX * cY * sZ + sX * sY * cZ
+    });
+  }
+
+  /** 水平回転（Marzipano yaw）を相対クォータニオンから取り出す */
+  function yawFromRelativeQuat(q) {
+    return -Math.atan2(
+      2 * (q.w * q.y + q.x * q.z),
+      1 - 2 * (q.y * q.y + q.x * q.x)
+    );
+  }
+
   function trackOrientation(e, state) {
     if (e.beta == null || e.alpha == null) return null;
     if (state.initBeta == null) {
       state.initBeta = e.beta;
       state.fBeta = e.beta;
-      state.prevAlpha = e.alpha;
-      state.unwrappedAlpha = e.alpha;
-      state.initUnwrappedAlpha = e.alpha;
+      state.qInit = quatFromDeviceOrientation(e.alpha, e.beta, e.gamma);
+      state.yawOff = 0;
       return { ready: false };
     }
 
     state.fBeta = lp(state.fBeta, e.beta, SENSOR_LP);
     var pitchOff = degToRad(state.initBeta - state.fBeta);
 
-    var alphaStep = e.alpha - state.prevAlpha;
-    if (alphaStep > 180) alphaStep -= 360;
-    if (alphaStep < -180) alphaStep += 360;
-    if (Math.abs(alphaStep) <= ALPHA_SPIKE_DEG) {
-      state.unwrappedAlpha += alphaStep;
-      state.prevAlpha = e.alpha;
-    }
+    var qCur = quatFromDeviceOrientation(e.alpha, e.beta, e.gamma);
+    var qRel = quatMultiply(quatConjugate(state.qInit), qCur);
+    var rawYawOff = yawFromRelativeQuat(qRel);
 
-    var yawOff = degToRad(state.initUnwrappedAlpha - state.unwrappedAlpha);
-    return { ready: true, yawOff: yawOff, pitchOff: pitchOff };
+    var dy = rawYawOff - state.yawOff;
+    dy = clamp(angleDelta(0, dy), -YAW_OFF_MAX_DELTA, YAW_OFF_MAX_DELTA);
+    state.yawOff = normalizeAngle(state.yawOff + dy);
+
+    return { ready: true, yawOff: state.yawOff, pitchOff: pitchOff };
   }
 
   function GyroControl(getView) {
@@ -113,9 +163,8 @@
     var orientState = {
       initBeta: null,
       fBeta: null,
-      prevAlpha: null,
-      unwrappedAlpha: 0,
-      initUnwrappedAlpha: 0
+      qInit: null,
+      yawOff: 0
     };
 
     this.handler = function(e) { self.latestEvent = e; };
