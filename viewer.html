@@ -2202,6 +2202,17 @@ function onPortalHotspotTap(hs) {
   if (ih.videoSrc && ih.playVideoOnTap !== false && !isSupportedFullscreenMediaSrc(ih.videoSrc)) {
     console.warn('⚠️ videoSrc は対応形式ではないため、再生をスキップします:', ih.videoSrc);
   }
+  if (ih.openInLook && ih.targetScene) {
+    setPortalTappable(hs, false);
+    var lookBack = location.pathname + location.search;
+    var lookUrl = 'look.html?id=' + encodeURIComponent(ih.targetScene);
+    if (ih.targetYaw != null && ih.targetYaw !== '') lookUrl += '&yaw=' + encodeURIComponent(ih.targetYaw);
+    if (ih.targetPitch != null && ih.targetPitch !== '') lookUrl += '&pitch=' + encodeURIComponent(ih.targetPitch);
+    lookUrl += '&back=' + encodeURIComponent(lookBack);
+    if (ih.autoGyro) lookUrl += '&gyro=1';
+    location.href = lookUrl;
+    return;
+  }
   if (!ih.targetScene) return;
   setPortalTappable(hs, false);
   if (isPortalDiveTransition(ih)) {
@@ -7057,7 +7068,12 @@ window.goToMap = function() {
   activeBgmCourse = null;
   guideVideoSessionDone = {};
   stopAllBGM();
-  location.href = urlParams.get('back') || 'map.html';
+  var back = urlParams.get('back') || 'map.html';
+  try {
+    location.href = new URL(back, window.location.href).href;
+  } catch (e0) {
+    location.href = 'map.html';
+  }
 };
 
 // ========================================
