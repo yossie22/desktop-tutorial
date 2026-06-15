@@ -1,15 +1,15 @@
 /**
- * パノラマ用ジャイロ制御 v9
- * 上下: beta（安定）
- * 左右: その場の動きが大きい方を採用（体の回転=alpha / iPadの傾き=gamma）
+ * パノラマ用ジャイロ制御 v10
+ * 上下: beta（v9 まで通り・変更なし）
+ * 左右: alpha 累積（v4 系）＋符号反転（逆向きだったため）
  */
 (function(global) {
   'use strict';
 
   var PITCH_SMOOTH = 0.17;
-  var YAW_SMOOTH = 0.22;
+  var YAW_SMOOTH = 0.30;
   var PITCH_MAX_STEP = 0.032;
-  var YAW_MAX_STEP = 0.038;
+  var YAW_MAX_STEP = 0.050;
   var ALPHA_SPIKE_DEG = 72;
   var SENSOR_LP = 0.22;
 
@@ -28,14 +28,13 @@
   }
 
   function trackOrientation(e, state) {
-    if (e.beta == null || e.gamma == null) return null;
+    if (e.beta == null) return null;
 
     if (state.initBeta == null) {
       state.initBeta = e.beta;
       state.fBeta = e.beta;
-      state.prevGamma = e.gamma;
       state.prevAlpha = e.alpha;
-      state.unwrappedAlpha = e.alpha != null ? e.alpha : 0;
+      state.unwrappedAlpha = 0;
       state.yawOff = 0;
       return { ready: false };
     }
@@ -43,30 +42,17 @@
     state.fBeta = lp(state.fBeta, e.beta, SENSOR_LP);
     var pitchOff = degToRad(state.initBeta - state.fBeta);
 
-    var dGamma = e.gamma - state.prevGamma;
-    state.prevGamma = e.gamma;
-
-    var alphaStep = 0;
-    var alphaOk = false;
     if (e.alpha != null && state.prevAlpha != null) {
-      alphaStep = e.alpha - state.prevAlpha;
+      var alphaStep = e.alpha - state.prevAlpha;
       if (alphaStep > 180) alphaStep -= 360;
       if (alphaStep < -180) alphaStep += 360;
       if (Math.abs(alphaStep) <= ALPHA_SPIKE_DEG) {
-        alphaOk = true;
         state.unwrappedAlpha += alphaStep;
         state.prevAlpha = e.alpha;
       }
     }
 
-    var stepYawDeg = 0;
-    if (Math.abs(dGamma) >= Math.abs(alphaOk ? alphaStep : 0)) {
-      stepYawDeg = dGamma;
-    } else if (alphaOk) {
-      stepYawDeg = -alphaStep;
-    }
-
-    state.yawOff = normalizeAngle(state.yawOff + degToRad(stepYawDeg));
+    state.yawOff = normalizeAngle(degToRad(state.unwrappedAlpha));
 
     return { ready: true, yawOff: state.yawOff, pitchOff: pitchOff };
   }
@@ -132,7 +118,6 @@
     var orientState = {
       initBeta: null,
       fBeta: null,
-      prevGamma: null,
       prevAlpha: null,
       unwrappedAlpha: 0,
       yawOff: 0
