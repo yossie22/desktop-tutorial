@@ -26,6 +26,14 @@
       defaultBody: '画面をドラッグすると、上下左右を自由に見渡せます。',
       markType: 'look'
     },
+    gyroButton: {
+      id: 'gyroButton',
+      order: 25,
+      feature: 'hasGyroHelp',
+      defaultTitle: '右上の GYRO で、向いた方を見られます。',
+      defaultBody: 'iPad・iPhone の360度画面では、右上に青い丸の「GYRO」が出ることがあります。押して緑色になったら、端末を向けた方向に画面がついてきます。もう一度押すと止まります。初めてのときは「モーションと画面の向きのアクセスを許可」を選んでください。',
+      markType: 'gyro'
+    },
     routeArrows: {
       id: 'routeArrows',
       order: 30,
@@ -96,6 +104,14 @@
     }
   };
 
+  function isGyroHelpTarget() {
+    if (!('ontouchstart' in global)) return false;
+    var ua = navigator.userAgent || '';
+    if (/iPad|iPhone|iPod|Android/i.test(ua)) return true;
+    if (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1) return true;
+    return false;
+  }
+
   function detectAppFeatures(appData, userCfg) {
     var scenes = (appData && appData.scenes) || [];
     var positions = {};
@@ -143,7 +159,8 @@
       hasHiResPeek: hasHiResPeek,
       hasHiResPeekVideo: hasHiResPeekVideo,
       hasGuideVideo: hasGuideVideo,
-      magnifierColor: magnifierColor
+      magnifierColor: magnifierColor,
+      hasGyroHelp: isGyroHelpTarget()
     };
   }
 
@@ -153,7 +170,14 @@
     return fallback;
   }
 
-  function buildHelpConfig(appData, userCfg) {
+  function defaultMapBackHref() {
+  if (typeof location !== 'undefined' && /\/help\//i.test(location.pathname || '')) {
+    return '../map.html';
+  }
+  return 'map.html';
+}
+
+function buildHelpConfig(appData, userCfg) {
     userCfg = userCfg || {};
     var features = detectAppFeatures(appData, userCfg);
     var userTexts = userCfg.texts || {};
@@ -199,7 +223,7 @@
     return {
       title: features.tourTitle + ' — 使い方',
       backLabel: userCfg.backLabel || '地図に戻る',
-      backHref: userCfg.backHref || '../map.html',
+      backHref: userCfg.backHref || defaultMapBackHref(),
       steps: steps,
       notes: notes,
       footer: userCfg.footer || '表示がおかしいときは、ブラウザでページを再読み込みしてください。',
@@ -224,6 +248,8 @@
     } else if (step.markType === 'magnifier') {
       html = '<div class="step-mark step-mark--magnifier color-' + escapeAttr(step.magnifierColor || 'pink') + '">' +
         magnifierSvg(step.magnifierColor) + '</div>';
+    } else if (step.markType === 'gyro') {
+      html = '<div class="step-mark step-mark--gyro"><span>GYRO</span></div>';
     } else if (step.imageSrc) {
       var blinkClass = step.blink ? ' blink' : '';
       html = '<div class="step-mark' + blinkClass + '">' +
@@ -246,7 +272,7 @@
     if (titleEl) titleEl.textContent = cfg.title || 'VRツアーの使い方';
     if (backEl) {
       backEl.textContent = cfg.backLabel || '地図に戻る';
-      backEl.href = cfg.backHref || '../map.html';
+      backEl.href = cfg.backHref || defaultMapBackHref();
     }
     if (stepsEl) {
       stepsEl.innerHTML = (cfg.steps || []).map(function(step) {
