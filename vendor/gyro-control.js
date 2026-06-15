@@ -1,7 +1,9 @@
 /**
- * パノラマ用ジャイロ制御 v13
- * 上下: beta（変更なし）
- * 左右: iPad のコンパス（webkitCompassHeading）優先 → alpha → gamma
+ * パノラマ用ジャイロ制御 v13 【安定版・本番用】
+ * 確定日: 2026-06-14（iPad 実機で上下と同程度の安定性を確認）
+ * 上下: beta + 平滑化
+ * 左右: iPad コンパス（webkitCompassHeading）→ alpha → gamma
+ * 詳細: vendor/gyro-STABLE-v13.txt を参照（数値・手順・注意）
  */
 (function(global) {
   'use strict';

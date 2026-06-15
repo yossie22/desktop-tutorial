@@ -1,0 +1,43 @@
+万年山VR — ジャイロ安定版メモ（v13）
+====================================
+確定日: 2026-06-14
+状態: iPad 実機で上下・左右とも安定（11k / 8k シーンで確認）
+
+■ 使っているファイル
+  vendor/gyro-control.js     … 本体（BUILD = v13）
+  viewer.html                … GYRO ボタン横に「v13」表示
+                             … <script src="vendor/gyro-control.js?v=13">
+  look.html                  … 同じ gyro-control.js を共有
+
+■ 方式（v12〜v13 で確立）
+  上下: センサー beta（前後の傾き）＋低域フィルタ
+  左右: webkitCompassHeading（iPad コンパス）を優先
+        無いとき alpha → それも無いとき gamma
+  イベント: deviceorientationabsolute + deviceorientation
+  iOS: GYRO 押下時の「モーション許可」が必須
+
+■ 数値（変えないこと）
+  PITCH_SMOOTH      = 0.17
+  YAW_SMOOTH        = 0.22
+  PITCH_MAX_STEP    = 0.032
+  YAW_MAX_STEP      = 0.040
+  HEADING_SPIKE_DEG = 55
+  SENSOR_LP         = 0.22
+  左右の符号: unwrappedHeading - initHeading（v13 で確定）
+
+■ タイル
+  tiles1024（表示最大 1024px）でジャイロ検証可能
+  11k ソースでもタイル読み込みのため動作する
+
+■ サイトへの反映手順
+  1. アジサイ\GitHubDesktop用に反映.cmd を実行
+  2. GitHub Desktop（desktop-tutorial）で Commit → Push
+  3. iPad でタブを閉じて開き直し、GYRO 横が v13 か確認
+
+■ 触らない方がよいもの
+  v4〜v11 の alpha だけ / クォータニオン / gamma 切替などの旧方式
+  desktop-tutorial 内の反映.cmd だけ押す（アジサイからコピーすること）
+
+■ 問題が出たとき
+  まず iPad で v13 表示を確認（古いキャッシュの可能性）
+  左右が逆 → 符号 1 行だけ反転（v12↔v13 の差分を参照）

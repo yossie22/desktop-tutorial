@@ -10,6 +10,7 @@ if not exist "%SRC%\" (
 copy /Y "%SRC%viewer.html" "%DEST%\viewer.html"
 copy /Y "%SRC%look.html" "%DEST%\look.html"
 copy /Y "%SRC%vendor\gyro-control.js" "%DEST%\vendor\gyro-control.js"
+copy /Y "%SRC%vendor\gyro-STABLE-v13.txt" "%DEST%\vendor\gyro-STABLE-v13.txt"
 copy /Y "%SRC%map.html" "%DEST%\map.html"
 copy /Y "%SRC%index.html" "%DEST%\index.html"
 copy /Y "%SRC%data.js" "%DEST%\data.js"
