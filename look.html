@@ -98,7 +98,8 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font
   var gyroBase = null;
   var gyroRaf = null;
   var gyroLatestEvent = null;
-  var GYRO_SMOOTH = 0.38;
+  var GYRO_SMOOTH = 0.24;
+  var LOOK_BUILD = 'v4';
 
   function screenOrientationAngle() {
     if (window.screen && window.screen.orientation && window.screen.orientation.angle != null) {
@@ -107,32 +108,27 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font
     return window.orientation || 0;
   }
 
-  function deviceTiltOffsets(e, initBeta, initGamma) {
-    var beta = e.beta;
-    var gamma = e.gamma;
-    if (beta == null || gamma == null) return null;
-    if (initBeta == null || initGamma == null) {
-      return { beta: beta, gamma: gamma, ready: false };
+  function trackOrientation(e, state) {
+    if (e.alpha == null || e.beta == null) return null;
+    if (state.prevAlpha == null) {
+      state.prevAlpha = e.alpha;
+      state.unwrappedAlpha = e.alpha;
+      state.initUnwrappedAlpha = e.alpha;
+      state.initBeta = e.beta;
+      return { ready: false };
     }
-    var dBeta = beta - initBeta;
-    var dGamma = gamma - initGamma;
-    var orient = screenOrientationAngle();
-    var yawOff;
-    var pitchOff;
-    // 方角（alpha）は使わない。ジャイロON時の傾きを基準にした相対角度
-    if (orient === 90 || orient === -90 || orient === 270) {
-      yawOff = dBeta;
-      pitchOff = -dGamma;
-    } else {
-      yawOff = dGamma;
-      pitchOff = -dBeta;
-    }
+    var alphaStep = e.alpha - state.prevAlpha;
+    if (alphaStep > 180) alphaStep -= 360;
+    if (alphaStep < -180) alphaStep += 360;
+    if (Math.abs(alphaStep) > 55) return null;
+    state.unwrappedAlpha += alphaStep;
+    state.prevAlpha = e.alpha;
+    var yawOffDeg = state.initUnwrappedAlpha - state.unwrappedAlpha;
+    var pitchOffDeg = state.initBeta - e.beta;
     return {
-      beta: beta,
-      gamma: gamma,
       ready: true,
-      yawOff: degToRad(yawOff),
-      pitchOff: degToRad(pitchOff)
+      yawOff: degToRad(yawOffDeg),
+      pitchOff: degToRad(pitchOffDeg)
     };
   }
 
@@ -166,8 +162,12 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font
     gyroLatestEvent = null;
     var displayYaw = currentView.yaw();
     var displayPitch = currentView.pitch();
-    var initBeta = null;
-    var initGamma = null;
+    var orientState = {
+      prevAlpha: null,
+      unwrappedAlpha: 0,
+      initUnwrappedAlpha: 0,
+      initBeta: 0
+    };
     var lastTargetYaw = null;
     var lastTargetPitch = null;
 
@@ -180,23 +180,21 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font
       if (!gyroEnabled || !currentView) return;
       gyroRaf = requestAnimationFrame(tick);
       if (!gyroLatestEvent) return;
-      var tilt = deviceTiltOffsets(gyroLatestEvent, initBeta, initGamma);
-      if (!tilt) return;
-      if (!tilt.ready) {
-        initBeta = tilt.beta;
-        initGamma = tilt.gamma;
+      var o = trackOrientation(gyroLatestEvent, orientState);
+      if (!o) return;
+      if (!o.ready) {
         displayYaw = gyroBase.viewYaw;
         displayPitch = gyroBase.viewPitch;
         lastTargetYaw = displayYaw;
         lastTargetPitch = displayPitch;
         return;
       }
-      var targetYaw = gyroBase.viewYaw + tilt.yawOff;
-      var targetPitch = clamp(gyroBase.viewPitch + tilt.pitchOff, -Math.PI / 2, Math.PI / 2);
+      var targetYaw = gyroBase.viewYaw + o.yawOff;
+      var targetPitch = clamp(gyroBase.viewPitch + o.pitchOff, -Math.PI / 2, Math.PI / 2);
       if (lastTargetYaw != null) {
         var jumpYaw = Math.abs(angleDelta(lastTargetYaw, targetYaw));
         var jumpPitch = Math.abs(targetPitch - lastTargetPitch);
-        if (jumpYaw > 0.75 || jumpPitch > 0.75) return;
+        if (jumpYaw > 0.9 || jumpPitch > 0.9) return;
       }
       lastTargetYaw = targetYaw;
       lastTargetPitch = targetPitch;
@@ -208,7 +206,7 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font
     }
     gyroRaf = requestAnimationFrame(tick);
     setGyroUi(true);
-    showHint('端末を傾けて見回してください');
+    showHint('ジャイロ ' + LOOK_BUILD + ' — 端末を傾けて見回す');
   }
 
   function requestGyroPermission() {
@@ -268,7 +266,7 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font
     var scene = viewer.createScene({ source: source, geometry: geometry, view: currentView });
     scene.switchTo();
 
-    showHint('指ドラッグで360°｜ジャイロボタンで傾けて見る');
+    showHint('指ドラッグで360°｜ジャイロ ' + LOOK_BUILD);
     if (autoGyro) requestGyroPermission();
   }
 
