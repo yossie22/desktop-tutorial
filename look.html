@@ -88,6 +88,9 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font
   var gyroEnabled = false;
   var gyroHandler = null;
   var gyroBase = null;
+  var gyroRaf = null;
+  var gyroLatestEvent = null;
+  var GYRO_SMOOTH = 0.16;
 
   function screenOrientationAngle() {
     if (window.screen && window.screen.orientation && window.screen.orientation.angle != null) {
@@ -104,7 +107,7 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font
 
     var orient = screenOrientationAngle();
     var yawDeg = 360 - alpha;
-    var pitchDeg = beta - 90;
+    var pitchDeg = 90 - beta;
 
     if (orient === 90) yawDeg += 90;
     else if (orient === -90 || orient === 270) yawDeg -= 90;
@@ -124,6 +127,11 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font
       window.removeEventListener('deviceorientation', gyroHandler, true);
       gyroHandler = null;
     }
+    if (gyroRaf) {
+      cancelAnimationFrame(gyroRaf);
+      gyroRaf = null;
+    }
+    gyroLatestEvent = null;
     gyroBase = null;
     setGyroUi(false);
   }
@@ -135,22 +143,39 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font
       viewPitch: currentView.pitch(),
       device: null
     };
+    gyroLatestEvent = null;
+    var displayYaw = currentView.yaw();
+    var displayPitch = currentView.pitch();
+
     gyroHandler = function(e) {
+      gyroLatestEvent = e;
+    };
+    window.addEventListener('deviceorientation', gyroHandler, true);
+
+    function tick() {
       if (!gyroEnabled || !currentView) return;
-      var angles = deviceToViewAngles(e);
+      gyroRaf = requestAnimationFrame(tick);
+      if (!gyroLatestEvent) return;
+      var angles = deviceToViewAngles(gyroLatestEvent);
       if (!angles) return;
       if (!gyroBase.device) {
         gyroBase.device = angles;
+        displayYaw = gyroBase.viewYaw;
+        displayPitch = gyroBase.viewPitch;
         return;
       }
       var dy = angles.yaw - gyroBase.device.yaw;
       var dp = angles.pitch - gyroBase.device.pitch;
       while (dy > Math.PI) dy -= 2 * Math.PI;
       while (dy < -Math.PI) dy += 2 * Math.PI;
-      currentView.setYaw(gyroBase.viewYaw + dy);
-      currentView.setPitch(clamp(gyroBase.viewPitch + dp, -Math.PI / 2, Math.PI / 2));
-    };
-    window.addEventListener('deviceorientation', gyroHandler, true);
+      var targetYaw = gyroBase.viewYaw + dy;
+      var targetPitch = clamp(gyroBase.viewPitch + dp, -Math.PI / 2, Math.PI / 2);
+      displayYaw += GYRO_SMOOTH * (targetYaw - displayYaw);
+      displayPitch += GYRO_SMOOTH * (targetPitch - displayPitch);
+      currentView.setYaw(displayYaw);
+      currentView.setPitch(displayPitch);
+    }
+    gyroRaf = requestAnimationFrame(tick);
     setGyroUi(true);
     showHint('端末を傾けて見回してください');
   }
