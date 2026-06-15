@@ -22,15 +22,11 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font
   box-shadow: 0 4px 14px rgba(0,0,0,0.45);
 }
 #backBtn { background: rgba(255,255,255,0.92); color: #222; }
-#gyroBtn { background: rgba(40,120,255,0.92); color: #fff; }
-#gyroBtn.is-on { background: rgba(20,180,90,0.94); }
-#hint {
-  position: fixed; top: 14px; left: 50%; transform: translateX(-50%);
-  z-index: 20; max-width: 92vw; padding: 8px 14px; border-radius: 999px;
-  background: rgba(0,0,0,0.55); color: #eee; font-size: 13px; text-align: center;
-  pointer-events: none; opacity: 0; transition: opacity 0.35s ease;
+#gyroBtn {
+  width: 52px; height: 52px; border-radius: 50%; padding: 0;
+  background: rgba(48, 108, 210, 0.9); color: #fff; font-size: 9px;
 }
-#hint.show { opacity: 1; }
+#gyroBtn.is-on { background: rgba(22, 155, 78, 0.94); }
 #titleBar {
   position: fixed; top: 14px; left: 14px; z-index: 20;
   color: rgba(255,255,255,0.85); font-size: 13px; text-shadow: 0 1px 4px rgba(0,0,0,0.8);
@@ -38,14 +34,14 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font
 }
 </style>
 <script src="vendor/marzipano.js"></script>
+<script src="vendor/gyro-control.js"></script>
 </head>
 <body>
 <div id="pano"></div>
 <div id="titleBar"></div>
-<div id="hint"></div>
 <div id="ui">
   <button type="button" class="btn" id="backBtn">← 戻る</button>
-  <button type="button" class="btn" id="gyroBtn">📱 ジャイロ</button>
+  <button type="button" class="btn" id="gyroBtn" aria-pressed="false">GYRO</button>
 </div>
 <script>
 (function() {
@@ -59,19 +55,14 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font
   var autoGyro = urlParams.get('gyro') === '1';
   window.TILES_BASE = urlParams.get('tiles') || 'tiles1024';
 
-  var hintEl = document.getElementById('hint');
   var titleEl = document.getElementById('titleBar');
   var gyroBtn = document.getElementById('gyroBtn');
-  var hintTimer = null;
-
-  function showHint(text, ms) {
-    hintEl.textContent = text;
-    hintEl.classList.add('show');
-    clearTimeout(hintTimer);
-    hintTimer = setTimeout(function() { hintEl.classList.remove('show'); }, ms || 2600);
-  }
+  var viewer = null;
+  var currentView = null;
+  var sceneGyro = null;
 
   document.getElementById('backBtn').addEventListener('click', function() {
+    if (sceneGyro) sceneGyro.stop();
     try {
       location.href = new URL(backUrl, location.href).href;
     } catch (e) {
@@ -80,157 +71,14 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font
   });
 
   function degToRad(d) { return d * Math.PI / 180; }
-  function radToDeg(r) { return r * 180 / Math.PI; }
-  function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
-  function normalizeAngle(a) {
-    while (a > Math.PI) a -= 2 * Math.PI;
-    while (a < -Math.PI) a += 2 * Math.PI;
-    return a;
+
+  if (GyroControl.isSupportedDevice()) {
+    gyroBtn.addEventListener('click', function() {
+      if (sceneGyro) sceneGyro.toggle();
+    });
+  } else {
+    gyroBtn.style.display = 'none';
   }
-  function angleDelta(from, to) {
-    return normalizeAngle(to - from);
-  }
-
-  var viewer = null;
-  var currentView = null;
-  var gyroEnabled = false;
-  var gyroHandler = null;
-  var gyroBase = null;
-  var gyroRaf = null;
-  var gyroLatestEvent = null;
-  var GYRO_SMOOTH = 0.24;
-  var LOOK_BUILD = 'v4';
-
-  function screenOrientationAngle() {
-    if (window.screen && window.screen.orientation && window.screen.orientation.angle != null) {
-      return window.screen.orientation.angle;
-    }
-    return window.orientation || 0;
-  }
-
-  function trackOrientation(e, state) {
-    if (e.alpha == null || e.beta == null) return null;
-    if (state.prevAlpha == null) {
-      state.prevAlpha = e.alpha;
-      state.unwrappedAlpha = e.alpha;
-      state.initUnwrappedAlpha = e.alpha;
-      state.initBeta = e.beta;
-      return { ready: false };
-    }
-    var alphaStep = e.alpha - state.prevAlpha;
-    if (alphaStep > 180) alphaStep -= 360;
-    if (alphaStep < -180) alphaStep += 360;
-    if (Math.abs(alphaStep) > 55) return null;
-    state.unwrappedAlpha += alphaStep;
-    state.prevAlpha = e.alpha;
-    var yawOffDeg = state.initUnwrappedAlpha - state.unwrappedAlpha;
-    var pitchOffDeg = state.initBeta - e.beta;
-    return {
-      ready: true,
-      yawOff: degToRad(yawOffDeg),
-      pitchOff: degToRad(pitchOffDeg)
-    };
-  }
-
-  function setGyroUi(on) {
-    gyroEnabled = on;
-    gyroBtn.textContent = on ? '📱 ジャイロ ON' : '📱 ジャイロ';
-    gyroBtn.classList.toggle('is-on', on);
-  }
-
-  function stopGyro() {
-    if (gyroHandler) {
-      window.removeEventListener('deviceorientation', gyroHandler, true);
-      gyroHandler = null;
-    }
-    if (gyroRaf) {
-      cancelAnimationFrame(gyroRaf);
-      gyroRaf = null;
-    }
-    gyroLatestEvent = null;
-    gyroBase = null;
-    setGyroUi(false);
-  }
-
-  function startGyro() {
-    if (!currentView) return;
-    gyroBase = {
-      viewYaw: currentView.yaw(),
-      viewPitch: currentView.pitch(),
-      device: null
-    };
-    gyroLatestEvent = null;
-    var displayYaw = currentView.yaw();
-    var displayPitch = currentView.pitch();
-    var orientState = {
-      prevAlpha: null,
-      unwrappedAlpha: 0,
-      initUnwrappedAlpha: 0,
-      initBeta: 0
-    };
-    var lastTargetYaw = null;
-    var lastTargetPitch = null;
-
-    gyroHandler = function(e) {
-      gyroLatestEvent = e;
-    };
-    window.addEventListener('deviceorientation', gyroHandler, true);
-
-    function tick() {
-      if (!gyroEnabled || !currentView) return;
-      gyroRaf = requestAnimationFrame(tick);
-      if (!gyroLatestEvent) return;
-      var o = trackOrientation(gyroLatestEvent, orientState);
-      if (!o) return;
-      if (!o.ready) {
-        displayYaw = gyroBase.viewYaw;
-        displayPitch = gyroBase.viewPitch;
-        lastTargetYaw = displayYaw;
-        lastTargetPitch = displayPitch;
-        return;
-      }
-      var targetYaw = gyroBase.viewYaw + o.yawOff;
-      var targetPitch = clamp(gyroBase.viewPitch + o.pitchOff, -Math.PI / 2, Math.PI / 2);
-      if (lastTargetYaw != null) {
-        var jumpYaw = Math.abs(angleDelta(lastTargetYaw, targetYaw));
-        var jumpPitch = Math.abs(targetPitch - lastTargetPitch);
-        if (jumpYaw > 0.9 || jumpPitch > 0.9) return;
-      }
-      lastTargetYaw = targetYaw;
-      lastTargetPitch = targetPitch;
-      displayYaw = normalizeAngle(displayYaw + GYRO_SMOOTH * angleDelta(displayYaw, targetYaw));
-      displayPitch = displayPitch + GYRO_SMOOTH * (targetPitch - displayPitch);
-      displayPitch = clamp(displayPitch, -Math.PI / 2, Math.PI / 2);
-      currentView.setYaw(displayYaw);
-      currentView.setPitch(displayPitch);
-    }
-    gyroRaf = requestAnimationFrame(tick);
-    setGyroUi(true);
-    showHint('ジャイロ ' + LOOK_BUILD + ' — 端末を傾けて見回す');
-  }
-
-  function requestGyroPermission() {
-    if (typeof DeviceOrientationEvent !== 'undefined' &&
-        typeof DeviceOrientationEvent.requestPermission === 'function') {
-      DeviceOrientationEvent.requestPermission()
-        .then(function(state) {
-          if (state === 'granted') startGyro();
-          else showHint('ジャイロの許可が必要です（設定→Safari）');
-        })
-        .catch(function() { showHint('ジャイロを開始できませんでした'); });
-      return;
-    }
-    startGyro();
-  }
-
-  gyroBtn.addEventListener('click', function() {
-    if (gyroEnabled) {
-      stopGyro();
-      showHint('指でドラッグして見回せます');
-      return;
-    }
-    requestGyroPermission();
-  });
 
   function normalizeLevels(scenes) {
     scenes.forEach(function(scene) {
@@ -250,45 +98,40 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font
 
     document.title = (data.tourTitle || '360°') + ' — ' + (sd.name || sceneId);
     titleEl.textContent = sd.name || sceneId;
-
     normalizeLevels(data.scenes);
 
     var panoEl = document.getElementById('pano');
     viewer = new Marzipano.Viewer(panoEl);
-    var tilesBase = window.TILES_BASE;
-    var source = Marzipano.ImageUrlSource.fromString(tilesBase + '/' + sd.id + '/{z}/{f}/{y}/{x}.jpg');
+    var source = Marzipano.ImageUrlSource.fromString(
+      window.TILES_BASE + '/' + sd.id + '/{z}/{f}/{y}/{x}.jpg'
+    );
     var geometry = new Marzipano.CubeGeometry(sd.levels);
-    var limiter = Marzipano.RectilinearView.limit.traditional(sd.faceSize, 75 * Math.PI / 180, 120 * Math.PI / 180);
+    var limiter = Marzipano.RectilinearView.limit.traditional(
+      sd.faceSize, 75 * Math.PI / 180, 120 * Math.PI / 180
+    );
     var params = Object.assign({}, sd.initialViewParameters || {});
     if (initialYaw != null && initialYaw !== '') params.yaw = degToRad(parseFloat(initialYaw));
     if (initialPitch != null && initialPitch !== '') params.pitch = degToRad(parseFloat(initialPitch));
     currentView = new Marzipano.RectilinearView(params, limiter);
-    var scene = viewer.createScene({ source: source, geometry: geometry, view: currentView });
-    scene.switchTo();
+    viewer.createScene({ source: source, geometry: geometry, view: currentView }).switchTo();
 
-    showHint('指ドラッグで360°｜ジャイロ ' + LOOK_BUILD);
-    if (autoGyro) requestGyroPermission();
+    sceneGyro = new GyroControl(function() { return currentView; });
+    sceneGyro.setOnChange(function(on) {
+      gyroBtn.classList.toggle('is-on', on);
+      gyroBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
+    if (autoGyro) sceneGyro.requestStart();
   }
 
-  function loadDataAndBoot() {
-    fetch('data.js?_=' + Date.now(), { cache: 'no-store' })
-      .then(function(r) {
-        if (!r.ok) throw new Error('HTTP ' + r.status);
-        return r.text();
-      })
-      .then(function(text) {
-        var fn = new Function(text + '\n;return typeof APP_DATA !== "undefined" ? APP_DATA : null;');
-        var data = fn();
-        if (!data) throw new Error('APP_DATA なし');
-        boot(data);
-      })
-      .catch(function(err) {
-        console.error(err);
-        alert('data.js の読み込みに失敗しました');
-      });
-  }
-
-  loadDataAndBoot();
+  fetch('data.js?_=' + Date.now(), { cache: 'no-store' })
+    .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); })
+    .then(function(text) {
+      var fn = new Function(text + '\n;return typeof APP_DATA !== "undefined" ? APP_DATA : null;');
+      var data = fn();
+      if (!data) throw new Error('APP_DATA なし');
+      boot(data);
+    })
+    .catch(function() { alert('data.js の読み込みに失敗しました'); });
 })();
 </script>
 </body>

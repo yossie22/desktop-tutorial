@@ -30,6 +30,32 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #000; }
 }
 #compassContainer.visible { opacity: 1; pointer-events: auto; }
 
+/* ジャイロ（スマホ・iPad・右上・他UIと同様に自動消灯） */
+#gyroButton {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 40px;
+  height: 40px;
+  border: none;
+  border-radius: 50%;
+  z-index: 101;
+  opacity: 0;
+  transition: opacity 0.5s ease;
+  pointer-events: none;
+  background: rgba(48, 108, 210, 0.9);
+  color: #fff;
+  font-size: 9px;
+  font-weight: bold;
+  font-family: sans-serif;
+  letter-spacing: -0.3px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.45);
+  cursor: pointer;
+  padding: 0;
+}
+#gyroButton.visible { opacity: 0.88; pointer-events: auto; }
+#gyroButton.is-on { background: rgba(22, 155, 78, 0.94); }
+
 /* 方位計（数値：全シーン共通） */
 #degreeCircle {
   width: 60px; height: 60px; background: rgba(255,255,255,0.8); border-radius: 50%; border: 3px solid #0066ff;
@@ -764,6 +790,8 @@ body.embed-shadow #hiResPeekOverlay { display: none !important; }
 </div>
 <div id="crosshair"></div>
 
+<button type="button" id="gyroButton" aria-label="ジャイロ" aria-pressed="false" title="ジャイロ">GYRO</button>
+
 <div id="compassContainer">
   <div id="degreeCircle"><span id="yawTxt">0°</span><small id="pitchTxt">0°</small></div>
   <div id="compassCircle">
@@ -811,6 +839,7 @@ body.embed-shadow #hiResPeekOverlay { display: none !important; }
 </div>
 
 <script src="vendor/marzipano.js"></script>
+<script src="vendor/gyro-control.js"></script>
 <script>
 // ポータル画像は data.js の imageHotspots（sourceScene / sceneStartId で出発地に紐付け）
 
@@ -1754,6 +1783,7 @@ panoElement.addEventListener('touchstart', function(e) {
 // UI要素の取得（ここで一括定義するように修正）
 var counterEl = document.getElementById('counter');
 var mapBtnEl = document.getElementById('mapButton');
+var gyroBtnEl = document.getElementById('gyroButton');
 var crosshairEl = document.getElementById('crosshair');
 var compassContEl = document.getElementById('compassContainer');
 var compassNeedleCircle = document.getElementById('compassCircle');
@@ -1800,6 +1830,23 @@ var zoomUI=document.getElementById('zoomContainer');
 var fadeUI=document.getElementById('fadeContainer');
 var showAutoCtrl=false;
 var uiArrowsShown=false;
+var sceneGyro = null;
+
+if (typeof GyroControl !== 'undefined' && GyroControl.isSupportedDevice() && gyroBtnEl) {
+  sceneGyro = new GyroControl(function() { return currentView; });
+  sceneGyro.setOnChange(function(on) {
+    gyroBtnEl.classList.toggle('is-on', on);
+    gyroBtnEl.setAttribute('aria-pressed', on ? 'true' : 'false');
+  });
+  gyroBtnEl.addEventListener('click', function(e) {
+    e.stopPropagation();
+    sceneGyro.toggle();
+    showUI();
+  });
+  window.sceneGyro = sceneGyro;
+} else if (gyroBtnEl) {
+  gyroBtnEl.style.display = 'none';
+}
 
 data.scenes.forEach(function(sd) {
   var tilesBase = window.TILES_BASE || 'tiles';
@@ -1832,6 +1879,7 @@ function syncYellowArrowVisibility() {
 
 function showUI() {
   var standardUI = [mapBtnEl, counterEl];
+  if (gyroBtnEl && gyroBtnEl.style.display !== 'none') standardUI.push(gyroBtnEl);
   var yellowArrowIds = ['arrowUp', 'arrowDown', 'arrowLeft', 'arrowRight'];
 
   uiArrowsShown = true;
@@ -5358,6 +5406,7 @@ function collectImageHotspotsForScene(sceneId) {
 }
 
 function switchScene(sceneId, yaw, pitch, fov, fromPortalHotspot, keepFullscreenOverlay) {
+  if (window.sceneGyro) window.sceneGyro.stop();
   var obj = scenesData[sceneId];
   if (!obj) return;
 
