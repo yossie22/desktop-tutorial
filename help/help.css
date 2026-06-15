@@ -1,0 +1,142 @@
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: "Meiryo", sans-serif;
+  color: #f8f8f8;
+  background: #171717;
+  line-height: 1.7;
+}
+.wrap {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 20px 14px 40px;
+}
+.top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+h1 {
+  font-size: 24px;
+  margin: 0;
+  color: #ffe26a;
+}
+.back {
+  margin-left: auto;
+  color: #111;
+  background: #ffe26a;
+  text-decoration: none;
+  font-weight: bold;
+  padding: 8px 14px;
+  border-radius: 999px;
+}
+.card {
+  background: #242424;
+  border: 1px solid #444;
+  border-radius: 14px;
+  padding: 16px;
+  margin: 12px 0;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.25);
+}
+.step {
+  display: grid;
+  grid-template-columns: 80px 1fr;
+  gap: 14px;
+  align-items: center;
+}
+.step-mark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 56px;
+  background: transparent;
+  border: none;
+  padding: 0;
+}
+.step-mark img {
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: 70px;
+  max-height: 70px;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+.step-mark--pin {
+  flex-direction: column;
+  align-items: center;
+}
+.help-map-pin {
+  width: 36px;
+  height: 36px;
+  border: 3px solid #fff;
+  border-radius: 50% 50% 50% 0;
+  transform: rotate(-45deg);
+  box-shadow: 0 3px 8px rgba(0,0,0,0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: #e8453c;
+}
+.help-map-pin-num {
+  transform: rotate(45deg);
+  font-size: 14px;
+  font-weight: bold;
+  color: #fff;
+  line-height: 1;
+  font-family: sans-serif;
+}
+.step-mark--magnifier svg {
+  width: 52px;
+  height: 52px;
+  display: block;
+}
+.step-mark--magnifier.color-pink { color: #ff4da6; }
+.step-mark--magnifier.color-green { color: #4de67a; }
+.step-mark--magnifier.color-gold { color: #f5c518; }
+.step-mark--look {
+  font-size: 40px;
+  line-height: 1;
+}
+.blink img {
+  animation: helpArrowBlink 1.7s ease-in-out infinite;
+}
+@keyframes helpArrowBlink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+.tip {
+  color: #d8d8d8;
+  font-size: 14px;
+}
+.small {
+  color: #aaa;
+  font-size: 13px;
+  margin-top: 18px;
+}
+strong { color: #fff; }
+.feature-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0 14px;
+}
+.feature-tag {
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #333;
+  color: #ccc;
+  border: 1px solid #555;
+}
+.feature-tag.on {
+  background: #2a4a2a;
+  color: #b8f0b8;
+  border-color: #4a8a4a;
+}
+.feature-tag.off {
+  opacity: 0.45;
+}

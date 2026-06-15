@@ -1,4 +1,6 @@
 var APP_DATA = {
+  "tourTitle": "アジサイの妖精",
+  "tourDescription": "アジサイの妖精が現れます。",
   "scenes": [
     {
       "id": "0-aa001",
@@ -110,24 +112,25 @@ var APP_DATA = {
       "hiResPeek": {
         "imageSrc": "aa003eos.jpg",
         "yawCenter": -5,
-        "pitchCenter": 39,
-        "frameWidth": 366,
-        "frameHeight": 399,
+        "pitchCenter": 34,
+        "frameWidth": 449,
+        "frameHeight": 449,
         "frameRadius": 900,
-        "rangeAngleYaw": 23,
-        "rangeAnglePitch": 25,
-        "showAngleYaw": 15,
-        "showAnglePitch": 10,
+        "rangeAngleYaw": 28,
+        "rangeAnglePitch": 28,
+        "showAngleYaw": 18,
+        "showAnglePitch": 20,
         "shootMode": "range",
         "maskType": "softRect",
-        "maskStrength": 65,
+        "maskStrength": 70,
         "magnifierColor": "pink",
         "videoSrc": "video/fairy.webm",
-        "videoX": 16.5,
+        "videoSrcIos": "video/fairy.mp4",
+        "videoX": 15.5,
         "videoY": 79,
-        "videoWidth": 24,
+        "videoWidth": 24.5,
         "videoMatte": "lighten",
-        "videoLoop": true
+        "videoLoop": false
       }
     }
   ],

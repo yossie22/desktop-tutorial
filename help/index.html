@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VRツアーの使い方</title>
+<link rel="stylesheet" href="help.css">
+<script src="../data.js"></script>
+<script src="help-engine.js"></script>
+</head>
+<body>
+<div class="wrap" id="helpRoot">
+  <div class="top">
+    <h1 data-help-title>VRツアーの使い方</h1>
+    <a class="back" data-help-back href="../map.html">地図に戻る</a>
+  </div>
+  <div data-help-steps></div>
+  <div data-help-notes></div>
+  <div class="small" data-help-footer></div>
+</div>
+<script>
+(function loadHelpAndRender() {
+  var stamp = Date.now();
+  function boot() { HelpEngine.initHelpPage('#helpRoot'); }
+  var onGitHub = /github\.io$/i.test(location.hostname);
+  function loadConfig() {
+    var fb = document.createElement('script');
+    fb.src = 'config.js?v=' + stamp;
+    fb.onload = boot;
+    fb.onerror = function() { boot(); };
+    document.head.appendChild(fb);
+  }
+  if (onGitHub) {
+    loadConfig();
+    return;
+  }
+  var local = document.createElement('script');
+  local.src = '../地図の取説/取説設定.js?v=' + stamp;
+  local.onload = boot;
+  local.onerror = loadConfig;
+  document.head.appendChild(local);
+})();
+</script>
+</body>
+</html>
