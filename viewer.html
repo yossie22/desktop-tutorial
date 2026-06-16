@@ -25,7 +25,8 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #000; }
 #crosshair::after { left: 14px; top: 0; width: 2px; height: 30px; }
 
 #compassContainer {
-  position: absolute; top: 20px; right: 20px; display: flex; align-items: center; z-index: 100;
+  position: absolute; top: 62px; right: 14px; display: flex; flex-direction: column; align-items: center;
+  gap: 8px; z-index: 100;
   transition: opacity 0.5s ease; opacity: 0; pointer-events: none;
 }
 #compassContainer.visible { opacity: 1; pointer-events: auto; }
@@ -65,6 +66,23 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #000; }
 }
 body.gyro-active #pano { touch-action: none; }
 
+/* コンパス（針：ダブルタップ時に常時表示。真方位は heading があるシーンのみ） */
+#compassCircle {
+  width: 60px; height: 60px; background: rgba(255,255,255,0.92); border-radius: 50%; border: 3px solid #0066ff;
+  display: flex; justify-content: center; align-items: center; box-shadow: 0 4px 8px rgba(0,0,0,0.28);
+  position: relative; flex-shrink: 0; overflow: visible;
+}
+#compassCircle .compass-dial,
+#compassCircle .compass-needle {
+  position: absolute; left: 50%; top: 50%; width: 52px; height: 52px;
+  margin-left: -26px; margin-top: -26px;
+  pointer-events: none;
+}
+#compassCircle .compass-needle {
+  transform-origin: 26px 26px;
+  transition: transform 0.12s linear;
+}
+
 /* 画面角度（yaw / pitch：全シーン共通） */
 #degreeCircle {
   width: 60px; height: 60px; background: rgba(255,255,255,0.92); border-radius: 50%; border: 3px solid #0066ff;
@@ -74,30 +92,10 @@ body.gyro-active #pano { touch-action: none; }
 }
 #degreeCircle small { font-size: 10px; color: #666; }
 
-/* コンパス（針：data.js に heading / compassHeading があるシーンのみ） */
-#compassCircle {
-  width: 60px; height: 60px; background: rgba(255,255,255,0.92); border-radius: 50%; border: 3px solid #0066ff;
-  margin-left: 10px; display: none; justify-content: center; align-items: center; box-shadow: 0 4px 8px rgba(0,0,0,0.28);
-  position: relative; flex-shrink: 0;
-}
-#compassCircle.active { display: flex; }
-#compassCircle .compass-dial {
-  position: absolute; width: 52px; height: 52px; left: 50%; top: 50%;
-  transform: translate(-50%, -50%);
-  pointer-events: none;
-}
-#compassCircle .compass-needle {
-  position: absolute; width: 52px; height: 52px; left: 50%; top: 50%;
-  transform: translate(-50%, -50%);
-  transform-origin: 50% 50%;
-  transition: transform 0.12s linear;
-  pointer-events: none;
-}
-
 /* 真方位（画面角度 yaw とは別） */
 #bearingCircle {
   width: 60px; height: 60px; background: rgba(255,255,255,0.92); border-radius: 50%; border: 3px solid #0066ff;
-  margin-left: 10px; display: none; flex-direction: column; justify-content: center; align-items: center;
+  display: none; flex-direction: column; justify-content: center; align-items: center;
   font-family: sans-serif; font-weight: bold; font-size: 16px; color: #0066ff;
   box-shadow: 0 4px 8px rgba(0,0,0,0.28); flex-shrink: 0;
 }
@@ -825,19 +823,19 @@ body.embed-shadow #hiResPeekOverlay { display: none !important; }
 <button type="button" id="gyroButton" aria-label="ジャイロ" aria-pressed="false" title="ジャイロ">GYRO</button>
 
 <div id="compassContainer" aria-label="方位表示">
-  <div id="degreeCircle" aria-label="画面角度">
-    <span id="yawTxt">0°</span>
-    <small id="pitchTxt">0°</small>
-  </div>
-  <div id="compassCircle" aria-hidden="true">
-    <svg class="compass-dial" viewBox="0 0 100 100" aria-hidden="true">
+  <div id="compassCircle" aria-label="コンパス">
+    <svg class="compass-dial" viewBox="0 0 100 100" width="52" height="52" aria-hidden="true">
       <text x="50" y="17" font-family="sans-serif" font-size="16" fill="#E60000" font-weight="bold" text-anchor="middle">N</text>
     </svg>
-    <svg id="compassNeedle" class="compass-needle" viewBox="0 0 100 100" aria-hidden="true">
+    <svg id="compassNeedle" class="compass-needle" viewBox="0 0 100 100" width="52" height="52" aria-hidden="true">
       <polygon points="50,88 62,54 38,54" fill="#888888" />
       <polygon points="50,12 62,54 38,54" fill="#E60000" />
       <circle cx="50" cy="50" r="6" fill="#333333" stroke="#fff" stroke-width="2" />
     </svg>
+  </div>
+  <div id="degreeCircle" aria-label="画面角度">
+    <span id="yawTxt">0°</span>
+    <small id="pitchTxt">0°</small>
   </div>
   <div id="bearingCircle" aria-label="真方位の角度">
     <span id="bearingTxt">--</span>
@@ -1227,7 +1225,7 @@ data.scenes.forEach(function(scene) {
 });
 
 // ビルド識別（どのファイルが実行されているか確認用）
-var BUILD_STAMP = '2026-06-13-eosVideoOverlay';
+var BUILD_STAMP = '2026-06-14-compassUi';
 var guideVideoPreloadBySrc = {};
 var guideVideoSessionDone = {};
 console.log('🧩 viewer build:', BUILD_STAMP);
@@ -5711,27 +5709,22 @@ function getSceneNorthOffset(sceneData) {
 
 function updateCompassDisplay() {
   var northOff = getSceneNorthOffset(currentSceneObj && currentSceneObj.data);
-  var hasCompass = northOff != null;
-  if (compassNeedleCircle) {
-    compassNeedleCircle.classList.toggle('active', hasCompass);
-  }
+  var hasTrueBearing = northOff != null;
   if (bearingCircleEl) {
-    bearingCircleEl.classList.toggle('active', hasCompass);
-  }
-  if (!hasCompass) {
-    var bearingEl = document.getElementById('bearingTxt');
-    if (bearingEl) bearingEl.textContent = '--';
-    return;
+    bearingCircleEl.classList.toggle('active', hasTrueBearing);
   }
   if (!currentView) return;
   var yawDeg = radToDeg(normalizeAngle(currentView.parameters().yaw));
-  var bearingDeg = ((northOff + yawDeg) % 360 + 360) % 360;
+  var offset = hasTrueBearing ? northOff : 0;
+  var bearingDeg = ((offset + yawDeg) % 360 + 360) % 360;
   var needleEl = document.getElementById('compassNeedle');
   var bearingEl = document.getElementById('bearingTxt');
   if (needleEl) {
-    needleEl.style.transform = 'translate(-50%, -50%) rotate(' + (-(northOff + yawDeg)) + 'deg)';
+    needleEl.style.transform = 'rotate(' + (-(offset + yawDeg)) + 'deg)';
   }
-  if (bearingEl) bearingEl.textContent = Math.round(bearingDeg) + '°';
+  if (bearingEl) {
+    bearingEl.textContent = hasTrueBearing ? (Math.round(bearingDeg) + '°') : '--';
+  }
 }
 
 function updateUI() {
