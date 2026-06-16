@@ -36,7 +36,9 @@ var APP_DATA = {
       ],
       "infoHotspots": [],
       "position": 1,
-      "course": "aa"
+      "course": "aa",
+      "lat": 33.520345,
+      "lng": 131.21794
     },
     {
       "id": "1-aa002",
@@ -72,7 +74,9 @@ var APP_DATA = {
       ],
       "infoHotspots": [],
       "position": 2,
-      "course": "aa"
+      "course": "aa",
+      "lat": 33.520525,
+      "lng": 131.21764
     },
     {
       "id": "2-aa003",

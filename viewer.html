@@ -63,24 +63,46 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #000; }
   font-size: 7px;
   opacity: 0.85;
 }
-#gyroButton { position: absolute; }
 body.gyro-active #pano { touch-action: none; }
 
-/* 方位計（数値：全シーン共通） */
+/* 画面角度（yaw / pitch：全シーン共通） */
 #degreeCircle {
-  width: 60px; height: 60px; background: rgba(255,255,255,0.8); border-radius: 50%; border: 3px solid #0066ff;
+  width: 60px; height: 60px; background: rgba(255,255,255,0.92); border-radius: 50%; border: 3px solid #0066ff;
   display: flex; flex-direction: column; justify-content: center; align-items: center;
   font-family: sans-serif; font-weight: bold; font-size: 14px; color: #0066ff;
-  z-index: 102;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.28); flex-shrink: 0;
 }
 #degreeCircle small { font-size: 10px; color: #666; }
 
-/* コンパス（針：データがある時のみ） */
+/* コンパス（針：data.js に heading / compassHeading があるシーンのみ） */
 #compassCircle {
-  width: 60px; height: 60px; background: white; border-radius: 50%; border: 3px solid #0066ff;
-  margin-left: 10px; display: none; justify-content: center; align-items: center; box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+  width: 60px; height: 60px; background: rgba(255,255,255,0.92); border-radius: 50%; border: 3px solid #0066ff;
+  margin-left: 10px; display: none; justify-content: center; align-items: center; box-shadow: 0 4px 8px rgba(0,0,0,0.28);
+  position: relative; flex-shrink: 0;
 }
 #compassCircle.active { display: flex; }
+#compassCircle .compass-dial {
+  position: absolute; width: 52px; height: 52px; left: 50%; top: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+#compassCircle .compass-needle {
+  position: absolute; width: 52px; height: 52px; left: 50%; top: 50%;
+  transform: translate(-50%, -50%);
+  transform-origin: 50% 50%;
+  transition: transform 0.12s linear;
+  pointer-events: none;
+}
+
+/* 真方位（画面角度 yaw とは別） */
+#bearingCircle {
+  width: 60px; height: 60px; background: rgba(255,255,255,0.92); border-radius: 50%; border: 3px solid #0066ff;
+  margin-left: 10px; display: none; flex-direction: column; justify-content: center; align-items: center;
+  font-family: sans-serif; font-weight: bold; font-size: 16px; color: #0066ff;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.28); flex-shrink: 0;
+}
+#bearingCircle.active { display: flex; }
+#bearingCircle small { font-size: 10px; color: #666; letter-spacing: 0.04em; }
 
 #volumeContainer {
   position: absolute; top: 20px; left: 20px; height: 60px; display: flex; align-items: center;
@@ -802,15 +824,24 @@ body.embed-shadow #hiResPeekOverlay { display: none !important; }
 
 <button type="button" id="gyroButton" aria-label="ジャイロ" aria-pressed="false" title="ジャイロ">GYRO</button>
 
-<div id="compassContainer">
-  <div id="degreeCircle"><span id="yawTxt">0°</span><small id="pitchTxt">0°</small></div>
-  <div id="compassCircle">
-    <svg id="compassNeedle" viewBox="0 0 100 100" width="45" height="45" style="transition: transform 0.1s linear;">
-      <polygon points="50,90 65,50 35,50" fill="#999999" />
-      <polygon points="50,10 65,50 35,50" fill="#E60000" />
-      <text x="50" y="42" font-family="sans-serif" font-size="20" fill="white" font-weight="bold" text-anchor="middle">N</text>
-      <circle cx="50" cy="50" r="5" fill="#333333" />
+<div id="compassContainer" aria-label="方位表示">
+  <div id="degreeCircle" aria-label="画面角度">
+    <span id="yawTxt">0°</span>
+    <small id="pitchTxt">0°</small>
+  </div>
+  <div id="compassCircle" aria-hidden="true">
+    <svg class="compass-dial" viewBox="0 0 100 100" aria-hidden="true">
+      <text x="50" y="17" font-family="sans-serif" font-size="16" fill="#E60000" font-weight="bold" text-anchor="middle">N</text>
     </svg>
+    <svg id="compassNeedle" class="compass-needle" viewBox="0 0 100 100" aria-hidden="true">
+      <polygon points="50,88 62,54 38,54" fill="#888888" />
+      <polygon points="50,12 62,54 38,54" fill="#E60000" />
+      <circle cx="50" cy="50" r="6" fill="#333333" stroke="#fff" stroke-width="2" />
+    </svg>
+  </div>
+  <div id="bearingCircle" aria-label="真方位の角度">
+    <span id="bearingTxt">--</span>
+    <small>方位</small>
   </div>
 </div>
 
@@ -1797,6 +1828,7 @@ var gyroBtnEl = document.getElementById('gyroButton');
 var crosshairEl = document.getElementById('crosshair');
 var compassContEl = document.getElementById('compassContainer');
 var compassNeedleCircle = document.getElementById('compassCircle');
+var bearingCircleEl = document.getElementById('bearingCircle');
 var volumeUI = document.getElementById('volumeContainer');
 
 var audioEnabled = false;
@@ -1919,12 +1951,7 @@ function showUI() {
     if(crosshairEl) crosshairEl.classList.add('visible');
     if(compassContEl) compassContEl.classList.add('visible');
     
-    var hasCompassData = (currentSceneObj && (currentSceneObj.data.heading !== undefined || currentSceneObj.data.compassHeading !== undefined));
-    if(hasCompassData) {
-      compassNeedleCircle.classList.add('active');
-    } else {
-      compassNeedleCircle.classList.remove('active');
-    }
+    updateCompassDisplay();
   } else {
     if(crosshairEl) crosshairEl.classList.remove('visible');
     if(compassContEl) compassContEl.classList.remove('visible');
@@ -5668,6 +5695,43 @@ function switchScene(sceneId, yaw, pitch, fov, fromPortalHotspot, keepFullscreen
 
   attachHiResPeekHotspot(sceneId, obj.data);
 
+  updateCompassDisplay();
+}
+
+function getSceneNorthOffset(sceneData) {
+  if (!sceneData) return null;
+  if (sceneData.compassHeading != null && !isNaN(Number(sceneData.compassHeading))) {
+    return Number(sceneData.compassHeading);
+  }
+  if (sceneData.heading != null && !isNaN(Number(sceneData.heading))) {
+    return Number(sceneData.heading);
+  }
+  return null;
+}
+
+function updateCompassDisplay() {
+  var northOff = getSceneNorthOffset(currentSceneObj && currentSceneObj.data);
+  var hasCompass = northOff != null;
+  if (compassNeedleCircle) {
+    compassNeedleCircle.classList.toggle('active', hasCompass);
+  }
+  if (bearingCircleEl) {
+    bearingCircleEl.classList.toggle('active', hasCompass);
+  }
+  if (!hasCompass) {
+    var bearingEl = document.getElementById('bearingTxt');
+    if (bearingEl) bearingEl.textContent = '--';
+    return;
+  }
+  if (!currentView) return;
+  var yawDeg = radToDeg(normalizeAngle(currentView.parameters().yaw));
+  var bearingDeg = ((northOff + yawDeg) % 360 + 360) % 360;
+  var needleEl = document.getElementById('compassNeedle');
+  var bearingEl = document.getElementById('bearingTxt');
+  if (needleEl) {
+    needleEl.style.transform = 'translate(-50%, -50%) rotate(' + (-(northOff + yawDeg)) + 'deg)';
+  }
+  if (bearingEl) bearingEl.textContent = Math.round(bearingDeg) + '°';
 }
 
 function updateUI() {
@@ -5676,9 +5740,12 @@ function updateUI() {
   var yawDeg = radToDeg(normalizeAngle(currentView.parameters().yaw));
   var pitch = radToDeg(currentView.parameters().pitch);
 
-  document.getElementById('yawTxt').textContent = Math.round(yawDeg) + '°';
-  document.getElementById('pitchTxt').textContent = Math.round(pitch) + '°';
-  document.getElementById('compassNeedle').style.transform = 'rotate(' + (-yawDeg) + 'deg)';
+  var yawEl = document.getElementById('yawTxt');
+  var pitchEl = document.getElementById('pitchTxt');
+  if (yawEl) yawEl.textContent = Math.round(yawDeg) + '°';
+  if (pitchEl) pitchEl.textContent = Math.round(pitch) + '°';
+
+  updateCompassDisplay();
 
   // ★ホットスポットエディタ連携：現在の向きをlocalStorageに書き込む
   try {
