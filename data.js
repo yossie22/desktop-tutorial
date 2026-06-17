@@ -38,7 +38,8 @@ var APP_DATA = {
       "position": 1,
       "course": "aa",
       "lat": 33.520345,
-      "lng": 131.21794
+      "lng": 131.21794,
+      "heading": 90
     },
     {
       "id": "1-aa002",

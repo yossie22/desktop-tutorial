@@ -101,6 +101,14 @@
       markType: 'image',
       imageSrc: ASSET.mapBtn,
       blink: false
+    },
+    compassBearing: {
+      id: 'compassBearing',
+      order: 95,
+      always: true,
+      defaultTitle: '番号をダブルタップするとコンパスが出ます。',
+      defaultBody: '画面右下の番号を素早く2回タップすると、右上に丸いコンパスと画面角度が出ます。コンパスの針は北を指します。画面を回すと針も方角に合わせて動きます。',
+      markType: 'compass'
     }
   };
 
@@ -226,9 +234,37 @@ function buildHelpConfig(appData, userCfg) {
       backHref: userCfg.backHref || defaultMapBackHref(),
       steps: steps,
       notes: notes,
+      gpsRows: buildGpsRows(appData),
       footer: userCfg.footer || '表示がおかしいときは、ブラウザでページを再読み込みしてください。',
       features: features
     };
+  }
+
+  function buildGpsRows(appData) {
+    var scenes = (appData && appData.scenes) || [];
+    return scenes.filter(function(sd) {
+      return sd && sd.lat != null && sd.lng != null && !isNaN(Number(sd.lat)) && !isNaN(Number(sd.lng));
+    }).map(function(sd) {
+      return {
+        id: sd.id || '',
+        name: sd.name || sd.id || '',
+        lat: Number(sd.lat),
+        lng: Number(sd.lng)
+      };
+    });
+  }
+
+  function renderGpsAppendix(rows) {
+    if (!rows || !rows.length) return '';
+    var body = rows.map(function(row) {
+      return '<tr><td>' + escapeHtml(row.name) + '</td><td>緯 ' + row.lat.toFixed(6) + '</td><td>経 ' + row.lng.toFixed(6) + '</td></tr>';
+    }).join('');
+    return '<div class="card gps-appendix">' +
+      '<strong>撮影地点のGPS（記録用）</strong><br>' +
+      '<span class="tip">VR画面には出しません。地図や記録用の数値です。</span>' +
+      '<table class="gps-table"><thead><tr><th>場所</th><th>緯度</th><th>経度</th></tr></thead><tbody>' +
+      body +
+      '</tbody></table></div>';
   }
 
   function magnifierSvg(colorClass) {
@@ -250,6 +286,11 @@ function buildHelpConfig(appData, userCfg) {
         magnifierSvg(step.magnifierColor) + '</div>';
     } else if (step.markType === 'gyro') {
       html = '<div class="step-mark step-mark--gyro"><span>GYRO</span></div>';
+    } else if (step.markType === 'compass') {
+      html = '<div class="step-mark step-mark--compass" aria-hidden="true">' +
+        '<span class="help-compass-dial">N</span>' +
+        '<span class="help-compass-needle"></span>' +
+        '</div>';
     } else if (step.imageSrc) {
       var blinkClass = step.blink ? ' blink' : '';
       html = '<div class="step-mark' + blinkClass + '">' +
@@ -267,6 +308,7 @@ function buildHelpConfig(appData, userCfg) {
     var backEl = rootEl.querySelector('[data-help-back]');
     var stepsEl = rootEl.querySelector('[data-help-steps]');
     var notesEl = rootEl.querySelector('[data-help-notes]');
+    var gpsEl = rootEl.querySelector('[data-help-gps]');
     var footerEl = rootEl.querySelector('[data-help-footer]');
 
     if (titleEl) titleEl.textContent = cfg.title || 'VRツアーの使い方';
@@ -290,6 +332,9 @@ function buildHelpConfig(appData, userCfg) {
           (note.tip ? '<div class="tip">' + nl2br(note.tip) + '</div>' : '') +
           '</div>';
       }).join('');
+    }
+    if (gpsEl) {
+      gpsEl.innerHTML = renderGpsAppendix(cfg.gpsRows || []);
     }
     if (footerEl) footerEl.textContent = cfg.footer || '';
   }
@@ -324,6 +369,8 @@ function buildHelpConfig(appData, userCfg) {
     STEP_CATALOG: STEP_CATALOG,
     detectAppFeatures: detectAppFeatures,
     buildHelpConfig: buildHelpConfig,
+    buildGpsRows: buildGpsRows,
+    renderGpsAppendix: renderGpsAppendix,
     renderHelpPage: renderHelpPage,
     renderStepMark: renderStepMark,
     getStepCatalog: getStepCatalog,

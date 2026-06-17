@@ -66,12 +66,13 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #000; }
 }
 body.gyro-active #pano { touch-action: none; }
 
-/* コンパス（針：ダブルタップ時に常時表示。真方位は heading があるシーンのみ） */
+/* コンパス（針：data.js / マップジェネレータの heading があるシーンのみ） */
 #compassCircle {
   width: 60px; height: 60px; background: rgba(255,255,255,0.92); border-radius: 50%; border: 3px solid #0066ff;
-  display: flex; justify-content: center; align-items: center; box-shadow: 0 4px 8px rgba(0,0,0,0.28);
+  display: none; justify-content: center; align-items: center; box-shadow: 0 4px 8px rgba(0,0,0,0.28);
   position: relative; flex-shrink: 0; overflow: visible;
 }
+#compassCircle.active { display: flex; }
 #compassCircle .compass-dial,
 #compassCircle .compass-needle {
   position: absolute; left: 50%; top: 50%; width: 52px; height: 52px;
@@ -91,16 +92,6 @@ body.gyro-active #pano { touch-action: none; }
   box-shadow: 0 4px 8px rgba(0,0,0,0.28); flex-shrink: 0;
 }
 #degreeCircle small { font-size: 10px; color: #666; }
-
-/* 真方位（画面角度 yaw とは別） */
-#bearingCircle {
-  width: 60px; height: 60px; background: rgba(255,255,255,0.92); border-radius: 50%; border: 3px solid #0066ff;
-  display: none; flex-direction: column; justify-content: center; align-items: center;
-  font-family: sans-serif; font-weight: bold; font-size: 16px; color: #0066ff;
-  box-shadow: 0 4px 8px rgba(0,0,0,0.28); flex-shrink: 0;
-}
-#bearingCircle.active { display: flex; }
-#bearingCircle small { font-size: 10px; color: #666; letter-spacing: 0.04em; }
 
 #volumeContainer {
   position: absolute; top: 20px; left: 20px; height: 60px; display: flex; align-items: center;
@@ -837,10 +828,6 @@ body.embed-shadow #hiResPeekOverlay { display: none !important; }
     <span id="yawTxt">0°</span>
     <small id="pitchTxt">0°</small>
   </div>
-  <div id="bearingCircle" aria-label="真方位の角度">
-    <span id="bearingTxt">--</span>
-    <small>方位</small>
-  </div>
 </div>
 
 <div id="volumeContainer">
@@ -1225,7 +1212,7 @@ data.scenes.forEach(function(scene) {
 });
 
 // ビルド識別（どのファイルが実行されているか確認用）
-var BUILD_STAMP = '2026-06-14-compassUi';
+var BUILD_STAMP = '2026-06-16-compassHeading';
 var guideVideoPreloadBySrc = {};
 var guideVideoSessionDone = {};
 console.log('🧩 viewer build:', BUILD_STAMP);
@@ -1826,7 +1813,6 @@ var gyroBtnEl = document.getElementById('gyroButton');
 var crosshairEl = document.getElementById('crosshair');
 var compassContEl = document.getElementById('compassContainer');
 var compassNeedleCircle = document.getElementById('compassCircle');
-var bearingCircleEl = document.getElementById('bearingCircle');
 var volumeUI = document.getElementById('volumeContainer');
 
 var audioEnabled = false;
@@ -5696,34 +5682,42 @@ function switchScene(sceneId, yaw, pitch, fov, fromPortalHotspot, keepFullscreen
   updateCompassDisplay();
 }
 
+function hasSceneCompassData(sceneData) {
+  if (!sceneData) return false;
+  if (sceneData.compassHeading !== undefined && sceneData.compassHeading !== null &&
+      !isNaN(Number(sceneData.compassHeading))) {
+    return true;
+  }
+  if (sceneData.heading !== undefined && sceneData.heading !== null &&
+      !isNaN(Number(sceneData.heading))) {
+    return true;
+  }
+  return false;
+}
+
 function getSceneNorthOffset(sceneData) {
-  if (!sceneData) return null;
-  if (sceneData.compassHeading != null && !isNaN(Number(sceneData.compassHeading))) {
+  if (!hasSceneCompassData(sceneData)) return null;
+  if (sceneData.compassHeading !== undefined && sceneData.compassHeading !== null &&
+      !isNaN(Number(sceneData.compassHeading))) {
     return Number(sceneData.compassHeading);
   }
-  if (sceneData.heading != null && !isNaN(Number(sceneData.heading))) {
-    return Number(sceneData.heading);
-  }
-  return null;
+  return Number(sceneData.heading);
 }
 
 function updateCompassDisplay() {
-  var northOff = getSceneNorthOffset(currentSceneObj && currentSceneObj.data);
-  var hasTrueBearing = northOff != null;
-  if (bearingCircleEl) {
-    bearingCircleEl.classList.toggle('active', hasTrueBearing);
+  var sceneData = currentSceneObj && currentSceneObj.data;
+  var hasCompass = hasSceneCompassData(sceneData);
+  var northOff = getSceneNorthOffset(sceneData);
+  if (compassNeedleCircle) {
+    compassNeedleCircle.classList.toggle('active', hasCompass);
   }
-  if (!currentView) return;
+  if (!hasCompass || northOff == null || !currentView) {
+    return;
+  }
   var yawDeg = radToDeg(normalizeAngle(currentView.parameters().yaw));
-  var offset = hasTrueBearing ? northOff : 0;
-  var bearingDeg = ((offset + yawDeg) % 360 + 360) % 360;
   var needleEl = document.getElementById('compassNeedle');
-  var bearingEl = document.getElementById('bearingTxt');
   if (needleEl) {
-    needleEl.style.transform = 'rotate(' + (-(offset + yawDeg)) + 'deg)';
-  }
-  if (bearingEl) {
-    bearingEl.textContent = hasTrueBearing ? (Math.round(bearingDeg) + '°') : '--';
+    needleEl.style.transform = 'rotate(' + (-(northOff + yawDeg)) + 'deg)';
   }
 }
 
