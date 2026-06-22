@@ -1,9 +1,9 @@
 /**
- * パノラマ用ジャイロ制御 v30
+ * パノラマ用ジャイロ制御 v31
  * 縦画面: v13 ベース（下方向の角度制限を緩和）
  * 横画面: クォータニオン+変化量積み上げ
- * v30: iPad停止を修正、縦→横の左右ずれ防止（回転中は左右を止める）
- * 詳細: vendor/gyro-STABLE-v30.txt
+ * v31: iPad縦の左右停止修正、回転中の誤追従防止、切替時の画面固定
+ * 詳細: vendor/gyro-STABLE-v31.txt
  */
 (function(global) {
   'use strict';
@@ -25,8 +25,9 @@
   var LANDSCAPE_YAW_IGNORE_PITCH = 0.45;
   var LANDSCAPE_CALIB_FRAMES = 6;
   var LANDSCAPE_PITCH_SIGN = 1;
-  var ROTATE_YAW_FREEZE_FRAMES = 18;
-  var BUILD = 'v30';
+  var ROTATE_YAW_FREEZE_FRAMES = 20;
+  var ROTATE_BETA_JUMP_DEG = 10;
+  var BUILD = 'v31';
 
   function isLandscapeAngleDeg(screenAngleDeg) {
     var a = Math.round(normalizeAngle360(screenAngleDeg));
@@ -198,11 +199,22 @@
     return Math.atan2(look.y, Math.sqrt(look.x * look.x + look.z * look.z));
   }
 
-  function syncLandscapeHeading(state, heading) {
+  function syncHeadingBaseline(state, heading) {
     state.initHeading = heading;
     state.prevHeading = heading;
     state.unwrappedHeading = heading != null ? heading : 0;
     state.headingMode = heading != null;
+  }
+
+  function isDeviceRotating(rawEvent, state) {
+    if (rawEvent.beta == null || isNaN(rawEvent.beta)) return false;
+    if (state.prevRotateBeta == null) {
+      state.prevRotateBeta = rawEvent.beta;
+      return false;
+    }
+    var jump = Math.abs(rawEvent.beta - state.prevRotateBeta);
+    state.prevRotateBeta = rawEvent.beta;
+    return jump > ROTATE_BETA_JUMP_DEG;
   }
 
   function readHeadingDegPortrait(rawEvent) {
@@ -244,6 +256,8 @@
     state.pitchIntegral = 0;
     state.lastPitchOff = 0;
     state.yawFreezeFrames = 0;
+    state.portraitReady = false;
+    state.prevRotateBeta = null;
   }
 
   function isYawFrozen(state) {
@@ -282,11 +296,9 @@
       state.fBeta = rawEvent.beta;
       state.initGamma = rawEvent.gamma;
       state.fGamma = rawEvent.gamma;
-      state.prevHeading = readHeadingDegPortrait(rawEvent);
-      state.initHeading = state.prevHeading;
-      state.unwrappedHeading = state.prevHeading != null ? state.prevHeading : 0;
       state.gammaYawDeg = 0;
-      state.headingMode = state.prevHeading != null;
+      state.prevRotateBeta = rawEvent.beta;
+      state.portraitReady = false;
       return { ready: false };
     }
 
@@ -298,10 +310,16 @@
     );
 
     var heading = readHeadingDegPortrait(rawEvent);
-    var yawOff = trackYawFromHeading(heading, state);
+    var yawOff = 0;
 
-    if (isLandscapeAngleDeg(getScreenAngleDeg()) || isYawFrozen(state)) {
+    if (!state.portraitReady) {
+      syncHeadingBaseline(state, heading);
+      state.portraitReady = true;
       yawOff = 0;
+    } else if (isYawFrozen(state) || isDeviceRotating(rawEvent, state)) {
+      yawOff = 0;
+    } else {
+      yawOff = trackYawFromHeading(heading, state);
     }
 
     if (heading == null && rawEvent.gamma != null && state.initGamma != null) {
@@ -366,7 +384,7 @@
       state.prevPitchSample = pitchSample;
       state.pitchIntegral = 0;
       state.landscapeReady = true;
-      syncLandscapeHeading(state, heading);
+      syncHeadingBaseline(state, heading);
       state.lastPitchOff = 0;
       yawOff = 0;
       pitchOff = 0;
@@ -454,6 +472,15 @@
       resetOrientState(this.orientState);
       this.orientState.yawFreezeFrames = ROTATE_YAW_FREEZE_FRAMES;
     }
+    if (this.base) {
+      this.displayYaw = this.base.viewYaw;
+      this.displayPitch = this.base.viewPitch;
+    }
+    var view = this.getView();
+    if (view && this.base) {
+      view.setYaw(this.displayYaw);
+      view.setPitch(this.displayPitch);
+    }
   };
 
   GyroControl.prototype._bindOrientation = function() {
@@ -525,7 +552,9 @@
       prevPitchSample: null,
       pitchIntegral: 0,
       lastPitchOff: 0,
-      yawFreezeFrames: 0
+      yawFreezeFrames: 0,
+      portraitReady: false,
+      prevRotateBeta: null
     };
 
     this._bindOrientation();
