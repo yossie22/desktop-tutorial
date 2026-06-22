@@ -4,35 +4,59 @@
 <title>VRツアーマップ</title>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<script src="data.js"></script>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
-body, html { width: 100%; height: 100%; overflow: hidden; background: #222; }
-.map-container { width: 100vw; height: 100vh; display: flex; justify-content: center; align-items: center; background: #222; overflow: hidden; }
-.map-stage { position: relative; display: block; max-width: 100vw; max-height: 100vh; line-height: 0; }
-.map-image { display: block; max-width: 100vw; max-height: 100vh; width: auto; height: auto; }
+body, html { width: 100%; height: 100%; overflow: hidden; background: #000; }
+.map-container {
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+}
+.map-stage {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  line-height: 0;
+}
+.map-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+}
+.map-overlay { position: absolute; inset: 0; z-index: 2; pointer-events: none; }
+.map-overlay > * { pointer-events: auto; }
 .overlay-text { position: absolute; z-index: 5; pointer-events: none; }
-.main-title { font-size: 57px; color: #80ffff; font-weight: bold; font-family: 'Yu Mincho','YuMincho','Hiragino Mincho ProN','MS PMincho',serif; text-shadow: 0 0 10px rgba(0,0,0,0.95), 0 0 20px rgba(0,0,0,0.76), 0 0 30px rgba(0,0,0,0.57), 0 0 40px rgba(0,0,0,0.38); line-height: 1.25; margin-bottom: 10px; text-align: left; }
-.desc-text { font-size: 34px; color: #ffff00; font-family: 'Meiryo',sans-serif; text-shadow: 0 0 10px rgba(0,0,0,0), 0 0 20px rgba(0,0,0,0), 0 0 30px rgba(0,0,0,0), 0 0 40px rgba(0,0,0,0); white-space: pre-wrap; line-height: 1.7; text-align: left; }
+.main-title { font-size: clamp(28px, 5vw, 57px); color: #80ffff; font-weight: bold; font-family: 'Yu Mincho','YuMincho','Hiragino Mincho ProN','MS PMincho',serif; text-shadow: 0 0 10px rgba(0,0,0,0.95), 0 0 20px rgba(0,0,0,0.76); line-height: 1.25; text-align: left; }
+.desc-text { font-size: clamp(16px, 2.5vw, 29px); color: #ffff00; font-family: 'Meiryo',sans-serif; white-space: pre-wrap; line-height: 1.7; text-align: left; }
 .map-pin { position: absolute; transform: translate(-50%, -100%); cursor: pointer; z-index: 10; display: flex; flex-direction: column; align-items: center; transition: transform 0.2s; }
 .map-pin:hover, .map-pin:active { transform: translate(-50%, -100%) scale(1.15); }
 .pin-icon { width: 36px; height: 36px; border: 3px solid white; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); box-shadow: 0 3px 8px rgba(0,0,0,0.5); display: flex; justify-content: center; align-items: center; }
 .pin-number { transform: rotate(45deg); font-size: 14px; font-weight: bold; color: white; line-height: 1; }
 .pin-label { background: rgba(255,255,255,0.95); color: #333; font-size: 13px; font-weight: bold; padding: 3px 7px; border-radius: 4px; white-space: nowrap; line-height: 1.2; text-align: center; box-shadow: 0 2px 6px rgba(0,0,0,0.4); margin-bottom: 4px; pointer-events: none; font-family: sans-serif; }
-.help-button { position: fixed; right: 14px; top: 14px; z-index: 50; background: rgba(255,226,106,0.94); color: #111; font-weight: bold; font-size: 15px; text-decoration: none; padding: 9px 14px; border-radius: 999px; box-shadow: 0 3px 12px rgba(0,0,0,0.45); font-family: sans-serif; }
-.help-button { position: fixed; right: 14px; top: 14px; z-index: 50; background: rgba(255,226,106,0.94); color: #111; font-weight: bold; font-size: 15px; text-decoration: none; padding: 9px 14px; border-radius: 999px; box-shadow: 0 3px 12px rgba(0,0,0,0.45); font-family: sans-serif; }
+.help-button { position: absolute; right: 14px; top: 14px; z-index: 50; background: rgba(255,226,106,0.94); color: #111; font-weight: bold; font-size: 15px; text-decoration: none; padding: 9px 14px; border-radius: 999px; box-shadow: 0 3px 12px rgba(0,0,0,0.45); font-family: sans-serif; }
 </style>
 </head>
 <body>
-<a class="help-button" href="help/index.html">？使い方</a>
-<a class="help-button" href="取説/取説表示.html">？使い方</a>
 <div class="map-container">
   <div class="map-stage" id="mapStage">
-  <img src="map.jpg" alt="地図" class="map-image">
-  <div class="overlay-text main-title" style="width:min(92%,900px);padding:8px;left:2%;top:3%;">アジサイの妖精 (テスト作品）</div>
-  <div class="overlay-text desc-text" style="width:min(92%,900px);padding:8px;left:33%;top:47%;">アジサイの妖精が現れます。</div>
+    <img src="map.jpg" alt="地図" class="map-image" id="mapImage">
+    <div class="map-overlay" id="mapOverlay">
+      <a class="help-button" href="help/index.html">？使い方</a>
+      <div class="overlay-text main-title" id="tourTitle" style="width:min(92%,900px);padding:8px;left:2%;top:3%;"></div>
+      <div class="overlay-text desc-text" id="tourDesc" style="width:min(92%,900px);padding:8px;left:24%;top:79%;"></div>
+    </div>
   </div>
 </div>
 <script>
+var TOUR_TITLE = (typeof APP_DATA !== 'undefined' && APP_DATA.tourTitle) ? APP_DATA.tourTitle : 'VRツアー';
+var TOUR_DESC = (typeof APP_DATA !== 'undefined' && APP_DATA.tourDescription) ? APP_DATA.tourDescription : '';
+document.getElementById('tourTitle').textContent = TOUR_TITLE;
+document.getElementById('tourDesc').textContent = TOUR_DESC;
+
+// GPS範囲：map.jpg の左上＝topLeft、右下＝bottomRight に対応させる
+// map.jpg (1217×703) の比率 ≈ 1.73 と、この範囲の比率は一致しています
 var MAP_BOUNDS = { topLeft: { lat: 33.52093, lng: 131.217184 }, bottomRight: { lat: 33.520168, lng: 131.218755 } };
 var MAP_INSETS = { left: 0, top: 0, right: 0, bottom: 0 };
 var MAP_PIN_OFFSET = { x: 0, y: 0 };
@@ -60,7 +84,7 @@ function gpsToPercent(lat, lng) {
 var PINS = [
 
   // Pin #1: スモークツリー (aa - sceneId: 0-aa001)
-  { lat: 33.520345, lng: 131.21794, name: 'スモークツリー', sceneId: '0-aa001', color: '#e8453c', heading: 90 },
+  { lat: 33.520345, lng: 131.21794, name: 'スモークツリー', sceneId: '0-aa001', color: '#e8453c' },
 
   // Pin #2: アジサイ (aa - sceneId: 1-aa002)
   { lat: 33.520525, lng: 131.21764, name: 'アジサイ', sceneId: '1-aa002', color: '#00ff40' }
@@ -99,22 +123,34 @@ function goToScene(pin) {
   if (SIDE_BRANCHES.length > 0) {
     url += '&sideBranches=' + encodeURIComponent(JSON.stringify(SIDE_BRANCHES));
   }
-  url += '&back=./map.html';
+  url += '&back=' + encodeURIComponent('map.html');
   window.location.href = url;
 }
 
-var container = document.getElementById('mapStage');
-var spread = spreadPinPositions(PINS);
-spread.forEach(function(item, i) {
-  var el = document.createElement('div');
-  el.className = 'map-pin';
-  el.style.left = item.pos.x + '%';
-  el.style.top = item.pos.y + '%';
-  el.setAttribute('data-idx', i);
-  el.innerHTML = '<div class="pin-label">' + item.pin.name + '</div><div class="pin-icon" style="background:' + item.pin.color + ';"><span class="pin-number">' + (i+1) + '</span></div>';
-  el.addEventListener('click', function() { goToScene(PINS[parseInt(this.getAttribute('data-idx'))]); });
-  container.appendChild(el);
-});
+function renderPins() {
+  var overlay = document.getElementById('mapOverlay');
+  overlay.querySelectorAll('.map-pin').forEach(function(el) { el.remove(); });
+  var spread = spreadPinPositions(PINS);
+  spread.forEach(function(item, i) {
+    var el = document.createElement('div');
+    el.className = 'map-pin';
+    el.style.left = item.pos.x + '%';
+    el.style.top = item.pos.y + '%';
+    el.setAttribute('data-idx', i);
+    el.innerHTML = '<div class="pin-label">' + item.pin.name + '</div><div class="pin-icon" style="background:' + item.pin.color + ';"><span class="pin-number">' + (i+1) + '</span></div>';
+    el.addEventListener('click', function() { goToScene(PINS[parseInt(this.getAttribute('data-idx'))]); });
+    overlay.appendChild(el);
+  });
+}
+
+var mapImage = document.getElementById('mapImage');
+function onMapReady() { renderPins(); }
+if (mapImage.complete && mapImage.naturalWidth) onMapReady();
+else mapImage.addEventListener('load', onMapReady);
+
+if (!TOUR_DESC) {
+  document.getElementById('tourDesc').textContent = TOUR_TITLE + 'が現れます。';
+}
 </script>
 </body>
 </html>

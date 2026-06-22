@@ -1,0 +1,36 @@
+万年山VR — ジャイロ v14（縦横対応）
+====================================
+確定日: 2026-06-22
+ベース: v13（2026-06-14 の平滑化数値はそのまま）
+
+■ 変更点（v13 → v14）
+  ・縦画面・横画面どちらでも GYRO が追従
+  ・画面を回転したとき、パノラマの向きは保ったまま再キャリブレーション
+  ・beta / gamma を画面向きに合わせて入れ替え
+  ・コンパス（webkitCompassHeading）も画面の上端基準に補正
+
+■ 使っているファイル
+  vendor/gyro-control.js     … 本体（BUILD = v14）
+  viewer.html                … GYRO 横に「v14」、?v=14
+  look.html                  … 同じ gyro-control.js
+
+■ v13 から変えない数値
+  PITCH_SMOOTH      = 0.17
+  YAW_SMOOTH        = 0.22
+  PITCH_MAX_STEP    = 0.032
+  YAW_MAX_STEP      = 0.040
+  HEADING_SPIKE_DEG = 55
+  SENSOR_LP         = 0.22
+
+■ iPad / iPhone で確認すること
+  1. 縦のまま GYRO ON → 上下左右が追従するか（v13 と同程度）
+  2. 横に回転 → 画面が急に飛ばないか
+  3. 横のまま GYRO → 上下左右が追従するか
+  4. 縦に戻す → また自然に動くか
+
+■ 左右や上下が逆に感じたとき
+  remapTiltForScreen の符号だけ調整（v13 の「1行反転」と同じ考え方）
+
+■ サイト反映
+  GitHubDesktop用に反映.cmd → Commit → Push
+  iPad でタブを閉じて開き直し、GYRO 横が v14 か確認
