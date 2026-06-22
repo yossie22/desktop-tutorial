@@ -1,8 +1,8 @@
 /**
- * パノラマ用ジャイロ制御 v15
- * 左右: v13/v14 同様 コンパス優先（画面向き補正）
- * 上下: 縦は beta（v13）、横はクォータニオン（左右を向いても上下が暴れない）
- * 詳細: vendor/gyro-STABLE-v15.txt
+ * パノラマ用ジャイロ制御 v16
+ * 縦画面: v13（beta + コンパス）— 安定版そのまま
+ * 横画面: クォータニオン差分で左右・上下を分離（コンパス依存なし）
+ * 詳細: vendor/gyro-STABLE-v16.txt
  */
 (function(global) {
   'use strict';
@@ -13,7 +13,11 @@
   var YAW_MAX_STEP = 0.040;
   var HEADING_SPIKE_DEG = 55;
   var SENSOR_LP = 0.22;
-  var BUILD = 'v15';
+  var LANDSCAPE_QUAT_LP = 0.18;
+  var LANDSCAPE_WARMUP = 6;
+  var LANDSCAPE_YAW_SIGN = -1;
+  var LANDSCAPE_PITCH_SIGN = 1;
+  var BUILD = 'v16';
 
   function degToRad(d) { return d * Math.PI / 180; }
   function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
@@ -56,6 +60,11 @@
     return { x: x * s, y: y * s, z: z * s, w: c };
   }
 
+  function quatNormalize(q) {
+    var len = Math.sqrt(q.x * q.x + q.y * q.y + q.z * q.z + q.w * q.w) || 1;
+    return { x: q.x / len, y: q.y / len, z: q.z / len, w: q.w / len };
+  }
+
   function quatMultiply(a, b) {
     return {
       x: a.w * b.x + a.x * b.w + a.y * b.z - a.z * b.y,
@@ -65,7 +74,39 @@
     };
   }
 
-  /** Three.js DeviceOrientationControls と同じ YXZ 順 */
+  function quatInverse(q) {
+    var len2 = q.x * q.x + q.y * q.y + q.z * q.z + q.w * q.w || 1;
+    return { x: -q.x / len2, y: -q.y / len2, z: -q.z / len2, w: q.w / len2 };
+  }
+
+  function quatSlerp(a, b, t) {
+    var dot = a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w;
+    var bUse = b;
+    if (dot < 0) {
+      dot = -dot;
+      bUse = { x: -b.x, y: -b.y, z: -b.z, w: -b.w };
+    }
+    if (dot > 0.9995) {
+      return quatNormalize({
+        x: a.x + t * (bUse.x - a.x),
+        y: a.y + t * (bUse.y - a.y),
+        z: a.z + t * (bUse.z - a.z),
+        w: a.w + t * (bUse.w - a.w)
+      });
+    }
+    var theta = Math.acos(clamp(dot, -1, 1));
+    var sinTheta = Math.sin(theta);
+    if (sinTheta < 1e-6) return quatNormalize(bUse);
+    var w1 = Math.sin((1 - t) * theta) / sinTheta;
+    var w2 = Math.sin(t * theta) / sinTheta;
+    return quatNormalize({
+      x: a.x * w1 + bUse.x * w2,
+      y: a.y * w1 + bUse.y * w2,
+      z: a.z * w1 + bUse.z * w2,
+      w: a.w * w1 + bUse.w * w2
+    });
+  }
+
   function quatFromDeviceOrientation(alphaDeg, betaDeg, gammaDeg) {
     var y = degToRad(alphaDeg);
     var x = degToRad(betaDeg);
@@ -73,47 +114,32 @@
     var c1 = Math.cos(y / 2), s1 = Math.sin(y / 2);
     var c2 = Math.cos(x / 2), s2 = Math.sin(x / 2);
     var c3 = Math.cos(z / 2), s3 = Math.sin(z / 2);
-    return {
+    return quatNormalize({
       w: c1 * c2 * c3 + s1 * s2 * s3,
       x: c1 * s2 * c3 + s1 * c2 * s3,
       y: s1 * c2 * c3 - c1 * s2 * s3,
       z: c1 * c2 * s3 - s1 * s2 * c3
-    };
+    });
   }
 
-  function computeScreenQuaternion(rawEvent, screenAngleDeg) {
+  function computeDeviceToScreenQuat(rawEvent, screenAngleDeg) {
     if (!rawEvent || rawEvent.beta == null || rawEvent.gamma == null) return null;
-    var alpha = rawEvent.alpha != null ? rawEvent.alpha : 0;
+    var alpha = rawEvent.alpha != null && !isNaN(rawEvent.alpha) ? rawEvent.alpha : 0;
     var q = quatFromDeviceOrientation(alpha, rawEvent.beta, rawEvent.gamma);
     var qFix = quatFromAxisAngle(1, 0, 0, -Math.PI / 2);
     q = quatMultiply(q, qFix);
     var qScreen = quatFromAxisAngle(0, 0, 1, -degToRad(screenAngleDeg));
     q = quatMultiply(q, qScreen);
-    return q;
+    return quatNormalize(q);
   }
 
-  function pitchFromScreenQuaternion(q) {
+  function deltaQuatToYawPitch(q) {
     var sinp = 2 * (q.w * q.x - q.y * q.z);
-    if (sinp >= 1) return Math.PI / 2;
-    if (sinp <= -1) return -Math.PI / 2;
-    return Math.asin(sinp);
-  }
-
-  /**
-   * 上下用サンプル（ラジアン）
-   * 縦: v13 と同じ beta ベース
-   * 横: クォータニオン（左右を向いても上下が連動しない）
-   */
-  function computePitchSampleRad(rawEvent, screenAngleDeg) {
-    if (!rawEvent || rawEvent.beta == null) return null;
-    if (isPortraitScreen(screenAngleDeg)) {
-      var beta = rawEvent.beta;
-      if (Math.round(normalizeAngle360(screenAngleDeg)) === 180) beta = -beta;
-      return degToRad(beta);
-    }
-    var q = computeScreenQuaternion(rawEvent, screenAngleDeg);
-    if (!q) return null;
-    return pitchFromScreenQuaternion(q);
+    var pitch = sinp >= 1 ? Math.PI / 2 : (sinp <= -1 ? -Math.PI / 2 : Math.asin(sinp));
+    var siny = 2 * (q.w * q.y + q.x * q.z);
+    var cosy = 1 - 2 * (q.y * q.y + q.z * q.z);
+    var yaw = Math.atan2(siny, cosy);
+    return { yaw: yaw, pitch: pitch };
   }
 
   function screenRelativeHeading(heading, screenAngleDeg) {
@@ -143,14 +169,15 @@
     return normalized.screenHeading;
   }
 
-  function trackOrientation(rawEvent, normalized, state) {
-    if (!normalized) return null;
-    var pitchSample = computePitchSampleRad(rawEvent, normalized.screenAngle);
-    if (pitchSample == null) return null;
+  /** 縦画面: v13 そのまま */
+  function trackPortrait(rawEvent, normalized, state) {
+    if (!normalized || rawEvent.beta == null) return null;
+    var beta = rawEvent.beta;
+    if (Math.round(normalizeAngle360(normalized.screenAngle)) === 180) beta = -beta;
 
     if (state.initPitch == null) {
-      state.initPitch = pitchSample;
-      state.fPitch = pitchSample;
+      state.initPitch = degToRad(beta);
+      state.fPitch = state.initPitch;
       state.initGamma = normalized.gamma;
       state.fGamma = normalized.gamma;
       state.prevHeading = readHeadingDeg(normalized);
@@ -161,7 +188,7 @@
       return { ready: false };
     }
 
-    state.fPitch = lp(state.fPitch, pitchSample, SENSOR_LP);
+    state.fPitch = lp(state.fPitch, degToRad(beta), SENSOR_LP);
     var pitchOff = clamp(state.initPitch - state.fPitch, -Math.PI / 2.2, Math.PI / 2.2);
 
     var heading = readHeadingDeg(normalized);
@@ -189,6 +216,41 @@
     return { ready: true, yawOff: yawOff, pitchOff: pitchOff, headingMode: state.headingMode };
   }
 
+  /** 横画面: 開始時の向きからの差分（左右・上下を分離） */
+  function trackLandscape(rawEvent, screenAngle, state) {
+    var q = computeDeviceToScreenQuat(rawEvent, screenAngle);
+    if (!q) return null;
+
+    if (!state.initQ) {
+      if (!state.warmupQs) state.warmupQs = [];
+      state.warmupQs.push(q);
+      if (state.warmupQs.length < LANDSCAPE_WARMUP) return { ready: false };
+      state.initQ = state.warmupQs[state.warmupQs.length - 1];
+      state.fQ = state.initQ;
+      state.smoothYaw = 0;
+      state.smoothPitch = 0;
+      state.warmupQs = null;
+      return { ready: false };
+    }
+
+    state.fQ = quatSlerp(state.fQ, q, LANDSCAPE_QUAT_LP);
+    var qDelta = quatMultiply(quatInverse(state.initQ), state.fQ);
+    var yp = deltaQuatToYawPitch(qDelta);
+
+    var targetYaw = LANDSCAPE_YAW_SIGN * yp.yaw;
+    var targetPitch = LANDSCAPE_PITCH_SIGN * yp.pitch;
+
+    state.smoothYaw = lp(state.smoothYaw, targetYaw, SENSOR_LP);
+    state.smoothPitch = lp(state.smoothPitch, targetPitch, SENSOR_LP);
+
+    return {
+      ready: true,
+      yawOff: clamp(state.smoothYaw, -Math.PI, Math.PI),
+      pitchOff: clamp(state.smoothPitch, -Math.PI / 2.2, Math.PI / 2.2),
+      headingMode: true
+    };
+  }
+
   function resetOrientState(state) {
     state.initPitch = null;
     state.fPitch = null;
@@ -199,6 +261,11 @@
     state.unwrappedHeading = 0;
     state.gammaYawDeg = 0;
     state.headingMode = true;
+    state.initQ = null;
+    state.fQ = null;
+    state.warmupQs = null;
+    state.smoothYaw = 0;
+    state.smoothPitch = 0;
   }
 
   function GyroControl(getView) {
@@ -312,6 +379,11 @@
       unwrappedHeading: 0,
       gammaYawDeg: 0,
       headingMode: true,
+      initQ: null,
+      fQ: null,
+      warmupQs: null,
+      smoothYaw: 0,
+      smoothPitch: 0,
       lastScreenAngle: getScreenAngleDeg()
     };
 
@@ -331,8 +403,13 @@
         return;
       }
 
-      var normalized = normalizeSensorEvent(self.latestEvent);
-      var o = trackOrientation(self.latestEvent, normalized, self.orientState);
+      var o;
+      if (isPortraitScreen(screenAngle)) {
+        var normalized = normalizeSensorEvent(self.latestEvent);
+        o = trackPortrait(self.latestEvent, normalized, self.orientState);
+      } else {
+        o = trackLandscape(self.latestEvent, screenAngle, self.orientState);
+      }
       if (!o || !o.ready) return;
 
       var targetYaw = self.base.viewYaw + o.yawOff;
