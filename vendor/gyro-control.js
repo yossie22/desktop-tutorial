@@ -1,9 +1,9 @@
 /**
- * パノラマ用ジャイロ制御 v29
+ * パノラマ用ジャイロ制御 v30
  * 縦画面: v13 ベース（下方向の角度制限を緩和）
  * 横画面: クォータニオン+変化量積み上げ
- * v29: 横画面角度が確定してから切替、左右基準を同時リセット
- * 詳細: vendor/gyro-STABLE-v29.txt
+ * v30: iPad停止を修正、縦→横の左右ずれ防止（回転中は左右を止める）
+ * 詳細: vendor/gyro-STABLE-v30.txt
  */
 (function(global) {
   'use strict';
@@ -25,7 +25,8 @@
   var LANDSCAPE_YAW_IGNORE_PITCH = 0.45;
   var LANDSCAPE_CALIB_FRAMES = 6;
   var LANDSCAPE_PITCH_SIGN = 1;
-  var BUILD = 'v29';
+  var ROTATE_YAW_FREEZE_FRAMES = 18;
+  var BUILD = 'v30';
 
   function isLandscapeAngleDeg(screenAngleDeg) {
     var a = Math.round(normalizeAngle360(screenAngleDeg));
@@ -43,19 +44,15 @@
     return navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1;
   }
 
-  /** portrait / landscape / null(切替中) */
+  /** portrait / landscape（iPad でも止まらないよう matchMedia 優先） */
   function resolveTrackMode(screenAngleDeg) {
     if (global.matchMedia) {
-      if (global.matchMedia('(orientation: portrait)').matches) {
-        return isPortraitAngleDeg(screenAngleDeg) ? 'portrait' : null;
-      }
-      if (global.matchMedia('(orientation: landscape)').matches) {
-        return isLandscapeAngleDeg(screenAngleDeg) ? 'landscape' : null;
-      }
+      if (global.matchMedia('(orientation: portrait)').matches) return 'portrait';
+      if (global.matchMedia('(orientation: landscape)').matches) return 'landscape';
     }
     if (isPortraitAngleDeg(screenAngleDeg)) return 'portrait';
     if (isLandscapeAngleDeg(screenAngleDeg)) return 'landscape';
-    return null;
+    return 'portrait';
   }
 
   function degToRad(d) { return d * Math.PI / 180; }
@@ -246,6 +243,15 @@
     state.prevPitchSample = null;
     state.pitchIntegral = 0;
     state.lastPitchOff = 0;
+    state.yawFreezeFrames = 0;
+  }
+
+  function isYawFrozen(state) {
+    return state.yawFreezeFrames > 0;
+  }
+
+  function consumeYawFreeze(state) {
+    if (state.yawFreezeFrames > 0) state.yawFreezeFrames--;
   }
 
   function trackYawFromHeading(heading, state) {
@@ -294,6 +300,10 @@
     var heading = readHeadingDegPortrait(rawEvent);
     var yawOff = trackYawFromHeading(heading, state);
 
+    if (isLandscapeAngleDeg(getScreenAngleDeg()) || isYawFrozen(state)) {
+      yawOff = 0;
+    }
+
     if (heading == null && rawEvent.gamma != null && state.initGamma != null) {
       state.fGamma = lp(state.fGamma, rawEvent.gamma, SENSOR_LP);
       state.gammaYawDeg = state.fGamma - state.initGamma;
@@ -340,8 +350,12 @@
       state.gammaYawDeg = state.fGamma - state.initGamma;
       yawOff = degToRad(state.gammaYawDeg);
       state.headingMode = false;
-    } else if (state.landscapeReady) {
+    } else if (state.landscapeReady && !isYawFrozen(state)) {
       yawOff = trackYawFromHeading(heading, state);
+    }
+
+    if (isYawFrozen(state)) {
+      yawOff = 0;
     }
 
     var pitchSample = relativePitchFromQuat(state.qInit || qCurr, qCurr) * landscapePitchSign();
@@ -436,7 +450,10 @@
       this.base.viewYaw = this.displayYaw;
       this.base.viewPitch = this.displayPitch;
     }
-    if (this.orientState) resetOrientState(this.orientState);
+    if (this.orientState) {
+      resetOrientState(this.orientState);
+      this.orientState.yawFreezeFrames = ROTATE_YAW_FREEZE_FRAMES;
+    }
   };
 
   GyroControl.prototype._bindOrientation = function() {
@@ -507,7 +524,8 @@
       landscapeReady: false,
       prevPitchSample: null,
       pitchIntegral: 0,
-      lastPitchOff: 0
+      lastPitchOff: 0,
+      yawFreezeFrames: 0
     };
 
     this._bindOrientation();
@@ -521,26 +539,25 @@
 
       var screenAngle = getScreenAngleDeg();
       var trackMode = resolveTrackMode(screenAngle);
-
-      if (trackMode == null) {
-        return;
-      }
-
       var portrait = trackMode === 'portrait';
 
-      if (self.orientState.lastTrackMode !== trackMode ||
-          (trackMode === 'landscape' &&
-           self.orientState.lastScreenAngle !== screenAngle)) {
+      if (self.orientState.lastTrackMode !== trackMode) {
         self.orientState.lastScreenAngle = screenAngle;
         self.orientState.lastTrackMode = trackMode;
         self._recalibrateForScreenRotate();
         return;
       }
+      self.orientState.lastScreenAngle = screenAngle;
 
       var o = portrait
         ? trackPortrait(self.latestEvent, self.orientState)
         : trackLandscape(self.latestEvent, screenAngle, self.orientState);
       if (!o || !o.ready) return;
+
+      if (isYawFrozen(self.orientState)) {
+        o.yawOff = 0;
+        consumeYawFreeze(self.orientState);
+      }
 
       var targetYaw = self.base.viewYaw + o.yawOff;
       var pitchDownMax = o.pitchDownMax || MAX_PITCH_DOWN;
