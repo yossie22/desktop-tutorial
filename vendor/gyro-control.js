@@ -1,9 +1,9 @@
 /**
- * パノラマ用ジャイロ制御 v27
+ * パノラマ用ジャイロ制御 v28
  * 縦画面: v13 ベース（下方向の角度制限を緩和）
- * 横画面: クォータニオン+変化量積み上げ（iPhone/iPad 共通）
- * v27: 縦→横ずれ防止、iPad横=クォータニオン、地面方向の制限緩和
- * 詳細: vendor/gyro-STABLE-v27.txt
+ * 横画面: クォータニオン+変化量積み上げ
+ * v28: 横画面コンパス補正の二重適用を修正（90°左回転の原因）
+ * 詳細: vendor/gyro-STABLE-v28.txt
  */
 (function(global) {
   'use strict';
@@ -25,7 +25,7 @@
   var LANDSCAPE_YAW_IGNORE_PITCH = 0.45;
   var LANDSCAPE_CALIB_FRAMES = 6;
   var LANDSCAPE_PITCH_SIGN = 1;
-  var BUILD = 'v27';
+  var BUILD = 'v28';
 
   function degToRad(d) { return d * Math.PI / 180; }
   function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
@@ -178,15 +178,14 @@
   }
 
   function readHeadingDegLandscape(rawEvent, screenAngleDeg) {
-    var raw = null;
     if (typeof rawEvent.webkitCompassHeading === 'number' &&
         !isNaN(rawEvent.webkitCompassHeading)) {
-      raw = rawEvent.webkitCompassHeading;
-    } else if (rawEvent.alpha != null && !isNaN(rawEvent.alpha)) {
-      raw = rawEvent.alpha;
+      return rawEvent.webkitCompassHeading;
     }
-    if (raw == null) return null;
-    return normalizeAngle360(raw - screenAngleDeg);
+    if (rawEvent.alpha != null && !isNaN(rawEvent.alpha)) {
+      return normalizeAngle360(rawEvent.alpha - screenAngleDeg);
+    }
+    return null;
   }
 
   function resetOrientState(state) {
