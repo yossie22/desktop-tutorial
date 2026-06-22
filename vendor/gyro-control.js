@@ -1,8 +1,8 @@
 /**
- * パノラマ用ジャイロ制御 v14
- * v13 の平滑化を維持し、縦・横画面どちらでも追従（画面向きで beta/gamma/コンパスを補正）
- * 画面回転時は見え方を保ったまま再キャリブレーション
- * 詳細: vendor/gyro-STABLE-v14.txt
+ * パノラマ用ジャイロ制御 v15
+ * 左右: v13/v14 同様 コンパス優先（画面向き補正）
+ * 上下: 縦は beta（v13）、横はクォータニオン（左右を向いても上下が暴れない）
+ * 詳細: vendor/gyro-STABLE-v15.txt
  */
 (function(global) {
   'use strict';
@@ -13,7 +13,7 @@
   var YAW_MAX_STEP = 0.040;
   var HEADING_SPIKE_DEG = 55;
   var SENSOR_LP = 0.22;
-  var BUILD = 'v14';
+  var BUILD = 'v15';
 
   function degToRad(d) { return d * Math.PI / 180; }
   function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
@@ -43,18 +43,79 @@
     return 0;
   }
 
-  /** 端末座標の傾きを、今の画面の上下左右に合わせて入れ替える */
-  function remapTiltForScreen(beta, gamma, screenAngleDeg) {
-    if (beta == null) return { beta: null, gamma: gamma };
-    var g = gamma == null ? 0 : gamma;
+  function isPortraitScreen(screenAngleDeg) {
     var a = Math.round(normalizeAngle360(screenAngleDeg));
-    if (a === 90) return { beta: g, gamma: -beta };
-    if (a === 180) return { beta: -beta, gamma: -g };
-    if (a === 270) return { beta: -g, gamma: beta };
-    return { beta: beta, gamma: g };
+    return a === 0 || a === 180;
   }
 
-  /** コンパスを「画面の上端」基準の角度に変換 */
+  function quatFromAxisAngle(x, y, z, angle) {
+    var len = Math.sqrt(x * x + y * y + z * z) || 1;
+    x /= len; y /= len; z /= len;
+    var s = Math.sin(angle / 2);
+    var c = Math.cos(angle / 2);
+    return { x: x * s, y: y * s, z: z * s, w: c };
+  }
+
+  function quatMultiply(a, b) {
+    return {
+      x: a.w * b.x + a.x * b.w + a.y * b.z - a.z * b.y,
+      y: a.w * b.y - a.x * b.z + a.y * b.w + a.z * b.x,
+      z: a.w * b.z + a.x * b.y - a.y * b.x + a.z * b.w,
+      w: a.w * b.w - a.x * b.x - a.y * b.y - a.z * b.z
+    };
+  }
+
+  /** Three.js DeviceOrientationControls と同じ YXZ 順 */
+  function quatFromDeviceOrientation(alphaDeg, betaDeg, gammaDeg) {
+    var y = degToRad(alphaDeg);
+    var x = degToRad(betaDeg);
+    var z = degToRad(-gammaDeg);
+    var c1 = Math.cos(y / 2), s1 = Math.sin(y / 2);
+    var c2 = Math.cos(x / 2), s2 = Math.sin(x / 2);
+    var c3 = Math.cos(z / 2), s3 = Math.sin(z / 2);
+    return {
+      w: c1 * c2 * c3 + s1 * s2 * s3,
+      x: c1 * s2 * c3 + s1 * c2 * s3,
+      y: s1 * c2 * c3 - c1 * s2 * s3,
+      z: c1 * c2 * s3 - s1 * s2 * c3
+    };
+  }
+
+  function computeScreenQuaternion(rawEvent, screenAngleDeg) {
+    if (!rawEvent || rawEvent.beta == null || rawEvent.gamma == null) return null;
+    var alpha = rawEvent.alpha != null ? rawEvent.alpha : 0;
+    var q = quatFromDeviceOrientation(alpha, rawEvent.beta, rawEvent.gamma);
+    var qFix = quatFromAxisAngle(1, 0, 0, -Math.PI / 2);
+    q = quatMultiply(q, qFix);
+    var qScreen = quatFromAxisAngle(0, 0, 1, -degToRad(screenAngleDeg));
+    q = quatMultiply(q, qScreen);
+    return q;
+  }
+
+  function pitchFromScreenQuaternion(q) {
+    var sinp = 2 * (q.w * q.x - q.y * q.z);
+    if (sinp >= 1) return Math.PI / 2;
+    if (sinp <= -1) return -Math.PI / 2;
+    return Math.asin(sinp);
+  }
+
+  /**
+   * 上下用サンプル（ラジアン）
+   * 縦: v13 と同じ beta ベース
+   * 横: クォータニオン（左右を向いても上下が連動しない）
+   */
+  function computePitchSampleRad(rawEvent, screenAngleDeg) {
+    if (!rawEvent || rawEvent.beta == null) return null;
+    if (isPortraitScreen(screenAngleDeg)) {
+      var beta = rawEvent.beta;
+      if (Math.round(normalizeAngle360(screenAngleDeg)) === 180) beta = -beta;
+      return degToRad(beta);
+    }
+    var q = computeScreenQuaternion(rawEvent, screenAngleDeg);
+    if (!q) return null;
+    return pitchFromScreenQuaternion(q);
+  }
+
   function screenRelativeHeading(heading, screenAngleDeg) {
     if (heading == null || isNaN(heading)) return null;
     return normalizeAngle360(heading - screenAngleDeg);
@@ -63,7 +124,6 @@
   function normalizeSensorEvent(rawEvent) {
     if (!rawEvent || rawEvent.beta == null) return null;
     var screenAngle = getScreenAngleDeg();
-    var tilt = remapTiltForScreen(rawEvent.beta, rawEvent.gamma, screenAngle);
     var screenHeading = null;
     if (typeof rawEvent.webkitCompassHeading === 'number' &&
         !isNaN(rawEvent.webkitCompassHeading)) {
@@ -72,8 +132,7 @@
       screenHeading = screenRelativeHeading(rawEvent.alpha, screenAngle);
     }
     return {
-      beta: tilt.beta,
-      gamma: tilt.gamma,
+      gamma: rawEvent.gamma,
       screenHeading: screenHeading,
       screenAngle: screenAngle
     };
@@ -84,12 +143,14 @@
     return normalized.screenHeading;
   }
 
-  function trackOrientation(normalized, state) {
-    if (!normalized || normalized.beta == null) return null;
+  function trackOrientation(rawEvent, normalized, state) {
+    if (!normalized) return null;
+    var pitchSample = computePitchSampleRad(rawEvent, normalized.screenAngle);
+    if (pitchSample == null) return null;
 
-    if (state.initBeta == null) {
-      state.initBeta = normalized.beta;
-      state.fBeta = normalized.beta;
+    if (state.initPitch == null) {
+      state.initPitch = pitchSample;
+      state.fPitch = pitchSample;
       state.initGamma = normalized.gamma;
       state.fGamma = normalized.gamma;
       state.prevHeading = readHeadingDeg(normalized);
@@ -100,8 +161,8 @@
       return { ready: false };
     }
 
-    state.fBeta = lp(state.fBeta, normalized.beta, SENSOR_LP);
-    var pitchOff = degToRad(state.initBeta - state.fBeta);
+    state.fPitch = lp(state.fPitch, pitchSample, SENSOR_LP);
+    var pitchOff = clamp(state.initPitch - state.fPitch, -Math.PI / 2.2, Math.PI / 2.2);
 
     var heading = readHeadingDeg(normalized);
     var yawOff = 0;
@@ -129,8 +190,8 @@
   }
 
   function resetOrientState(state) {
-    state.initBeta = null;
-    state.fBeta = null;
+    state.initPitch = null;
+    state.fPitch = null;
     state.initGamma = null;
     state.fGamma = null;
     state.prevHeading = null;
@@ -185,8 +246,7 @@
   };
 
   GyroControl.prototype._recalibrateForScreenRotate = function() {
-    var view = this.getView();
-    if (view && this.base) {
+    if (this.base) {
       this.base.viewYaw = this.displayYaw;
       this.base.viewPitch = this.displayPitch;
     }
@@ -243,8 +303,8 @@
 
     var self = this;
     this.orientState = {
-      initBeta: null,
-      fBeta: null,
+      initPitch: null,
+      fPitch: null,
       initGamma: null,
       fGamma: null,
       prevHeading: null,
@@ -272,7 +332,7 @@
       }
 
       var normalized = normalizeSensorEvent(self.latestEvent);
-      var o = trackOrientation(normalized, self.orientState);
+      var o = trackOrientation(self.latestEvent, normalized, self.orientState);
       if (!o || !o.ready) return;
 
       var targetYaw = self.base.viewYaw + o.yawOff;
