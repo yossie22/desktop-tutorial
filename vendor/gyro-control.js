@@ -1,9 +1,9 @@
 /**
- * パノラマ用ジャイロ制御 v22
+ * パノラマ用ジャイロ制御 v23
  * 縦画面: v13 そのまま
- * 横画面: 左右=コンパス、上下=傾きの「変化量」を積み上げ（2点固定を防ぐ）
- * iPhone/iPad で gamma の向きを切替
- * 詳細: vendor/gyro-STABLE-v22.txt
+ * 横画面: 左右=コンパス、上下=beta の「変化量」を積み上げ
+ * iPhone/iPad で beta の向きを切替
+ * 詳細: vendor/gyro-STABLE-v23.txt
  */
 (function(global) {
   'use strict';
@@ -20,8 +20,9 @@
   var LANDSCAPE_PITCH_SMOOTH = 0.14;
   var LANDSCAPE_PITCH_MAX_STEP = 0.015;
   var LANDSCAPE_PITCH_MAX = Math.PI * 55 / 180;
+  var LANDSCAPE_PITCH_DELTA_MAX = Math.PI * 2.5 / 180;
   var LANDSCAPE_YAW_IGNORE_PITCH = 0.45;
-  var BUILD = 'v22';
+  var BUILD = 'v23';
 
   function degToRad(d) { return d * Math.PI / 180; }
   function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
@@ -86,15 +87,15 @@
     return normalizeAngle360(raw - screenAngleDeg);
   }
 
-  /** 横画面の上下センサー（度→ラジアン）iPhone/iPad で向きを切替 */
-  function landscapePitchSampleRad(rawEvent, screenAngleDeg) {
-    if (rawEvent.gamma == null || isNaN(rawEvent.gamma)) return null;
-    var g = rawEvent.gamma;
+  /** 横画面の上下センサー（beta 度→ラジアン）iPhone/iPad で向きを切替 */
+  function landscapePitchSampleRad(betaDeg, screenAngleDeg) {
+    if (betaDeg == null || isNaN(betaDeg)) return null;
+    var b = betaDeg;
     var a = Math.round(normalizeAngle360(screenAngleDeg));
     var iphone = isIPhoneDevice();
-    if (a === 90) return degToRad(iphone ? -g : g);
-    if (a === 270) return degToRad(iphone ? g : -g);
-    return degToRad(iphone ? -g : g);
+    if (a === 90) return degToRad(iphone ? -b : b);
+    if (a === 270) return degToRad(iphone ? b : -b);
+    return degToRad(iphone ? -b : b);
   }
 
   function resetOrientState(state) {
@@ -165,16 +166,18 @@
   }
 
   /**
-   * 横画面: 上下は「傾きの変化量」を積み上げ
-   * 開始時に一気に地面/空へ飛ばない。左右を向いている間は上下を止める。
+   * 横画面: 上下は beta の「変化量」を積み上げ
+   * gamma は横画面で端に張り付くため beta を使う。
+   * 左右を向いている間は上下を止める。
    */
   function trackLandscape(rawEvent, screenAngleDeg, state) {
-    var pitchSample = landscapePitchSampleRad(rawEvent, screenAngleDeg);
-    if (pitchSample == null) return null;
+    if (rawEvent.beta == null || isNaN(rawEvent.beta)) return null;
 
     if (state.pitchIntegral == null) {
       state.pitchIntegral = 0;
-      state.prevPitchSample = pitchSample;
+      state.initBeta = rawEvent.beta;
+      state.fBeta = rawEvent.beta;
+      state.prevPitchSample = landscapePitchSampleRad(state.fBeta, screenAngleDeg);
       state.initGamma = rawEvent.gamma;
       state.fGamma = rawEvent.gamma;
       state.prevHeading = readHeadingDegLandscape(rawEvent, screenAngleDeg);
@@ -186,6 +189,8 @@
       return { ready: false };
     }
 
+    state.fBeta = lp(state.fBeta, rawEvent.beta, SENSOR_LP);
+
     var heading = readHeadingDegLandscape(rawEvent, screenAngleDeg);
     var yawOff = trackYawFromHeading(heading, state);
 
@@ -196,8 +201,12 @@
       state.headingMode = false;
     }
 
+    var pitchSample = landscapePitchSampleRad(state.fBeta, screenAngleDeg);
+    if (pitchSample == null) return null;
+
     var sampleDelta = pitchSample - state.prevPitchSample;
     state.prevPitchSample = pitchSample;
+    sampleDelta = clamp(sampleDelta, -LANDSCAPE_PITCH_DELTA_MAX, LANDSCAPE_PITCH_DELTA_MAX);
 
     if (state.lastHStepAbs > LANDSCAPE_YAW_IGNORE_PITCH) {
       sampleDelta = 0;
