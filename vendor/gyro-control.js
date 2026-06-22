@@ -1,9 +1,9 @@
 /**
- * パノラマ用ジャイロ制御 v25
+ * パノラマ用ジャイロ制御 v26
  * 縦画面: v13 そのまま
- * 横画面: 左右=コンパス、上下=クォータニオン+画面向き補正
- * v25: iPhone 上下符号修正、iPad 画面補正入替、左右回転を上下から分離
- * 詳細: vendor/gyro-STABLE-v25.txt
+ * 横画面: クォータニオン+画面向き補正
+ * v26: iPad縦横判定修正、上下基準リセット、縦→横ずれ防止
+ * 詳細: vendor/gyro-STABLE-v26.txt
  */
 (function(global) {
   'use strict';
@@ -23,7 +23,7 @@
   var LANDSCAPE_CALIB_FRAMES = 8;
   var LANDSCAPE_PITCH_SIGN = 1;
   var LANDSCAPE_QUAT_LP = 0.18;
-  var BUILD = 'v25';
+  var BUILD = 'v26';
 
   function degToRad(d) { return d * Math.PI / 180; }
   function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
@@ -71,6 +71,10 @@
   }
 
   function isPortraitScreen(screenAngleDeg) {
+    if (global.matchMedia) {
+      if (global.matchMedia('(orientation: portrait)').matches) return true;
+      if (global.matchMedia('(orientation: landscape)').matches) return false;
+    }
     var a = Math.round(normalizeAngle360(screenAngleDeg));
     return a === 0 || a === 180;
   }
@@ -138,16 +142,11 @@
     return qMul(cq2, cq1);
   }
 
-  /** CTPanoramaView 方式。iPad は 90°/270° の補正を入れ替え */
+  /** CTPanoramaView 方式（iPhone/iPad 共通） */
   function landscapeScreenFixQuat(screenAngleDeg) {
     var a = Math.round(normalizeAngle360(screenAngleDeg));
-    if (isIPadDevice()) {
-      if (a === 90) return landscapeFixLandscapeLeft();
-      if (a === 270) return landscapeFixLandscapeRight();
-    } else {
-      if (a === 90) return landscapeFixLandscapeRight();
-      if (a === 270) return landscapeFixLandscapeLeft();
-    }
+    if (a === 90) return landscapeFixLandscapeRight();
+    if (a === 270) return landscapeFixLandscapeLeft();
     return qFromAxisAngle(1, 0, 0, -Math.PI / 2);
   }
 
@@ -173,24 +172,22 @@
     };
   }
 
-  function qLp(prev, next, k) {
-    if (!prev) return qNormalize(next);
-    return qNormalize({
-      w: lp(prev.w, next.w, k),
-      x: lp(prev.x, next.x, k),
-      y: lp(prev.y, next.y, k),
-      z: lp(prev.z, next.z, k)
-    });
-  }
-
-  function qRemoveYaw(q, yawRad) {
-    return qMul(qFromAxisAngle(0, 1, 0, -yawRad), q);
-  }
-
   function relativePitchFromQuat(qInit, qCurr) {
     var qRel = qMul(qConj(qInit), qCurr);
     var look = quatRotateVec(qRel, 0, 0, -1);
     return Math.atan2(look.y, Math.sqrt(look.x * look.x + look.z * look.z));
+  }
+
+  /** iPad 横画面: beta ベースの上下（クォータニオンが動かないときの予備） */
+  function landscapePitchFromBeta(rawEvent, state) {
+    if (rawEvent.beta == null || isNaN(rawEvent.beta)) return null;
+    if (state.landscapeInitBeta == null) state.landscapeInitBeta = rawEvent.beta;
+    state.landscapeFBeta = lp(state.landscapeFBeta, rawEvent.beta, SENSOR_LP);
+    return clamp(
+      degToRad(state.landscapeInitBeta - state.landscapeFBeta),
+      -LANDSCAPE_PITCH_MAX,
+      LANDSCAPE_PITCH_MAX
+    );
   }
 
   function readHeadingDegPortrait(rawEvent) {
@@ -230,6 +227,9 @@
     state.qInit = null;
     state.fQuat = null;
     state.calibCount = 0;
+    state.initPitchSample = null;
+    state.landscapeInitBeta = null;
+    state.landscapeFBeta = null;
     state.lastPitchOff = 0;
   }
 
@@ -287,16 +287,12 @@
 
   /**
    * 横画面: 左右=コンパス、上下=クォータニオン差分
-   * コンパスで左右を回した分を上下計算から外す（iPad の2点固定対策）
+   * 開始時の pitch を 0 に合わせる（縦→横のずれ防止）
+   * iPad は beta ベースも併用
    */
   function trackLandscape(rawEvent, screenAngleDeg, state) {
     var qCurr = deviceQuatLandscape(rawEvent, screenAngleDeg);
     if (!qCurr) return null;
-
-    if (isIPadDevice()) {
-      qCurr = qLp(state.fQuat, qCurr, LANDSCAPE_QUAT_LP);
-      state.fQuat = qCurr;
-    }
 
     if (state.qInit == null) {
       state.calibCount = (state.calibCount || 0) + 1;
@@ -304,7 +300,9 @@
         return { ready: false };
       }
       state.qInit = qCurr;
-      state.fQuat = qCurr;
+      state.initPitchSample = null;
+      state.landscapeInitBeta = rawEvent.beta;
+      state.landscapeFBeta = rawEvent.beta;
       state.prevHeading = readHeadingDegLandscape(rawEvent, screenAngleDeg);
       state.initHeading = state.prevHeading;
       state.unwrappedHeading = state.prevHeading != null ? state.prevHeading : 0;
@@ -327,8 +325,16 @@
       state.headingMode = false;
     }
 
-    var qTilt = qRemoveYaw(qCurr, yawOff);
-    var pitchOff = relativePitchFromQuat(state.qInit, qTilt) * landscapePitchSign();
+    var pitchSample = relativePitchFromQuat(state.qInit, qCurr) * landscapePitchSign();
+    if (state.initPitchSample == null) {
+      state.initPitchSample = pitchSample;
+    }
+    var pitchOff = pitchSample - state.initPitchSample;
+
+    if (isIPadDevice()) {
+      var betaPitch = landscapePitchFromBeta(rawEvent, state);
+      if (betaPitch != null) pitchOff = betaPitch;
+    }
 
     if (state.lastHStepAbs > LANDSCAPE_YAW_IGNORE_PITCH) {
       pitchOff = state.lastPitchOff;
@@ -463,6 +469,9 @@
       qInit: null,
       fQuat: null,
       calibCount: 0,
+      initPitchSample: null,
+      landscapeInitBeta: null,
+      landscapeFBeta: null,
       lastPitchOff: 0
     };
 
