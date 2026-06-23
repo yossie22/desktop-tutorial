@@ -1,8 +1,8 @@
 /**
- * パノラマ用ジャイロ制御 v46
- * 水平線優先：左右=コンパス(v13)、上下=重力ベクトル（ロールの影響なし）
- * 縦横切替で基準リセットなし
- * 詳細: vendor/gyro-STABLE-v46.txt
+ * パノラマ用ジャイロ制御 v47
+ * 水平線優先：上下=重力（画面は端末に固定なので角度補正しない）
+ * 左右=コンパス(v13)、縦横切替で基準リセットなし
+ * 詳細: vendor/gyro-STABLE-v47.txt
  */
 (function(global) {
   'use strict';
@@ -12,11 +12,12 @@
   var PITCH_MAX_STEP = 0.032;
   var YAW_MAX_STEP = 0.040;
   var HEADING_SPIKE_DEG = 55;
+  var SENSOR_LP = 0.22;
   var MAX_PITCH_UP = Math.PI * 82 / 180;
   var MAX_PITCH_DOWN = Math.PI * 82 / 180;
   var TRACK_WARMUP_FRAMES = 12;
   var GRAVITY_MIN = 4;
-  var BUILD = 'v46';
+  var BUILD = 'v47';
 
   function degToRad(d) { return d * Math.PI / 180; }
   function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
@@ -28,51 +29,39 @@
   function angleDelta(from, to) {
     return normalizeAngle(to - from);
   }
-
-  function getScreenAngleDeg() {
-    if (global.screen && global.screen.orientation &&
-        typeof global.screen.orientation.angle === 'number') {
-      return global.screen.orientation.angle;
-    }
-    if (typeof global.orientation === 'number') return global.orientation;
-    return 0;
+  function lp(prev, next, k) {
+    return prev == null ? next : prev + k * (next - prev);
   }
 
-  /** 画面の向き（端末座標系） */
-  function screenForwardDevice(screenAngleDeg) {
-    var a = degToRad(screenAngleDeg);
-    return {
-      x: -Math.sin(a),
-      y: 0,
-      z: -Math.cos(a)
-    };
-  }
+  /** 画面の向き＝端末の -Z（センサーは端末に固定） */
+  var SCREEN_FORWARD = { x: 0, y: 0, z: -1 };
 
-  /** 重力から仰角（端末を横に傾けても水平線がずれにくい） */
-  function pitchFromGravityRad(gx, gy, gz, screenAngleDeg) {
+  /**
+   * 重力から仰角（端末を横に傾けても変わりにくい）
+   * up = 重力と逆方向、pitch = asin(画面向き · up)
+   */
+  function pitchFromGravityRad(gx, gy, gz) {
     var len = Math.sqrt(gx * gx + gy * gy + gz * gz);
     if (len < GRAVITY_MIN) return null;
     var ux = -gx / len;
     var uy = -gy / len;
     var uz = -gz / len;
-    var f = screenForwardDevice(screenAngleDeg);
-    var dot = clamp(f.x * ux + f.y * uy + f.z * uz, -1, 1);
+    var dot = clamp(
+      SCREEN_FORWARD.x * ux + SCREEN_FORWARD.y * uy + SCREEN_FORWARD.z * uz,
+      -1, 1
+    );
     return Math.asin(dot);
   }
 
-  /** beta/gamma から重力を近似（devicemotion が無いとき） */
+  /** beta/gamma から重力方向（devicemotion 無し時） */
   function gravityFromEuler(rawEvent) {
     if (rawEvent.beta == null || rawEvent.gamma == null) return null;
     var b = degToRad(rawEvent.beta);
     var g = degToRad(rawEvent.gamma);
-    var cb = Math.cos(b);
-    var sb = Math.sin(b);
-    var cg = Math.cos(g);
-    var sg = Math.sin(g);
     return {
-      x: -sb * cg,
-      y: -cb,
-      z: sb * sg
+      x: Math.cos(b) * Math.sin(g),
+      y: -Math.sin(b),
+      z: Math.cos(b) * Math.cos(g)
     };
   }
 
@@ -110,17 +99,17 @@
     return yawOff;
   }
 
-  function resolvePitchRad(rawEvent, motion, screenAngleDeg) {
+  function resolvePitchRad(rawEvent, motion) {
     if (motion && motion.x != null && motion.y != null && motion.z != null) {
-      return pitchFromGravityRad(motion.x, motion.y, motion.z, screenAngleDeg);
+      return pitchFromGravityRad(motion.x, motion.y, motion.z);
     }
     var g = gravityFromEuler(rawEvent);
     if (!g) return null;
-    return pitchFromGravityRad(g.x, g.y, g.z, screenAngleDeg);
+    return pitchFromGravityRad(g.x, g.y, g.z);
   }
 
-  function trackUnified(rawEvent, motion, screenAngleDeg, state) {
-    var pitchSample = resolvePitchRad(rawEvent, motion, screenAngleDeg);
+  function trackUnified(rawEvent, motion, state) {
+    var pitchSample = resolvePitchRad(rawEvent, motion);
     if (pitchSample == null) return null;
 
     if (state.warmup < TRACK_WARMUP_FRAMES) {
@@ -132,6 +121,7 @@
 
     if (!state.trackingReady) {
       state.initPitch = pitchSample;
+      state.fPitch = pitchSample;
       syncHeadingBaseline(state, heading);
       state.trackingReady = true;
       return {
@@ -143,8 +133,9 @@
       };
     }
 
+    state.fPitch = lp(state.fPitch, pitchSample, SENSOR_LP);
     var pitchOff = clamp(
-      pitchSample - state.initPitch,
+      state.fPitch - state.initPitch,
       -MAX_PITCH_DOWN,
       MAX_PITCH_UP
     );
@@ -248,6 +239,7 @@
     var self = this;
     this.orientState = {
       initPitch: null,
+      fPitch: null,
       initHeading: null,
       prevHeading: null,
       unwrappedHeading: 0,
@@ -264,13 +256,7 @@
       var v = self.getView();
       if (!v || !self.latestEvent || !self.orientState || !self.base) return;
 
-      var screenAngle = getScreenAngleDeg();
-      var o = trackUnified(
-        self.latestEvent,
-        self.latestMotion,
-        screenAngle,
-        self.orientState
-      );
+      var o = trackUnified(self.latestEvent, self.latestMotion, self.orientState);
       if (!o || !o.ready) return;
 
       var targetYaw = self.base.viewYaw + o.yawOff;
