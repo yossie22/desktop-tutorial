@@ -1,7 +1,7 @@
 /**
- * パノラマ用ジャイロ制御 v48
+ * パノラマ用ジャイロ制御 v49
  * 没入モード：重力+コンパス、CSS逆回転で水平・切替抑制
- * 詳細: vendor/gyro-STABLE-v48.txt
+ * 詳細: vendor/gyro-STABLE-v49.txt
  */
 (function(global) {
   'use strict';
@@ -12,12 +12,12 @@
   var YAW_MAX_STEP = 0.040;
   var HEADING_SPIKE_DEG = 55;
   var SENSOR_LP = 0.22;
-  var ROLL_LP = 0.28;
+  var ROLL_LP = 0.38;
   var MAX_PITCH_UP = Math.PI * 82 / 180;
   var MAX_PITCH_DOWN = Math.PI * 82 / 180;
   var TRACK_WARMUP_FRAMES = 12;
   var GRAVITY_MIN = 4;
-  var BUILD = 'v48';
+  var BUILD = 'v49';
 
   var SCREEN_FORWARD = { x: 0, y: 0, z: -1 };
 
@@ -161,7 +161,7 @@
 
     state.fPitch = lp(state.fPitch, pitchSample, SENSOR_LP);
     var pitchOff = clamp(
-      state.fPitch - state.initPitch,
+      state.initPitch - state.fPitch,
       -MAX_PITCH_DOWN,
       MAX_PITCH_UP
     );
@@ -183,6 +183,7 @@
     this.initRoll = null;
     this.fRoll = null;
     this.saved = null;
+    this.lastLayoutKey = '';
   }
 
   VisualImmersive.prototype.start = function(motion, rawEvent) {
@@ -200,6 +201,7 @@
       transform: el.style.transform,
       transformOrigin: el.style.transformOrigin
     };
+    this.lastLayoutKey = '';
     this.apply(getScreenAngleDeg(), motion, rawEvent);
   };
 
@@ -217,6 +219,7 @@
     this.initRoll = null;
     this.fRoll = null;
     this.saved = null;
+    this.lastLayoutKey = '';
     this._updateViewerSize();
   };
 
@@ -252,11 +255,12 @@
     var rollOff = (this.fRoll != null && this.initRoll != null)
       ? this.fRoll - this.initRoll
       : 0;
-    var counterDeg = -delta - radToDeg(rollOff);
+    var counterDeg = -delta + radToDeg(rollOff);
 
     var vw = global.innerWidth || document.documentElement.clientWidth;
     var vh = global.innerHeight || document.documentElement.clientHeight;
     var ad = Math.abs(Math.round(delta));
+    var layoutKey = ad + ':' + vw + 'x' + vh;
 
     if (ad === 90 || ad === 270) {
       el.style.width = vh + 'px';
@@ -272,7 +276,10 @@
 
     el.style.transformOrigin = 'center center';
     el.style.transform = 'rotate(' + counterDeg + 'deg)';
-    this._updateViewerSize();
+    if (layoutKey !== this.lastLayoutKey) {
+      this.lastLayoutKey = layoutKey;
+      this._updateViewerSize();
+    }
   };
 
   function GyroControl(getView) {
