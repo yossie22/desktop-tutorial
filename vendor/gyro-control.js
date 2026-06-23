@@ -1,7 +1,7 @@
 /**
- * パノラマ用ジャイロ制御 v59
- * 縦＋右回転横のみ / ロール補正なし
- * 詳細: vendor/gyro-STABLE-v59.txt
+ * パノラマ用ジャイロ制御 v60
+ * 縦＋右回転横(270°)のみ / ロールなし / 右横で自動ON
+ * 詳細: vendor/gyro-STABLE-v60.txt
  */
 (function(global) {
   'use strict';
@@ -19,7 +19,8 @@
   var PITCH_ZENITH_END = Math.PI * 74 / 180;
   var TRACK_WARMUP_FRAMES = 18;
   var GRAVITY_MIN = 4;
-  var BUILD = 'v59';
+  var BUILD = 'v60';
+  var ALLOWED_LANDSCAPE_CUR = 270;
 
   var SCREEN_FORWARD = { x: 0, y: 0, z: -1 };
 
@@ -223,7 +224,11 @@
 
   function isAllowedScreenCur(cur) {
     var c = normalizeAngle360(cur);
-    return c === 0 || c === 90;
+    return c === 0 || c === ALLOWED_LANDSCAPE_CUR;
+  }
+
+  function isAutoLandscapeCur(cur) {
+    return normalizeAngle360(cur) === ALLOWED_LANDSCAPE_CUR;
   }
 
   function resetSensorBaselineOnLayout(gyro) {
@@ -284,7 +289,7 @@
   };
 
   VisualImmersive.prototype.getSensorRemapDelta = function() {
-    return this.snappedCur === 90 ? 90 : 0;
+    return this.snappedCur === ALLOWED_LANDSCAPE_CUR ? -90 : 0;
   };
 
   VisualImmersive.prototype.start = function() {
@@ -378,6 +383,8 @@
     this.displayYaw = 0;
     this.displayPitch = 0;
     this.hintText = '';
+    this.autoLandscape = true;
+    this.userDismissed = false;
   }
 
   GyroControl.BUILD = BUILD;
@@ -392,7 +399,19 @@
 
   GyroControl.prototype._rejectOrientation = function(msg) {
     this.hintText = msg || '右回転の横か縦へ';
-    this.stop();
+    this.stop(false);
+  };
+
+  GyroControl.prototype.setAutoLandscape = function(on) {
+    this.autoLandscape = on !== false;
+  };
+
+  GyroControl.prototype._tryAutoLandscapeStart = function() {
+    if (!this.autoLandscape || this.enabled || this.userDismissed) return;
+    var cur = snapScreenAngleDeg(normalizeAngle360(getScreenAngleDeg()), null);
+    if (isAutoLandscapeCur(cur)) {
+      this.requestStart();
+    }
   };
 
   GyroControl.prototype.setOnChange = function(fn) {
@@ -424,7 +443,7 @@
     this.visual.apply(getScreenAngleDeg());
     if (this.visual.snappedCur != null &&
         !GyroControl.isOrientationAllowed(this.visual.snappedCur)) {
-      this._rejectOrientation('左横は使えません');
+      this._rejectOrientation('左回転の横は使えません');
     }
   };
 
@@ -462,7 +481,10 @@
     global.addEventListener('devicemotion', motionFn, true);
     self.handlers.push({ type: 'devicemotion', fn: motionFn, capture: true });
 
-    var layoutFn = function() { self._onLayoutChange(); };
+    var layoutFn = function() {
+      self._onLayoutChange();
+      self._tryAutoLandscapeStart();
+    };
     global.addEventListener('resize', layoutFn);
     self.handlers.push({ type: 'resize', fn: layoutFn, capture: false });
     global.addEventListener('orientationchange', layoutFn);
@@ -474,8 +496,23 @@
     }
   };
 
-  GyroControl.prototype.stop = function() {
+  GyroControl.prototype._bindPassiveAutoLandscape = function() {
+    var self = this;
+    if (this._autoPassiveBound) return;
+    this._autoPassiveBound = true;
+    var fn = function() { self._tryAutoLandscapeStart(); };
+    global.addEventListener('orientationchange', fn);
+    global.addEventListener('resize', fn);
+    if (global.screen && global.screen.orientation &&
+        typeof global.screen.orientation.addEventListener === 'function') {
+      global.screen.orientation.addEventListener('change', fn);
+    }
+    self._tryAutoLandscapeStart();
+  };
+
+  GyroControl.prototype.stop = function(fromUser) {
     var wasOn = this.enabled;
+    if (fromUser !== false) this.userDismissed = true;
     this._cleanupListeners();
     this.base = null;
     this.orientState = null;
@@ -491,10 +528,11 @@
     if (!view) return false;
     var cur = snapScreenAngleDeg(normalizeAngle360(getScreenAngleDeg()), null);
     if (!GyroControl.isOrientationAllowed(cur)) {
-      this.hintText = '縦か右回転の横でON';
+      this.hintText = '縦か右回転（ボタン左）の横でON';
       return false;
     }
     this.hintText = '';
+    this.userDismissed = false;
     var wasOn = this.enabled;
     this._cleanupListeners();
     this.enabled = true;
@@ -534,8 +572,11 @@
         self.visual.apply(getScreenAngleDeg());
         if (self.visual.snappedCur != null &&
             !GyroControl.isOrientationAllowed(self.visual.snappedCur)) {
-          self._rejectOrientation('左横は使えません');
+          self._rejectOrientation('左回転の横は使えません');
           return;
+        }
+        if (self.visual.snappedCur === 0) {
+          self.userDismissed = false;
         }
         if (prevCur != null && self.visual.snappedCur != null &&
             prevCur !== self.visual.snappedCur) {
@@ -610,10 +651,14 @@
 
   GyroControl.prototype.toggle = function() {
     if (this.enabled) {
-      this.stop();
+      this.stop(true);
       return Promise.resolve(false);
     }
     return this.requestStart();
+  };
+
+  GyroControl.installPassiveAutoLandscape = function(gyro) {
+    if (gyro) gyro._bindPassiveAutoLandscape();
   };
 
   GyroControl.isSupportedDevice = function() {
