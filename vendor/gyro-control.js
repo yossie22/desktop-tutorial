@@ -1,7 +1,7 @@
 /**
- * パノラマ用ジャイロ制御 v52
+ * パノラマ用ジャイロ制御 v53
  * 没入モード：重力+コンパス、CSS逆回転で水平・切替抑制
- * 詳細: vendor/gyro-STABLE-v52.txt
+ * 詳細: vendor/gyro-STABLE-v53.txt
  */
 (function(global) {
   'use strict';
@@ -17,11 +17,13 @@
   var ROLL_SMOOTH = 0.09;
   var ROLL_DEADZONE_DEG = 4.0;
   var ROLL_MAX_COVER_DEG = 22;
-  var MAX_PITCH_UP = Math.PI * 82 / 180;
-  var MAX_PITCH_DOWN = Math.PI * 82 / 180;
+  var PITCH_ZENITH_START = Math.PI * 58 / 180;
+  var PITCH_ZENITH_END = Math.PI * 74 / 180;
+  var MAX_PITCH_UP = Math.PI * 78 / 180;
+  var MAX_PITCH_DOWN = Math.PI * 78 / 180;
   var TRACK_WARMUP_FRAMES = 18;
   var GRAVITY_MIN = 4;
-  var BUILD = 'v52';
+  var BUILD = 'v53';
 
   var SCREEN_FORWARD = { x: 0, y: 0, z: -1 };
 
@@ -174,6 +176,7 @@
       MAX_PITCH_UP
     );
     var yawOff = trackYawFromHeading(heading, state);
+    state.lastYawOff = yawOff;
 
     return {
       ready: true,
@@ -182,6 +185,28 @@
       pitchDownMax: MAX_PITCH_DOWN,
       pitchUpMax: MAX_PITCH_UP
     };
+  }
+
+  function zenithFactor(pitch) {
+    var a = Math.abs(pitch);
+    if (a <= PITCH_ZENITH_START) return 0;
+    if (a >= PITCH_ZENITH_END) return 1;
+    return (a - PITCH_ZENITH_START) / (PITCH_ZENITH_END - PITCH_ZENITH_START);
+  }
+
+  function dampedScalarStep(display, target, smooth, maxStep) {
+    var err = target - display;
+    var k = Math.abs(err) < 0.04 ? smooth * 0.55 : smooth;
+    return clamp(k * err, -maxStep, maxStep);
+  }
+
+  function orientDegForLayout(delta) {
+    var absD = Math.abs(Math.round(delta));
+    if (absD === 90) {
+      return delta === 90 ? 0 : -90;
+    }
+    if (absD === 180) return 180;
+    return -delta;
   }
 
   function snapScreenAngleDeg(deg, prev) {
@@ -312,14 +337,7 @@
     if (this.fRollDeg == null) this.fRollDeg = rollDeg;
 
     var absD = Math.abs(Math.round(delta));
-    var orientDeg;
-    if (absD === 90) {
-      orientDeg = delta;
-    } else if (absD === 180) {
-      orientDeg = 180;
-    } else {
-      orientDeg = -delta;
-    }
+    var orientDeg = orientDegForLayout(delta);
 
     var vw = global.innerWidth || document.documentElement.clientWidth;
     var vh = global.innerHeight || document.documentElement.clientHeight;
@@ -483,6 +501,7 @@
       initHeading: null,
       prevHeading: null,
       fHeading: null,
+      lastYawOff: 0,
       unwrappedHeading: 0,
       warmup: 0,
       trackingReady: false
@@ -516,11 +535,19 @@
       );
       targetPitch = clamp(targetPitch, -Math.PI / 2, Math.PI / 2);
 
-      self.displayYaw = normalizeAngle(
-        self.displayYaw + clamp(YAW_SMOOTH * angleDelta(self.displayYaw, targetYaw), -YAW_MAX_STEP, YAW_MAX_STEP)
-      );
+      var zf = zenithFactor(self.displayPitch);
+      if (zf >= 1) {
+        targetYaw = self.displayYaw;
+      } else if (zf > 0) {
+        targetYaw = self.displayYaw + (1 - zf) * angleDelta(self.displayYaw, targetYaw);
+      }
+
+      var ySmooth = YAW_SMOOTH * (1 - zf * 0.92);
+      var yStep = YAW_MAX_STEP * (1 - zf * 0.92);
+      var yawStep = dampedScalarStep(0, angleDelta(self.displayYaw, targetYaw), ySmooth, yStep);
+      self.displayYaw = normalizeAngle(self.displayYaw + yawStep);
       self.displayPitch = clamp(
-        self.displayPitch + clamp(PITCH_SMOOTH * (targetPitch - self.displayPitch), -PITCH_MAX_STEP, PITCH_MAX_STEP),
+        self.displayPitch + dampedScalarStep(self.displayPitch, targetPitch, PITCH_SMOOTH, PITCH_MAX_STEP),
         -Math.PI / 2,
         Math.PI / 2
       );
