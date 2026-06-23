@@ -1,7 +1,8 @@
 /**
- * パノラマ用ジャイロ制御 v67
- * v66 ＋ 横画面の上下は生betaで計算（上向きの跳び防止）
- * 詳細: vendor/gyro-STABLE-v67.txt
+ * パノラマ用ジャイロ制御 v68
+ * 縦 … v13 相当（大きい動きでもコンパス基準を維持）
+ * 横 … コンパスは画面角度を引かない（v28）＋回転直後に基準を即再設定
+ * 詳細: vendor/gyro-STABLE-v68.txt
  */
 (function(global) {
   'use strict';
@@ -13,7 +14,7 @@
   var HEADING_SPIKE_DEG = 55;
   var PITCH_SPIKE_DEG = 20;
   var SENSOR_LP = 0.22;
-  var BUILD = 'v67';
+  var BUILD = 'v68';
   var ALLOWED_LANDSCAPE_CUR = 270;
 
   function degToRad(d) { return d * Math.PI / 180; }
@@ -86,32 +87,27 @@
     return normalizeAngle360(heading - screenAngleDeg);
   }
 
+  function readHeadingFromEvent(rawEvent, screenAngleDeg) {
+    if (typeof rawEvent.webkitCompassHeading === 'number' &&
+        !isNaN(rawEvent.webkitCompassHeading)) {
+      return normalizeAngle360(rawEvent.webkitCompassHeading);
+    }
+    if (rawEvent.alpha != null && !isNaN(rawEvent.alpha)) {
+      return screenRelativeHeading(rawEvent.alpha, screenAngleDeg);
+    }
+    return null;
+  }
+
   function normalizeSensorEvent(rawEvent, screenAngleDeg) {
     if (!rawEvent || rawEvent.beta == null) return null;
     var screenAngle = normalizeAngle360(screenAngleDeg);
     var tilt = remapTiltForScreen(rawEvent.beta, rawEvent.gamma, screenAngle);
-    var screenHeading = null;
-    if (typeof rawEvent.webkitCompassHeading === 'number' &&
-        !isNaN(rawEvent.webkitCompassHeading)) {
-      screenHeading = screenRelativeHeading(rawEvent.webkitCompassHeading, screenAngle);
-    } else if (rawEvent.alpha != null && !isNaN(rawEvent.alpha)) {
-      screenHeading = screenRelativeHeading(rawEvent.alpha, screenAngle);
-    }
     return {
       beta: tilt.beta,
       gamma: tilt.gamma,
-      rawBeta: rawEvent.beta,
-      screenHeading: screenHeading,
+      screenHeading: readHeadingFromEvent(rawEvent, screenAngle),
       screenAngle: screenAngle
     };
-  }
-
-  function pitchBetaForTrack(normalized) {
-    if (normalized.screenAngle === ALLOWED_LANDSCAPE_CUR &&
-        normalized.rawBeta != null && !isNaN(normalized.rawBeta)) {
-      return normalized.rawBeta;
-    }
-    return normalized.beta;
   }
 
   function readHeadingDeg(normalized) {
@@ -122,11 +118,9 @@
   function trackOrientation(normalized, state) {
     if (!normalized || normalized.beta == null) return null;
 
-    var pitchBeta = pitchBetaForTrack(normalized);
-
     if (state.initBeta == null) {
-      state.initBeta = pitchBeta;
-      state.fBeta = pitchBeta;
+      state.initBeta = normalized.beta;
+      state.fBeta = normalized.beta;
       state.initGamma = normalized.gamma;
       state.fGamma = normalized.gamma;
       state.prevHeading = readHeadingDeg(normalized);
@@ -138,18 +132,17 @@
       return { ready: false };
     }
 
-    state.fBeta = lp(state.fBeta, pitchBeta, SENSOR_LP);
+    state.fBeta = lp(state.fBeta, normalized.beta, SENSOR_LP);
     var pitchOff = degToRad(state.initBeta - state.fBeta);
     if (normalized.screenAngle === ALLOWED_LANDSCAPE_CUR) {
       pitchOff = -pitchOff;
-    }
-
-    var pitchOffDeg = radToDeg(pitchOff);
-    if (state.lastPitchOffDeg != null &&
-        Math.abs(pitchOffDeg - state.lastPitchOffDeg) > PITCH_SPIKE_DEG) {
-      pitchOff = degToRad(state.lastPitchOffDeg);
-    } else {
-      state.lastPitchOffDeg = pitchOffDeg;
+      var pitchOffDeg = radToDeg(pitchOff);
+      if (state.lastPitchOffDeg != null &&
+          Math.abs(pitchOffDeg - state.lastPitchOffDeg) > PITCH_SPIKE_DEG) {
+        pitchOff = degToRad(state.lastPitchOffDeg);
+      } else {
+        state.lastPitchOffDeg = pitchOffDeg;
+      }
     }
 
     var heading = readHeadingDeg(normalized);
@@ -167,11 +160,12 @@
         yawOff = degToRad(state.unwrappedHeading - state.initHeading);
         state.headingMode = true;
       }
-    } else if (normalized.gamma != null && state.initGamma != null) {
+    } else if (state.headingMode && state.initHeading != null) {
+      yawOff = degToRad(state.unwrappedHeading - state.initHeading);
+    } else if (!state.headingMode && normalized.gamma != null && state.initGamma != null) {
       state.fGamma = lp(state.fGamma, normalized.gamma, SENSOR_LP);
       state.gammaYawDeg = state.fGamma - state.initGamma;
       yawOff = degToRad(state.gammaYawDeg);
-      state.headingMode = false;
     }
 
     return { ready: true, yawOff: yawOff, pitchOff: pitchOff, headingMode: state.headingMode };
@@ -329,7 +323,14 @@
       this.base.viewYaw = this.displayYaw;
       this.base.viewPitch = this.displayPitch;
     }
-    if (this.orientState) resetOrientState(this.orientState);
+    if (!this.orientState) return;
+    resetOrientState(this.orientState);
+    if (!this.latestEvent) return;
+    var normalized = normalizeSensorEvent(
+      this.latestEvent,
+      this.orientState.snappedCur
+    );
+    if (normalized) trackOrientation(normalized, this.orientState);
   };
 
   GyroControl.prototype._cleanupListeners = function() {
@@ -469,8 +470,9 @@
         self.orientState.snappedCur = snapped;
         if (prev != null && isAllowedLayoutPair(prev, snapped)) {
           self._recalibrateForScreenRotate();
+        } else {
+          return;
         }
-        return;
       }
 
       var normalized = normalizeSensorEvent(self.latestEvent, snapped);
