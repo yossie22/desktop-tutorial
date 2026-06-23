@@ -1,7 +1,7 @@
 /**
- * パノラマ用ジャイロ制御 v61
- * 縦＋右回転横(270°)のみ / 切替時の向きずれを抑える
- * 詳細: vendor/gyro-STABLE-v61.txt
+ * パノラマ用ジャイロ制御 v62
+ * 縦＋右回転横(270°)のみ / 横画面コンパス補正＋切替直後の向き固定
+ * 詳細: vendor/gyro-STABLE-v62.txt
  */
 (function(global) {
   'use strict';
@@ -18,9 +18,11 @@
   var PITCH_ZENITH_START = Math.PI * 58 / 180;
   var PITCH_ZENITH_END = Math.PI * 74 / 180;
   var TRACK_WARMUP_FRAMES = 18;
+  var LAYOUT_FREEZE_FRAMES = 14;
   var GRAVITY_MIN = 4;
-  var BUILD = 'v61';
+  var BUILD = 'v62';
   var ALLOWED_LANDSCAPE_CUR = 270;
+  var LANDSCAPE_HEADING_OFFSET = 90;
 
   var SCREEN_FORWARD = { x: 0, y: 0, z: -1 };
 
@@ -133,6 +135,21 @@
     return null;
   }
 
+  function headingFrameOffset(screenCur) {
+    return normalizeAngle360(screenCur) === ALLOWED_LANDSCAPE_CUR ?
+      LANDSCAPE_HEADING_OFFSET : 0;
+  }
+
+  function headingForScreenYaw(rawDeg, screenCur) {
+    if (rawDeg == null) return null;
+    return normalizeAngle360(rawDeg + headingFrameOffset(screenCur));
+  }
+
+  function shiftHeadingDeg(deg, delta) {
+    if (deg == null) return null;
+    return normalizeAngle360(deg + delta);
+  }
+
   function syncHeadingBaseline(state, heading) {
     state.initHeading = heading;
     state.prevHeading = heading;
@@ -162,7 +179,7 @@
     return pitchFromGravityRad(g.x, g.y, g.z);
   }
 
-  function trackUnified(rawEvent, motion, state, screenDelta) {
+  function trackUnified(rawEvent, motion, state, screenDelta, screenCur) {
     var pitchSample = resolvePitchRad(rawEvent, motion, screenDelta);
     if (pitchSample == null) return null;
 
@@ -171,7 +188,8 @@
       return { ready: false };
     }
 
-    var heading = readHeadingDeg(rawEvent);
+    var rawHeading = readHeadingDeg(rawEvent);
+    var heading = headingForScreenYaw(rawHeading, screenCur);
     if (heading != null) {
       state.fHeading = lp(state.fHeading, heading, HEADING_LP);
       heading = state.fHeading;
@@ -187,7 +205,8 @@
         yawOff: 0,
         pitchOff: 0,
         pitchDownMax: MAX_PITCH_DOWN,
-        pitchUpMax: MAX_PITCH_UP
+        pitchUpMax: MAX_PITCH_UP,
+        yawFrozen: false
       };
     }
 
@@ -197,7 +216,10 @@
       -MAX_PITCH_DOWN,
       MAX_PITCH_UP
     );
-    var yawOff = trackYawFromHeading(heading, state);
+    var yawFrozen = state.layoutFreeze > 0;
+    var yawOff = yawFrozen ?
+      (state.lastYawOff || 0) :
+      trackYawFromHeading(heading, state);
     state.lastYawOff = yawOff;
 
     return {
@@ -205,7 +227,8 @@
       yawOff: yawOff,
       pitchOff: pitchOff,
       pitchDownMax: MAX_PITCH_DOWN,
-      pitchUpMax: MAX_PITCH_UP
+      pitchUpMax: MAX_PITCH_UP,
+      yawFrozen: yawFrozen
     };
   }
 
@@ -243,6 +266,10 @@
     var st = gyro.orientState;
     if (!st || !st.trackingReady || !gyro.base || !gyro.latestEvent) return;
 
+    var prevCur = gyro.visual ? gyro.visual.prevSnappedCur : 0;
+    var newCur = gyro.visual ? gyro.visual.snappedCur : 0;
+    var frameDelta = headingFrameOffset(newCur) - headingFrameOffset(prevCur);
+
     gyro.base.viewYaw = gyro.displayYaw;
     gyro.base.viewPitch = gyro.displayPitch;
 
@@ -253,11 +280,30 @@
       st.fPitch = pitchSample;
     }
 
-    var heading = readHeadingDeg(gyro.latestEvent);
+    if (frameDelta && st.initHeading != null) {
+      st.initHeading = shiftHeadingDeg(st.initHeading, frameDelta);
+      st.unwrappedHeading += frameDelta;
+      if (st.unwrappedHeading < 0) st.unwrappedHeading += 360;
+      if (st.unwrappedHeading >= 360) st.unwrappedHeading -= 360;
+    }
+
+    var rawHeading = readHeadingDeg(gyro.latestEvent);
+    var heading = headingForScreenYaw(rawHeading, newCur);
     if (heading != null) {
       st.fHeading = heading;
+      st.prevHeading = heading;
+      var err = heading - st.unwrappedHeading;
+      if (err > 180) err -= 360;
+      if (err < -180) err += 360;
+      if (Math.abs(err) < 50) {
+        st.unwrappedHeading += err * 0.35;
+        if (st.unwrappedHeading < 0) st.unwrappedHeading += 360;
+        if (st.unwrappedHeading >= 360) st.unwrappedHeading -= 360;
+      }
     }
-    syncHeadingBaseline(st, heading);
+
+    st.layoutFreeze = LAYOUT_FREEZE_FRAMES;
+    st.lastYawOff = 0;
   }
 
   function snapScreenAngleDeg(deg, prev) {
@@ -575,7 +621,8 @@
       lastYawOff: 0,
       unwrappedHeading: 0,
       warmup: 0,
-      trackingReady: false
+      trackingReady: false,
+      layoutFreeze: 0
     };
 
     this._bindSensors();
@@ -611,11 +658,25 @@
       }
 
       var screenDelta = self.visual ? self.visual.getSensorRemapDelta() : 0;
-      var o = trackUnified(self.latestEvent, self.latestMotion, self.orientState, screenDelta);
+      var screenCur = self.visual ? self.visual.snappedCur : 0;
+      var o = trackUnified(
+        self.latestEvent,
+        self.latestMotion,
+        self.orientState,
+        screenDelta,
+        screenCur
+      );
 
       if (!o || !o.ready) return;
 
+      if (self.orientState.layoutFreeze > 0) {
+        self.orientState.layoutFreeze -= 1;
+      }
+
       var targetYaw = self.base.viewYaw + o.yawOff;
+      if (o.yawFrozen) {
+        targetYaw = self.displayYaw;
+      }
       var targetPitch = clamp(
         self.base.viewPitch + o.pitchOff,
         self.base.viewPitch - o.pitchDownMax,
