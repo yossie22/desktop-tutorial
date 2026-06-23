@@ -1,7 +1,7 @@
 /**
- * パノラマ用ジャイロ制御 v62
- * 縦＋右回転横(270°)のみ / 横画面コンパス補正＋切替直後の向き固定
- * 詳細: vendor/gyro-STABLE-v62.txt
+ * パノラマ用ジャイロ制御 v63
+ * 縦＋右回転横(270°)のみ / 切替の基準ずれ修正＋低角度のガタつき抑制
+ * 詳細: vendor/gyro-STABLE-v63.txt
  */
 (function(global) {
   'use strict';
@@ -11,8 +11,9 @@
   var PITCH_MAX_STEP = 0.016;
   var YAW_MAX_STEP = 0.020;
   var HEADING_SPIKE_DEG = 55;
-  var HEADING_LP = 0.11;
+  var HEADING_MIN_STEP_DEG = 0.35;
   var SENSOR_LP = 0.09;
+  var YAW_DEADBAND_RAD = Math.PI * 1.1 / 180;
   var MAX_PITCH_UP = Math.PI * 78 / 180;
   var MAX_PITCH_DOWN = Math.PI * 78 / 180;
   var PITCH_ZENITH_START = Math.PI * 58 / 180;
@@ -20,7 +21,7 @@
   var TRACK_WARMUP_FRAMES = 18;
   var LAYOUT_FREEZE_FRAMES = 14;
   var GRAVITY_MIN = 4;
-  var BUILD = 'v62';
+  var BUILD = 'v63';
   var ALLOWED_LANDSCAPE_CUR = 270;
   var LANDSCAPE_HEADING_OFFSET = 90;
 
@@ -145,11 +146,6 @@
     return normalizeAngle360(rawDeg + headingFrameOffset(screenCur));
   }
 
-  function shiftHeadingDeg(deg, delta) {
-    if (deg == null) return null;
-    return normalizeAngle360(deg + delta);
-  }
-
   function syncHeadingBaseline(state, heading) {
     state.initHeading = heading;
     state.prevHeading = heading;
@@ -162,7 +158,8 @@
       var hStep = heading - state.prevHeading;
       if (hStep > 180) hStep -= 360;
       if (hStep < -180) hStep += 360;
-      if (Math.abs(hStep) <= HEADING_SPIKE_DEG) {
+      if (Math.abs(hStep) >= HEADING_MIN_STEP_DEG &&
+          Math.abs(hStep) <= HEADING_SPIKE_DEG) {
         state.unwrappedHeading += hStep;
         state.prevHeading = heading;
       }
@@ -190,10 +187,6 @@
 
     var rawHeading = readHeadingDeg(rawEvent);
     var heading = headingForScreenYaw(rawHeading, screenCur);
-    if (heading != null) {
-      state.fHeading = lp(state.fHeading, heading, HEADING_LP);
-      heading = state.fHeading;
-    }
 
     if (!state.trackingReady) {
       state.initPitch = pitchSample;
@@ -239,6 +232,12 @@
     return (a - PITCH_ZENITH_START) / (PITCH_ZENITH_END - PITCH_ZENITH_START);
   }
 
+  function dampedYawStep(displayYaw, targetYaw, smooth, maxStep) {
+    var err = angleDelta(displayYaw, targetYaw);
+    if (Math.abs(err) < YAW_DEADBAND_RAD) return 0;
+    return clamp(smooth * err, -maxStep, maxStep);
+  }
+
   function dampedScalarStep(display, target, smooth, maxStep) {
     var err = target - display;
     var k = Math.abs(err) < 0.04 ? smooth * 0.55 : smooth;
@@ -266,9 +265,7 @@
     var st = gyro.orientState;
     if (!st || !st.trackingReady || !gyro.base || !gyro.latestEvent) return;
 
-    var prevCur = gyro.visual ? gyro.visual.prevSnappedCur : 0;
     var newCur = gyro.visual ? gyro.visual.snappedCur : 0;
-    var frameDelta = headingFrameOffset(newCur) - headingFrameOffset(prevCur);
 
     gyro.base.viewYaw = gyro.displayYaw;
     gyro.base.viewPitch = gyro.displayPitch;
@@ -280,26 +277,10 @@
       st.fPitch = pitchSample;
     }
 
-    if (frameDelta && st.initHeading != null) {
-      st.initHeading = shiftHeadingDeg(st.initHeading, frameDelta);
-      st.unwrappedHeading += frameDelta;
-      if (st.unwrappedHeading < 0) st.unwrappedHeading += 360;
-      if (st.unwrappedHeading >= 360) st.unwrappedHeading -= 360;
-    }
-
-    var rawHeading = readHeadingDeg(gyro.latestEvent);
-    var heading = headingForScreenYaw(rawHeading, newCur);
+    var heading = headingForScreenYaw(readHeadingDeg(gyro.latestEvent), newCur);
     if (heading != null) {
       st.fHeading = heading;
-      st.prevHeading = heading;
-      var err = heading - st.unwrappedHeading;
-      if (err > 180) err -= 360;
-      if (err < -180) err += 360;
-      if (Math.abs(err) < 50) {
-        st.unwrappedHeading += err * 0.35;
-        if (st.unwrappedHeading < 0) st.unwrappedHeading += 360;
-        if (st.unwrappedHeading >= 360) st.unwrappedHeading -= 360;
-      }
+      syncHeadingBaseline(st, heading);
     }
 
     st.layoutFreeze = LAYOUT_FREEZE_FRAMES;
@@ -696,7 +677,7 @@
 
       var ySmooth = YAW_SMOOTH * (1 - zf * 0.92);
       var yStep = YAW_MAX_STEP * (1 - zf * 0.92);
-      var yawStep = dampedScalarStep(0, angleDelta(self.displayYaw, targetYaw), ySmooth, yStep);
+      var yawStep = dampedYawStep(self.displayYaw, targetYaw, ySmooth, yStep);
       self.displayYaw = normalizeAngle(self.displayYaw + yawStep);
       self.displayPitch = clamp(
         self.displayPitch + dampedScalarStep(self.displayPitch, targetPitch, PITCH_SMOOTH, PITCH_MAX_STEP),
