@@ -1,7 +1,7 @@
 /**
- * パノラマ用ジャイロ制御 v50
+ * パノラマ用ジャイロ制御 v51
  * 没入モード：重力+コンパス、CSS逆回転で水平・切替抑制
- * 詳細: vendor/gyro-STABLE-v50.txt
+ * 詳細: vendor/gyro-STABLE-v51.txt
  */
 (function(global) {
   'use strict';
@@ -12,12 +12,13 @@
   var YAW_MAX_STEP = 0.040;
   var HEADING_SPIKE_DEG = 55;
   var SENSOR_LP = 0.22;
-  var ROLL_LP = 0.38;
+  var ROLL_LP = 0.14;
+  var ROLL_DEADZONE_DEG = 2.5;
   var MAX_PITCH_UP = Math.PI * 82 / 180;
   var MAX_PITCH_DOWN = Math.PI * 82 / 180;
   var TRACK_WARMUP_FRAMES = 12;
   var GRAVITY_MIN = 4;
-  var BUILD = 'v50';
+  var BUILD = 'v51';
 
   var SCREEN_FORWARD = { x: 0, y: 0, z: -1 };
 
@@ -176,6 +177,30 @@
     };
   }
 
+  function snapScreenAngleDeg(deg, prev) {
+    var d = normalizeAngle360(deg);
+    var candidates = [0, 90, 180, 270];
+    var best = d;
+    var bestDist = 999;
+    var i;
+    for (i = 0; i < candidates.length; i++) {
+      var c = candidates[i];
+      var dist = Math.abs(d - c);
+      if (dist > 180) dist = 360 - dist;
+      if (dist < bestDist) {
+        bestDist = dist;
+        best = c;
+      }
+    }
+    if (prev != null) {
+      var hold = Math.abs(d - prev);
+      if (hold > 180) hold = 360 - hold;
+      if (hold < 28) return prev;
+    }
+    if (bestDist <= 40) return best;
+    return d;
+  }
+
   function coverScaleForRotate(w, h, deg) {
     var rad = deg * Math.PI / 180;
     var c = Math.abs(Math.cos(rad));
@@ -191,12 +216,15 @@
     this.fRoll = null;
     this.saved = null;
     this.lastLayoutKey = '';
+    this.snappedCur = null;
   }
 
   VisualImmersive.prototype.start = function(motion, rawEvent) {
     if (!this.panoEl) return;
     var el = this.panoEl;
-    this.lockAngle = normalizeAngle360(getScreenAngleDeg());
+    var startAngle = normalizeAngle360(getScreenAngleDeg());
+    this.lockAngle = snapScreenAngleDeg(startAngle, null);
+    this.snappedCur = this.lockAngle;
     var roll = rollFromGravity(motion, rawEvent);
     this.initRoll = roll != null ? roll : 0;
     this.fRoll = this.initRoll;
@@ -227,6 +255,7 @@
     this.fRoll = null;
     this.saved = null;
     this.lastLayoutKey = '';
+    this.snappedCur = null;
     this._updateViewerSize();
   };
 
@@ -250,7 +279,9 @@
   VisualImmersive.prototype.apply = function(screenAngleDeg, motion, rawEvent) {
     if (!this.panoEl || this.lockAngle == null) return;
     var el = this.panoEl;
-    var cur = normalizeAngle360(screenAngleDeg);
+    var rawCur = normalizeAngle360(screenAngleDeg);
+    this.snappedCur = snapScreenAngleDeg(rawCur, this.snappedCur);
+    var cur = this.snappedCur;
     var delta = cur - this.lockAngle;
     if (delta > 180) delta -= 360;
     if (delta < -180) delta += 360;
@@ -262,16 +293,29 @@
     var rollOff = (this.fRoll != null && this.initRoll != null)
       ? this.fRoll - this.initRoll
       : 0;
-    var counterDeg = -delta - radToDeg(rollOff);
+    var rollDeg = 0;
+    if (Math.abs(radToDeg(rollOff)) >= ROLL_DEADZONE_DEG &&
+        Math.abs(Math.round(delta)) !== 180) {
+      rollDeg = -radToDeg(rollOff);
+    }
+
+    var absD = Math.abs(Math.round(delta));
+    var orientDeg;
+    if (absD === 90) {
+      orientDeg = delta;
+    } else if (absD === 180) {
+      orientDeg = 180;
+    } else {
+      orientDeg = -delta;
+    }
 
     var vw = global.innerWidth || document.documentElement.clientWidth;
     var vh = global.innerHeight || document.documentElement.clientHeight;
-    var ad = Math.abs(Math.round(delta));
-    var layoutKey = ad + ':' + vw + 'x' + vh;
+    var layoutKey = cur + ':' + vw + 'x' + vh;
     var pw = vw;
     var ph = vh;
 
-    if (ad === 90 || ad === 270) {
+    if (absD === 90) {
       pw = vh;
       ph = vw;
       el.style.width = pw + 'px';
@@ -285,9 +329,9 @@
       el.style.top = '0';
     }
 
-    var scale = coverScaleForRotate(pw, ph, counterDeg);
+    var scale = absD === 90 ? coverScaleForRotate(pw, ph, orientDeg) : 1;
     el.style.transformOrigin = 'center center';
-    el.style.transform = 'rotate(' + counterDeg + 'deg) scale(' + scale + ')';
+    el.style.transform = 'rotate(' + orientDeg + 'deg) scale(' + scale + ') rotate(' + rollDeg + 'deg)';
     if (layoutKey !== this.lastLayoutKey) {
       this.lastLayoutKey = layoutKey;
       this._updateViewerSize();
