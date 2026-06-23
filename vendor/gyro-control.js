@@ -1,9 +1,9 @@
 /**
- * パノラマ用ジャイロ制御 v39
- * 縦画面: v13 ベース（左右停止バグ修正）
- * 横画面: 左右=コンパス、上下=クォータニオン
- * v39: 縦の左右停止を修正、切替後のみ短時間固定（起動時は固定しない）
- * 詳細: vendor/gyro-STABLE-v39.txt
+ * パノラマ用ジャイロ制御 v40
+ * 縦画面: v13 ベース（左右=コンパス）
+ * 横画面: 左右=gamma、上下=クォータニオン
+ * v40: 横の左右をコンパスから変更（90°ずれ防止）、固定タイミング修正
+ * 詳細: vendor/gyro-STABLE-v40.txt
  */
 (function(global) {
   'use strict';
@@ -26,7 +26,7 @@
   var SWITCH_SETTLE_FRAMES = 45;
   var SWITCH_STABLE_FRAMES = 25;
   var ROTATE_BETA_JUMP_DEG = 10;
-  var BUILD = 'v39';
+  var BUILD = 'v40';
 
   function isLandscapeAngleDeg(screenAngleDeg) {
     var a = Math.round(normalizeAngle360(screenAngleDeg));
@@ -75,7 +75,14 @@
   }
 
   function landscapePitchSign() {
-    return isIPadDevice() ? 1 : -1;
+    return -1;
+  }
+
+  function beginSwitchStable(state) {
+    if (state.pendingStable) {
+      state.switchStableFrames = SWITCH_STABLE_FRAMES;
+      state.pendingStable = false;
+    }
   }
 
   function getScreenAngleDeg() {
@@ -209,10 +216,6 @@
     return state.settleFrames > 0;
   }
 
-  function isSwitchStabilizing(state) {
-    return state.switchStableFrames > 0;
-  }
-
   function resetOrientState(state) {
     state.initBeta = null;
     state.fBeta = null;
@@ -233,6 +236,7 @@
     state.prevRotateBeta = null;
     state.settleFrames = 0;
     state.switchStableFrames = 0;
+    state.pendingStable = false;
   }
   function readHeadingDegPortrait(rawEvent) {
     if (typeof rawEvent.webkitCompassHeading === 'number' &&
@@ -324,6 +328,7 @@
       syncHeadingBaseline(state, heading);
       state.initBeta = state.fBeta;
       state.portraitReady = true;
+      beginSwitchStable(state);
       yawOff = 0;
       pitchOff = 0;
     } else if (isDeviceRotating(rawEvent, state)) {
@@ -351,7 +356,7 @@
   }
 
   /**
-   * 横画面: 左右=コンパス、上下=クォータニオン（基準から毎フレーム再計算）
+   * 横画面: 左右=gamma（切替でずれにくい）、上下=クォータニオン
    */
   function trackLandscape(rawEvent, screenAngleDeg, state) {
     var qCurr = deviceQuatLandscape(rawEvent, screenAngleDeg);
@@ -374,35 +379,30 @@
         return { ready: false };
       }
       state.landscapePrimed = true;
-      state.initGamma = rawEvent.gamma;
-      state.fGamma = rawEvent.gamma;
-      state.gammaYawDeg = 0;
       state.lastHStepAbs = 0;
       return { ready: false };
     }
 
-    var heading = readHeadingDegLandscape(rawEvent, screenAngleDeg);
     var yawOff = 0;
-
-    if (heading == null && rawEvent.gamma != null && state.initGamma != null) {
-      state.fGamma = lp(state.fGamma, rawEvent.gamma, SENSOR_LP);
-      state.gammaYawDeg = state.fGamma - state.initGamma;
-      yawOff = degToRad(state.gammaYawDeg);
-      state.headingMode = false;
-    } else if (state.landscapeReady) {
-      yawOff = trackYawFromHeading(heading, state);
-    }
-
     var pitchOff = 0;
 
     if (!state.landscapeReady) {
       state.qInit = qCurr;
+      state.initGamma = rawEvent.gamma;
+      state.fGamma = rawEvent.gamma;
+      state.gammaYawDeg = 0;
       state.landscapeReady = true;
-      syncHeadingBaseline(state, heading);
+      beginSwitchStable(state);
       state.lastPitchOff = 0;
       yawOff = 0;
       pitchOff = 0;
     } else {
+      if (rawEvent.gamma != null && state.initGamma != null) {
+        state.fGamma = lp(state.fGamma, rawEvent.gamma, SENSOR_LP);
+        state.gammaYawDeg = state.fGamma - state.initGamma;
+        yawOff = degToRad(state.gammaYawDeg);
+        state.headingMode = false;
+      }
       pitchOff = clamp(
         relativePitchFromQuat(state.qInit, qCurr) * landscapePitchSign(),
         -LANDSCAPE_PITCH_DOWN,
@@ -479,7 +479,7 @@
       if (this.orientState.settleFrames > 0) return;
       resetOrientState(this.orientState);
       this.orientState.settleFrames = SWITCH_SETTLE_FRAMES;
-      this.orientState.switchStableFrames = SWITCH_STABLE_FRAMES;
+      this.orientState.pendingStable = true;
     }
     if (view) {
       view.setYaw(this.displayYaw);
@@ -541,7 +541,8 @@
       portraitReady: false,
       prevRotateBeta: null,
       settleFrames: 0,
-      switchStableFrames: 0
+      switchStableFrames: 0,
+      pendingStable: false
     };
 
     this._bindOrientation();
