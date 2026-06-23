@@ -1,24 +1,27 @@
 /**
- * パノラマ用ジャイロ制御 v51
+ * パノラマ用ジャイロ制御 v52
  * 没入モード：重力+コンパス、CSS逆回転で水平・切替抑制
- * 詳細: vendor/gyro-STABLE-v51.txt
+ * 詳細: vendor/gyro-STABLE-v52.txt
  */
 (function(global) {
   'use strict';
 
-  var PITCH_SMOOTH = 0.17;
-  var YAW_SMOOTH = 0.22;
-  var PITCH_MAX_STEP = 0.032;
-  var YAW_MAX_STEP = 0.040;
+  var PITCH_SMOOTH = 0.08;
+  var YAW_SMOOTH = 0.10;
+  var PITCH_MAX_STEP = 0.016;
+  var YAW_MAX_STEP = 0.020;
   var HEADING_SPIKE_DEG = 55;
-  var SENSOR_LP = 0.22;
-  var ROLL_LP = 0.14;
-  var ROLL_DEADZONE_DEG = 2.5;
+  var HEADING_LP = 0.11;
+  var SENSOR_LP = 0.09;
+  var ROLL_LP = 0.07;
+  var ROLL_SMOOTH = 0.09;
+  var ROLL_DEADZONE_DEG = 4.0;
+  var ROLL_MAX_COVER_DEG = 22;
   var MAX_PITCH_UP = Math.PI * 82 / 180;
   var MAX_PITCH_DOWN = Math.PI * 82 / 180;
-  var TRACK_WARMUP_FRAMES = 12;
+  var TRACK_WARMUP_FRAMES = 18;
   var GRAVITY_MIN = 4;
-  var BUILD = 'v51';
+  var BUILD = 'v52';
 
   var SCREEN_FORWARD = { x: 0, y: 0, z: -1 };
 
@@ -145,6 +148,10 @@
     }
 
     var heading = readHeadingDeg(rawEvent);
+    if (heading != null) {
+      state.fHeading = lp(state.fHeading, heading, HEADING_LP);
+      heading = state.fHeading;
+    }
 
     if (!state.trackingReady) {
       state.initPitch = pitchSample;
@@ -217,6 +224,7 @@
     this.saved = null;
     this.lastLayoutKey = '';
     this.snappedCur = null;
+    this.fRollDeg = null;
   }
 
   VisualImmersive.prototype.start = function(motion, rawEvent) {
@@ -228,6 +236,7 @@
     var roll = rollFromGravity(motion, rawEvent);
     this.initRoll = roll != null ? roll : 0;
     this.fRoll = this.initRoll;
+    this.fRollDeg = 0;
     this.saved = {
       width: el.style.width,
       height: el.style.height,
@@ -256,6 +265,7 @@
     this.saved = null;
     this.lastLayoutKey = '';
     this.snappedCur = null;
+    this.fRollDeg = null;
     this._updateViewerSize();
   };
 
@@ -298,6 +308,8 @@
         Math.abs(Math.round(delta)) !== 180) {
       rollDeg = -radToDeg(rollOff);
     }
+    this.fRollDeg = lp(this.fRollDeg, rollDeg, ROLL_SMOOTH);
+    if (this.fRollDeg == null) this.fRollDeg = rollDeg;
 
     var absD = Math.abs(Math.round(delta));
     var orientDeg;
@@ -329,9 +341,17 @@
       el.style.top = '0';
     }
 
-    var scale = absD === 90 ? coverScaleForRotate(pw, ph, orientDeg) : 1;
+    var scale;
+    if (absD === 90) {
+      scale = coverScaleForRotate(pw, ph, orientDeg);
+      scale = Math.max(scale, coverScaleForRotate(pw, ph, orientDeg + ROLL_MAX_COVER_DEG));
+    } else {
+      scale = coverScaleForRotate(pw, ph, ROLL_MAX_COVER_DEG);
+    }
+    scale = scale * 1.04;
+
     el.style.transformOrigin = 'center center';
-    el.style.transform = 'rotate(' + orientDeg + 'deg) scale(' + scale + ') rotate(' + rollDeg + 'deg)';
+    el.style.transform = 'rotate(' + orientDeg + 'deg) scale(' + scale + ') rotate(' + this.fRollDeg + 'deg)';
     if (layoutKey !== this.lastLayoutKey) {
       this.lastLayoutKey = layoutKey;
       this._updateViewerSize();
@@ -462,6 +482,7 @@
       fPitch: null,
       initHeading: null,
       prevHeading: null,
+      fHeading: null,
       unwrappedHeading: 0,
       warmup: 0,
       trackingReady: false
