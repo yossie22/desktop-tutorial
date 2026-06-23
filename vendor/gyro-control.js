@@ -1,7 +1,7 @@
 /**
- * パノラマ用ジャイロ制御 v54
+ * パノラマ用ジャイロ制御 v55
  * 没入モード：重力+コンパス、CSS逆回転で水平・切替抑制
- * 詳細: vendor/gyro-STABLE-v54.txt
+ * 詳細: vendor/gyro-STABLE-v55.txt
  */
 (function(global) {
   'use strict';
@@ -23,7 +23,7 @@
   var MAX_PITCH_DOWN = Math.PI * 78 / 180;
   var TRACK_WARMUP_FRAMES = 18;
   var GRAVITY_MIN = 4;
-  var BUILD = 'v54';
+  var BUILD = 'v55';
 
   var SCREEN_FORWARD = { x: 0, y: 0, z: -1 };
 
@@ -48,12 +48,33 @@
   }
 
   function getScreenAngleDeg() {
+    if (typeof global.orientation === 'number' && !isNaN(global.orientation)) {
+      return normalizeAngle360(global.orientation);
+    }
     if (global.screen && global.screen.orientation &&
         typeof global.screen.orientation.angle === 'number') {
-      return global.screen.orientation.angle;
+      return normalizeAngle360(global.screen.orientation.angle);
     }
-    if (typeof global.orientation === 'number') return global.orientation;
     return 0;
+  }
+
+  function gravityInLockFrame(rawEvent, motion, screenDelta) {
+    var gx;
+    var gy;
+    var gz;
+    if (motion && motion.x != null && motion.y != null && motion.z != null) {
+      gx = motion.x;
+      gy = motion.y;
+      gz = motion.z;
+    } else {
+      var g = gravityFromEuler(rawEvent);
+      if (!g) return null;
+      gx = g.x;
+      gy = g.y;
+      gz = g.z;
+    }
+    if (!screenDelta) return { x: gx, y: gy, z: gz };
+    return gravityToLockFrame(gx, gy, gz, screenDelta);
   }
 
   function pitchFromGravityRad(gx, gy, gz) {
@@ -98,25 +119,10 @@
   }
 
   function rollFromGravity(motion, rawEvent, screenDelta) {
-    var gx;
-    var gy;
-    var gz = 0;
-    if (motion && motion.x != null && motion.y != null) {
-      gx = motion.x;
-      gy = motion.y;
-      gz = motion.z || 0;
-    } else {
-      var g = gravityFromEuler(rawEvent);
-      if (!g) return null;
-      gx = g.x * 9.81;
-      gy = g.y * 9.81;
-      gz = g.z * 9.81;
-    }
-    if (screenDelta === 90) {
-      var lg = gravityToLockFrame(gx, gy, gz, screenDelta);
-      return rollFromGravityVec(lg.x, lg.y, lg.z);
-    }
-    return rollFromGravityVec(gx, gy, gz);
+    var g = gravityInLockFrame(rawEvent, motion, screenDelta);
+    if (!g) return null;
+    var scale = (motion && motion.x != null) ? 1 : 9.81;
+    return rollFromGravityVec(g.x * scale, g.y * scale, g.z * scale);
   }
 
   function readHeadingDeg(rawEvent) {
@@ -154,25 +160,9 @@
   }
 
   function resolvePitchRad(rawEvent, motion, screenDelta) {
-    var gx;
-    var gy;
-    var gz;
-    if (motion && motion.x != null && motion.y != null && motion.z != null) {
-      gx = motion.x;
-      gy = motion.y;
-      gz = motion.z;
-    } else {
-      var g = gravityFromEuler(rawEvent);
-      if (!g) return null;
-      gx = g.x;
-      gy = g.y;
-      gz = g.z;
-    }
-    if (screenDelta === 90) {
-      var lg = gravityToLockFrame(gx, gy, gz, screenDelta);
-      return pitchFromGravityRad(lg.x, lg.y, lg.z);
-    }
-    return pitchFromGravityRad(gx, gy, gz);
+    var g = gravityInLockFrame(rawEvent, motion, screenDelta);
+    if (!g) return null;
+    return pitchFromGravityRad(g.x, g.y, g.z);
   }
 
   function trackUnified(rawEvent, motion, state, screenDelta) {
@@ -237,34 +227,21 @@
 
   function orientDegForLayout(delta) {
     var absD = Math.abs(Math.round(delta));
-    if (absD === 90) return delta;
+    if (absD === 90) return -90;
     if (absD === 180) return 180;
     return -delta;
   }
 
-  function compensateLayoutYaw(gyro, prevCur, newCur) {
-    var lock = gyro.visual.lockAngle;
-    if (lock == null) return;
-    function normD(cur) {
-      var d = cur - lock;
-      if (d > 180) d -= 360;
-      if (d < -180) d += 360;
-      return d;
-    }
-    var prevD = normD(prevCur);
-    var newD = normD(newCur);
-    var wasPort = Math.abs(prevD) < 45;
-    var nowPort = Math.abs(newD) < 45;
-    var wasLand = Math.abs(prevD) === 90;
-    var nowLand = Math.abs(newD) === 90;
-    if (wasPort && nowLand) {
-      var adj = -newD * Math.PI / 180;
-      gyro.base.viewYaw = normalizeAngle(gyro.base.viewYaw + adj);
-      gyro.displayYaw = normalizeAngle(gyro.displayYaw + adj);
-    } else if (wasLand && nowPort) {
-      var adj2 = prevD * Math.PI / 180;
-      gyro.base.viewYaw = normalizeAngle(gyro.base.viewYaw + adj2);
-      gyro.displayYaw = normalizeAngle(gyro.displayYaw + adj2);
+  function resetSensorBaselineOnLayout(gyro) {
+    var st = gyro.orientState;
+    if (!st || !st.trackingReady) return;
+    st.trackingReady = false;
+    st.initPitch = null;
+    st.warmup = Math.max(0, TRACK_WARMUP_FRAMES - 6);
+    if (gyro.visual) {
+      gyro.visual.initRoll = null;
+      gyro.visual.fRoll = null;
+      gyro.visual.fRollDeg = 0;
     }
   }
 
@@ -597,7 +574,7 @@
         self.visual.apply(getScreenAngleDeg(), self.latestMotion, self.latestEvent);
         if (prevCur != null && self.visual.snappedCur != null &&
             prevCur !== self.visual.snappedCur) {
-          compensateLayoutYaw(self, prevCur, self.visual.snappedCur);
+          resetSensorBaselineOnLayout(self);
         }
         self.visual.prevSnappedCur = self.visual.snappedCur;
       }
@@ -616,6 +593,9 @@
       targetPitch = clamp(targetPitch, -Math.PI / 2, Math.PI / 2);
 
       var zf = zenithFactor(self.displayPitch);
+      if (Math.abs(screenDelta) === 90 && Math.abs(self.displayPitch) > degToRad(52)) {
+        zf = Math.max(zf, 0.75);
+      }
       if (zf >= 1) {
         targetYaw = self.displayYaw;
       } else if (zf > 0) {
