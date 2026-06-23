@@ -1,34 +1,22 @@
 /**
- * パノラマ用ジャイロ制御 v64
- * 縦＋右回転横(270°)のみ / コンパス生値＋画面回転時は跳びだけ吸収
- * 詳細: vendor/gyro-STABLE-v64.txt
+ * パノラマ用ジャイロ制御 v65
+ * 縦の追従は v13/v14 に戻す ＋ 右横(270°)のみ許可
+ * コンパスは「画面の上端」基準（screenRelativeHeading）
+ * 詳細: vendor/gyro-STABLE-v65.txt
  */
 (function(global) {
   'use strict';
 
-  var PITCH_SMOOTH = 0.08;
-  var YAW_SMOOTH = 0.10;
-  var PITCH_MAX_STEP = 0.016;
-  var YAW_MAX_STEP = 0.020;
+  var PITCH_SMOOTH = 0.17;
+  var YAW_SMOOTH = 0.22;
+  var PITCH_MAX_STEP = 0.032;
+  var YAW_MAX_STEP = 0.040;
   var HEADING_SPIKE_DEG = 55;
-  var HEADING_MIN_STEP_DEG = 0.2;
-  var HEADING_LP = 0.13;
-  var SENSOR_LP = 0.09;
-  var YAW_DEADBAND_RAD = Math.PI * 0.85 / 180;
-  var MAX_PITCH_UP = Math.PI * 78 / 180;
-  var MAX_PITCH_DOWN = Math.PI * 78 / 180;
-  var PITCH_ZENITH_START = Math.PI * 58 / 180;
-  var PITCH_ZENITH_END = Math.PI * 74 / 180;
-  var TRACK_WARMUP_FRAMES = 18;
-  var LAYOUT_FREEZE_FRAMES = 14;
-  var GRAVITY_MIN = 4;
-  var BUILD = 'v64';
+  var SENSOR_LP = 0.22;
+  var BUILD = 'v65';
   var ALLOWED_LANDSCAPE_CUR = 270;
 
-  var SCREEN_FORWARD = { x: 0, y: 0, z: -1 };
-
   function degToRad(d) { return d * Math.PI / 180; }
-  function radToDeg(r) { return r * 180 / Math.PI; }
   function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
   function normalizeAngle(a) {
     while (a > Math.PI) a -= 2 * Math.PI;
@@ -58,232 +46,6 @@
     return 0;
   }
 
-  function gravityInLockFrame(rawEvent, motion, screenDelta) {
-    var gx;
-    var gy;
-    var gz;
-    if (motion && motion.x != null && motion.y != null && motion.z != null) {
-      gx = motion.x;
-      gy = motion.y;
-      gz = motion.z;
-    } else {
-      var g = gravityFromEuler(rawEvent);
-      if (!g) return null;
-      gx = g.x;
-      gy = g.y;
-      gz = g.z;
-    }
-    if (!screenDelta) return { x: gx, y: gy, z: gz };
-    return gravityToLockFrame(gx, gy, gz, screenDelta);
-  }
-
-  function pitchFromGravityRad(gx, gy, gz) {
-    var len = Math.sqrt(gx * gx + gy * gy + gz * gz);
-    if (len < GRAVITY_MIN) return null;
-    var ux = -gx / len;
-    var uy = -gy / len;
-    var uz = -gz / len;
-    var dot = clamp(
-      SCREEN_FORWARD.x * ux + SCREEN_FORWARD.y * uy + SCREEN_FORWARD.z * uz,
-      -1, 1
-    );
-    return Math.asin(dot);
-  }
-
-  function gravityFromEuler(rawEvent) {
-    if (rawEvent.beta == null || rawEvent.gamma == null) return null;
-    var b = degToRad(rawEvent.beta);
-    var g = degToRad(rawEvent.gamma);
-    return {
-      x: Math.cos(b) * Math.sin(g),
-      y: -Math.sin(b),
-      z: Math.cos(b) * Math.cos(g)
-    };
-  }
-
-  function rollFromGravityVec(gx, gy, gz) {
-    var len = Math.sqrt(gx * gx + gy * gy);
-    if (len < GRAVITY_MIN) return null;
-    return Math.atan2(gx, -gy);
-  }
-
-  function gravityToLockFrame(gx, gy, gz, deltaDeg) {
-    var a = degToRad(-deltaDeg);
-    var c = Math.cos(a);
-    var s = Math.sin(a);
-    return {
-      x: gx * c + gy * s,
-      y: -gx * s + gy * c,
-      z: gz
-    };
-  }
-
-  function rollFromGravity(motion, rawEvent, screenDelta) {
-    var g = gravityInLockFrame(rawEvent, motion, screenDelta);
-    if (!g) return null;
-    var scale = (motion && motion.x != null) ? 1 : 9.81;
-    return rollFromGravityVec(g.x * scale, g.y * scale, g.z * scale);
-  }
-
-  function readHeadingDeg(rawEvent) {
-    if (typeof rawEvent.webkitCompassHeading === 'number' &&
-        !isNaN(rawEvent.webkitCompassHeading)) {
-      return rawEvent.webkitCompassHeading;
-    }
-    if (rawEvent.alpha != null && !isNaN(rawEvent.alpha)) {
-      return rawEvent.alpha;
-    }
-    return null;
-  }
-
-  function syncHeadingBaseline(state, heading) {
-    state.initHeading = heading;
-    state.prevHeading = heading;
-    state.unwrappedHeading = heading != null ? heading : 0;
-  }
-
-  function absorbHeadingJump(state, rawHeading) {
-    if (rawHeading == null) return;
-    state.fHeading = rawHeading;
-    state.prevHeading = rawHeading;
-    if (state.initHeading != null) {
-      state.initHeading = state.unwrappedHeading;
-    }
-  }
-
-  function trackYawFromHeading(heading, state) {
-    var yawOff = 0;
-    if (heading != null && state.prevHeading != null) {
-      var hStep = heading - state.prevHeading;
-      if (hStep > 180) hStep -= 360;
-      if (hStep < -180) hStep += 360;
-      if (Math.abs(hStep) >= HEADING_MIN_STEP_DEG &&
-          Math.abs(hStep) <= HEADING_SPIKE_DEG) {
-        state.unwrappedHeading += hStep;
-        state.prevHeading = heading;
-      }
-      if (state.initHeading != null) {
-        yawOff = degToRad(state.unwrappedHeading - state.initHeading);
-      }
-    }
-    return yawOff;
-  }
-
-  function resolvePitchRad(rawEvent, motion, screenDelta) {
-    var g = gravityInLockFrame(rawEvent, motion, screenDelta);
-    if (!g) return null;
-    return pitchFromGravityRad(g.x, g.y, g.z);
-  }
-
-  function trackUnified(rawEvent, motion, state, screenDelta) {
-    var pitchSample = resolvePitchRad(rawEvent, motion, screenDelta);
-    if (pitchSample == null) return null;
-
-    if (state.warmup < TRACK_WARMUP_FRAMES) {
-      state.warmup += 1;
-      return { ready: false };
-    }
-
-    var rawHeading = readHeadingDeg(rawEvent);
-    var heading = rawHeading;
-    if (heading != null) {
-      state.fHeading = lp(state.fHeading, heading, HEADING_LP);
-      heading = state.fHeading;
-    }
-
-    if (!state.trackingReady) {
-      state.initPitch = pitchSample;
-      state.fPitch = pitchSample;
-      syncHeadingBaseline(state, heading);
-      state.trackingReady = true;
-      return {
-        ready: true,
-        yawOff: 0,
-        pitchOff: 0,
-        pitchDownMax: MAX_PITCH_DOWN,
-        pitchUpMax: MAX_PITCH_UP,
-        yawFrozen: false
-      };
-    }
-
-    state.fPitch = lp(state.fPitch, pitchSample, SENSOR_LP);
-    var pitchOff = clamp(
-      state.initPitch - state.fPitch,
-      -MAX_PITCH_DOWN,
-      MAX_PITCH_UP
-    );
-    var yawFrozen = state.layoutFreeze > 0;
-    var yawOff = yawFrozen ?
-      (state.lastYawOff || 0) :
-      trackYawFromHeading(heading, state);
-    state.lastYawOff = yawOff;
-
-    return {
-      ready: true,
-      yawOff: yawOff,
-      pitchOff: pitchOff,
-      pitchDownMax: MAX_PITCH_DOWN,
-      pitchUpMax: MAX_PITCH_UP,
-      yawFrozen: yawFrozen
-    };
-  }
-
-  function zenithFactor(pitch) {
-    var a = Math.abs(pitch);
-    if (a <= PITCH_ZENITH_START) return 0;
-    if (a >= PITCH_ZENITH_END) return 1;
-    return (a - PITCH_ZENITH_START) / (PITCH_ZENITH_END - PITCH_ZENITH_START);
-  }
-
-  function dampedYawStep(displayYaw, targetYaw, smooth, maxStep) {
-    var err = angleDelta(displayYaw, targetYaw);
-    if (Math.abs(err) < YAW_DEADBAND_RAD) return 0;
-    return clamp(smooth * err, -maxStep, maxStep);
-  }
-
-  function dampedScalarStep(display, target, smooth, maxStep) {
-    var err = target - display;
-    var k = Math.abs(err) < 0.04 ? smooth * 0.55 : smooth;
-    return clamp(k * err, -maxStep, maxStep);
-  }
-
-  function isAllowedScreenCur(cur) {
-    var c = normalizeAngle360(cur);
-    return c === 0 || c === ALLOWED_LANDSCAPE_CUR;
-  }
-
-  function isAutoLandscapeCur(cur) {
-    return normalizeAngle360(cur) === ALLOWED_LANDSCAPE_CUR;
-  }
-
-  function isAllowedLayoutPair(prevCur, newCur) {
-    var a = normalizeAngle360(prevCur);
-    var b = normalizeAngle360(newCur);
-    if (a === b) return false;
-    return (a === 0 && b === ALLOWED_LANDSCAPE_CUR) ||
-      (a === ALLOWED_LANDSCAPE_CUR && b === 0);
-  }
-
-  function onAllowedLayoutChange(gyro) {
-    var st = gyro.orientState;
-    if (!st || !st.trackingReady || !gyro.base || !gyro.latestEvent) return;
-
-    gyro.base.viewYaw = gyro.displayYaw;
-    gyro.base.viewPitch = gyro.displayPitch;
-
-    var remap = gyro.visual ? gyro.visual.getSensorRemapDelta() : 0;
-    var pitchSample = resolvePitchRad(gyro.latestEvent, gyro.latestMotion, remap);
-    if (pitchSample != null) {
-      st.initPitch = pitchSample;
-      st.fPitch = pitchSample;
-    }
-
-    absorbHeadingJump(st, readHeadingDeg(gyro.latestEvent));
-
-    st.layoutFreeze = LAYOUT_FREEZE_FRAMES;
-    st.lastYawOff = 0;
-  }
-
   function snapScreenAngleDeg(deg, prev) {
     var d = normalizeAngle360(deg);
     var candidates = [0, 90, 180, 270];
@@ -308,100 +70,132 @@
     return d;
   }
 
-  function coverScaleForRotate(w, h, deg) {
-    var rad = deg * Math.PI / 180;
-    var c = Math.abs(Math.cos(rad));
-    var s = Math.abs(Math.sin(rad));
-    return Math.max((w * c + h * s) / w, (w * s + h * c) / h) * 1.02;
+  function remapTiltForScreen(beta, gamma, screenAngleDeg) {
+    if (beta == null) return { beta: null, gamma: gamma };
+    var g = gamma == null ? 0 : gamma;
+    var a = Math.round(normalizeAngle360(screenAngleDeg));
+    if (a === 90) return { beta: g, gamma: -beta };
+    if (a === 180) return { beta: -beta, gamma: -g };
+    if (a === 270) return { beta: -g, gamma: beta };
+    return { beta: beta, gamma: g };
+  }
+
+  function screenRelativeHeading(heading, screenAngleDeg) {
+    if (heading == null || isNaN(heading)) return null;
+    return normalizeAngle360(heading - screenAngleDeg);
+  }
+
+  function normalizeSensorEvent(rawEvent, screenAngleDeg) {
+    if (!rawEvent || rawEvent.beta == null) return null;
+    var screenAngle = normalizeAngle360(screenAngleDeg);
+    var tilt = remapTiltForScreen(rawEvent.beta, rawEvent.gamma, screenAngle);
+    var screenHeading = null;
+    if (typeof rawEvent.webkitCompassHeading === 'number' &&
+        !isNaN(rawEvent.webkitCompassHeading)) {
+      screenHeading = screenRelativeHeading(rawEvent.webkitCompassHeading, screenAngle);
+    } else if (rawEvent.alpha != null && !isNaN(rawEvent.alpha)) {
+      screenHeading = screenRelativeHeading(rawEvent.alpha, screenAngle);
+    }
+    return {
+      beta: tilt.beta,
+      gamma: tilt.gamma,
+      screenHeading: screenHeading,
+      screenAngle: screenAngle
+    };
+  }
+
+  function readHeadingDeg(normalized) {
+    if (!normalized) return null;
+    return normalized.screenHeading;
+  }
+
+  function trackOrientation(normalized, state) {
+    if (!normalized || normalized.beta == null) return null;
+
+    if (state.initBeta == null) {
+      state.initBeta = normalized.beta;
+      state.fBeta = normalized.beta;
+      state.initGamma = normalized.gamma;
+      state.fGamma = normalized.gamma;
+      state.prevHeading = readHeadingDeg(normalized);
+      state.initHeading = state.prevHeading;
+      state.unwrappedHeading = state.prevHeading != null ? state.prevHeading : 0;
+      state.gammaYawDeg = 0;
+      state.headingMode = state.prevHeading != null;
+      return { ready: false };
+    }
+
+    state.fBeta = lp(state.fBeta, normalized.beta, SENSOR_LP);
+    var pitchOff = degToRad(state.initBeta - state.fBeta);
+
+    var heading = readHeadingDeg(normalized);
+    var yawOff = 0;
+
+    if (heading != null && state.prevHeading != null) {
+      var hStep = heading - state.prevHeading;
+      if (hStep > 180) hStep -= 360;
+      if (hStep < -180) hStep += 360;
+      if (Math.abs(hStep) <= HEADING_SPIKE_DEG) {
+        state.unwrappedHeading += hStep;
+        state.prevHeading = heading;
+      }
+      if (state.initHeading != null) {
+        yawOff = degToRad(state.unwrappedHeading - state.initHeading);
+        state.headingMode = true;
+      }
+    } else if (normalized.gamma != null && state.initGamma != null) {
+      state.fGamma = lp(state.fGamma, normalized.gamma, SENSOR_LP);
+      state.gammaYawDeg = state.fGamma - state.initGamma;
+      yawOff = degToRad(state.gammaYawDeg);
+      state.headingMode = false;
+    }
+
+    return { ready: true, yawOff: yawOff, pitchOff: pitchOff, headingMode: state.headingMode };
+  }
+
+  function resetOrientState(state) {
+    state.initBeta = null;
+    state.fBeta = null;
+    state.initGamma = null;
+    state.fGamma = null;
+    state.prevHeading = null;
+    state.initHeading = null;
+    state.unwrappedHeading = 0;
+    state.gammaYawDeg = 0;
+    state.headingMode = true;
+  }
+
+  function isAllowedScreenCur(cur) {
+    var c = normalizeAngle360(cur);
+    return c === 0 || c === ALLOWED_LANDSCAPE_CUR;
+  }
+
+  function isAutoLandscapeCur(cur) {
+    return normalizeAngle360(cur) === ALLOWED_LANDSCAPE_CUR;
+  }
+
+  function isAllowedLayoutPair(prevCur, newCur) {
+    var a = normalizeAngle360(prevCur);
+    var b = normalizeAngle360(newCur);
+    if (a === b) return false;
+    return (a === 0 && b === ALLOWED_LANDSCAPE_CUR) ||
+      (a === ALLOWED_LANDSCAPE_CUR && b === 0);
   }
 
   function VisualImmersive(panoEl, getViewer) {
     this.panoEl = panoEl;
     this.getViewer = getViewer;
-    this.lockAngle = null;
-    this.saved = null;
     this.lastLayoutKey = '';
     this.snappedCur = null;
-    this.prevSnappedCur = null;
   }
 
-  VisualImmersive.prototype.getDelta = function() {
-    if (this.lockAngle == null || this.snappedCur == null) return 0;
-    var delta = this.snappedCur - this.lockAngle;
-    if (delta > 180) delta -= 360;
-    if (delta < -180) delta += 360;
-    return delta;
-  };
-
-  VisualImmersive.prototype.getSensorRemapDelta = function() {
-    if (this.snappedCur !== ALLOWED_LANDSCAPE_CUR) return 0;
-    var delta = this.getDelta();
-    if (Math.abs(Math.round(delta)) === 90) return delta;
-    return 0;
-  };
-
-  VisualImmersive.prototype.start = function() {
+  VisualImmersive.prototype.apply = function(snappedCur) {
     if (!this.panoEl) return;
     var el = this.panoEl;
-    var startAngle = normalizeAngle360(getScreenAngleDeg());
-    this.lockAngle = snapScreenAngleDeg(startAngle, null);
-    this.snappedCur = this.lockAngle;
-    this.prevSnappedCur = this.lockAngle;
-    this.saved = {
-      width: el.style.width,
-      height: el.style.height,
-      left: el.style.left,
-      top: el.style.top,
-      transform: el.style.transform,
-      transformOrigin: el.style.transformOrigin
-    };
-    this.lastLayoutKey = '';
-    this.apply(getScreenAngleDeg());
-  };
-
-  VisualImmersive.prototype.stop = function() {
-    if (!this.panoEl || !this.saved) return;
-    var el = this.panoEl;
-    var s = this.saved;
-    el.style.width = s.width;
-    el.style.height = s.height;
-    el.style.left = s.left;
-    el.style.top = s.top;
-    el.style.transform = s.transform;
-    el.style.transformOrigin = s.transformOrigin;
-    this.lockAngle = null;
-    this.saved = null;
-    this.lastLayoutKey = '';
-    this.snappedCur = null;
-    this.prevSnappedCur = null;
-    this._updateViewerSize();
-  };
-
-  VisualImmersive.prototype._updateViewerSize = function() {
-    var viewer = this.getViewer ? this.getViewer() : null;
-    if (viewer && typeof viewer.updateSize === 'function') {
-      viewer.updateSize();
-    } else {
-      try {
-        global.dispatchEvent(new Event('resize'));
-      } catch (e) {
-        if (document.createEvent) {
-          var ev = document.createEvent('Event');
-          ev.initEvent('resize', true, true);
-          global.dispatchEvent(ev);
-        }
-      }
-    }
-  };
-
-  VisualImmersive.prototype.apply = function(screenAngleDeg) {
-    if (!this.panoEl || this.lockAngle == null) return;
-    var el = this.panoEl;
-    var rawCur = normalizeAngle360(screenAngleDeg);
-    this.snappedCur = snapScreenAngleDeg(rawCur, this.snappedCur);
+    this.snappedCur = snappedCur;
     var vw = global.innerWidth || document.documentElement.clientWidth;
     var vh = global.innerHeight || document.documentElement.clientHeight;
-    var layoutKey = this.snappedCur + ':' + vw + 'x' + vh;
+    var layoutKey = snappedCur + ':' + vw + 'x' + vh;
     el.style.width = '100%';
     el.style.height = '100%';
     el.style.left = '0';
@@ -410,8 +204,27 @@
     el.style.transformOrigin = '';
     if (layoutKey !== this.lastLayoutKey) {
       this.lastLayoutKey = layoutKey;
-      this._updateViewerSize();
+      var viewer = this.getViewer ? this.getViewer() : null;
+      if (viewer && typeof viewer.updateSize === 'function') {
+        viewer.updateSize();
+      } else {
+        try {
+          global.dispatchEvent(new Event('resize'));
+        } catch (e) {
+          if (document.createEvent) {
+            var ev = document.createEvent('Event');
+            ev.initEvent('resize', true, true);
+            global.dispatchEvent(ev);
+          }
+        }
+      }
     }
+  };
+
+  VisualImmersive.prototype.stop = function() {
+    if (!this.panoEl) return;
+    this.lastLayoutKey = '';
+    this.snappedCur = null;
   };
 
   function GyroControl(getView) {
@@ -422,7 +235,6 @@
     this.handlers = [];
     this.raf = null;
     this.latestEvent = null;
-    this.latestMotion = null;
     this.base = null;
     this.onChange = null;
     this.hooks = {};
@@ -456,7 +268,7 @@
 
   GyroControl.prototype._tryAutoLandscapeStart = function() {
     if (!this.autoLandscape || this.enabled || this.userDismissed) return;
-    var cur = snapScreenAngleDeg(normalizeAngle360(getScreenAngleDeg()), null);
+    var cur = snapScreenAngleDeg(getScreenAngleDeg(), null);
     if (isAutoLandscapeCur(cur)) {
       this.requestStart();
     }
@@ -486,13 +298,13 @@
     if (this.onChange) this.onChange(this.enabled);
   };
 
-  GyroControl.prototype._onLayoutChange = function() {
-    if (!this.enabled || !this.visual) return;
-    this.visual.apply(getScreenAngleDeg());
-    if (this.visual.snappedCur != null &&
-        !GyroControl.isOrientationAllowed(this.visual.snappedCur)) {
-      this._rejectOrientation('左回転の横は使えません');
+  GyroControl.prototype._recalibrateForScreenRotate = function() {
+    var view = this.getView();
+    if (view && this.base) {
+      this.base.viewYaw = this.displayYaw;
+      this.base.viewPitch = this.displayPitch;
     }
+    if (this.orientState) resetOrientState(this.orientState);
   };
 
   GyroControl.prototype._cleanupListeners = function() {
@@ -510,7 +322,6 @@
     }
     if (this.visual) this.visual.stop();
     this.latestEvent = null;
-    this.latestMotion = null;
   };
 
   GyroControl.prototype._bindSensors = function() {
@@ -520,18 +331,19 @@
       global.addEventListener(type, orientFn, true);
       self.handlers.push({ type: type, fn: orientFn, capture: true });
     });
-    var motionFn = function(e) {
-      var a = e.accelerationIncludingGravity;
-      if (a && a.x != null) {
-        self.latestMotion = { x: a.x, y: a.y, z: a.z };
-      }
-    };
-    global.addEventListener('devicemotion', motionFn, true);
-    self.handlers.push({ type: 'devicemotion', fn: motionFn, capture: true });
 
     var layoutFn = function() {
-      self._onLayoutChange();
-      self._tryAutoLandscapeStart();
+      if (!self.enabled) {
+        self._tryAutoLandscapeStart();
+        return;
+      }
+      var snapped = snapScreenAngleDeg(getScreenAngleDeg(), self.orientState ?
+        self.orientState.snappedCur : null);
+      if (!isAllowedScreenCur(snapped)) {
+        self._rejectOrientation('左回転の横は使えません');
+        return;
+      }
+      if (self.visual) self.visual.apply(snapped);
     };
     global.addEventListener('resize', layoutFn);
     self.handlers.push({ type: 'resize', fn: layoutFn, capture: false });
@@ -574,7 +386,7 @@
   GyroControl.prototype.start = function() {
     var view = this.getView();
     if (!view) return false;
-    var cur = snapScreenAngleDeg(normalizeAngle360(getScreenAngleDeg()), null);
+    var cur = snapScreenAngleDeg(getScreenAngleDeg(), null);
     if (!GyroControl.isOrientationAllowed(cur)) {
       this.hintText = '縦か右回転（ボタン左）の横でON';
       return false;
@@ -591,18 +403,19 @@
 
     var self = this;
     this.orientState = {
-      initPitch: null,
-      fPitch: null,
-      initHeading: null,
+      initBeta: null,
+      fBeta: null,
+      initGamma: null,
+      fGamma: null,
       prevHeading: null,
-      fHeading: null,
-      lastYawOff: 0,
+      initHeading: null,
       unwrappedHeading: 0,
-      warmup: 0,
-      trackingReady: false,
-      layoutFreeze: 0
+      gammaYawDeg: 0,
+      headingMode: true,
+      snappedCur: cur
     };
 
+    if (this.visual) this.visual.apply(cur);
     this._bindSensors();
 
     function tick() {
@@ -612,70 +425,48 @@
       var v = self.getView();
       if (!v || !self.latestEvent || !self.orientState || !self.base) return;
 
-      if (self.visual && self.orientState.warmup === 0 && !self.visual.lockAngle) {
-        self.visual.start();
-      }
-
-      if (self.visual && self.visual.lockAngle != null) {
-        var prevCur = self.visual.prevSnappedCur;
-        self.visual.apply(getScreenAngleDeg());
-        if (self.visual.snappedCur != null &&
-            !GyroControl.isOrientationAllowed(self.visual.snappedCur)) {
-          self._rejectOrientation('左回転の横は使えません');
-          return;
-        }
-        if (self.visual.snappedCur === 0) {
-          self.userDismissed = false;
-        }
-        if (prevCur != null && self.visual.snappedCur != null &&
-            prevCur !== self.visual.snappedCur &&
-            isAllowedLayoutPair(prevCur, self.visual.snappedCur)) {
-          onAllowedLayoutChange(self);
-        }
-        self.visual.prevSnappedCur = self.visual.snappedCur;
-      }
-
-      var screenDelta = self.visual ? self.visual.getSensorRemapDelta() : 0;
-      var o = trackUnified(
-        self.latestEvent,
-        self.latestMotion,
-        self.orientState,
-        screenDelta
+      var snapped = snapScreenAngleDeg(
+        getScreenAngleDeg(),
+        self.orientState.snappedCur
       );
 
+      if (!isAllowedScreenCur(snapped)) {
+        self._rejectOrientation('左回転の横は使えません');
+        return;
+      }
+
+      if (self.visual) self.visual.apply(snapped);
+
+      if (snapped === 0) self.userDismissed = false;
+
+      if (self.orientState.snappedCur !== snapped) {
+        var prev = self.orientState.snappedCur;
+        self.orientState.snappedCur = snapped;
+        if (prev != null && isAllowedLayoutPair(prev, snapped)) {
+          self._recalibrateForScreenRotate();
+        }
+        return;
+      }
+
+      var normalized = normalizeSensorEvent(self.latestEvent, snapped);
+      var o = trackOrientation(normalized, self.orientState);
       if (!o || !o.ready) return;
 
-      if (self.orientState.layoutFreeze > 0) {
-        self.orientState.layoutFreeze -= 1;
-      }
-
       var targetYaw = self.base.viewYaw + o.yawOff;
-      if (o.yawFrozen) {
-        targetYaw = self.displayYaw;
-      }
-      var targetPitch = clamp(
-        self.base.viewPitch + o.pitchOff,
-        self.base.viewPitch - o.pitchDownMax,
-        self.base.viewPitch + o.pitchUpMax
+      var targetPitch = clamp(self.base.viewPitch + o.pitchOff, -Math.PI / 2, Math.PI / 2);
+      self.displayYaw = normalizeAngle(
+        self.displayYaw + clamp(
+          YAW_SMOOTH * angleDelta(self.displayYaw, targetYaw),
+          -YAW_MAX_STEP,
+          YAW_MAX_STEP
+        )
       );
-      targetPitch = clamp(targetPitch, -Math.PI / 2, Math.PI / 2);
-
-      var zf = zenithFactor(self.displayPitch);
-      if (Math.abs(screenDelta) === 90 && Math.abs(self.displayPitch) > degToRad(52)) {
-        zf = Math.max(zf, 0.75);
-      }
-      if (zf >= 1) {
-        targetYaw = self.displayYaw;
-      } else if (zf > 0) {
-        targetYaw = self.displayYaw + (1 - zf) * angleDelta(self.displayYaw, targetYaw);
-      }
-
-      var ySmooth = YAW_SMOOTH * (1 - zf * 0.92);
-      var yStep = YAW_MAX_STEP * (1 - zf * 0.92);
-      var yawStep = dampedYawStep(self.displayYaw, targetYaw, ySmooth, yStep);
-      self.displayYaw = normalizeAngle(self.displayYaw + yawStep);
       self.displayPitch = clamp(
-        self.displayPitch + dampedScalarStep(self.displayPitch, targetPitch, PITCH_SMOOTH, PITCH_MAX_STEP),
+        self.displayPitch + clamp(
+          PITCH_SMOOTH * (targetPitch - self.displayPitch),
+          -PITCH_MAX_STEP,
+          PITCH_MAX_STEP
+        ),
         -Math.PI / 2,
         Math.PI / 2
       );
