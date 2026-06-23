@@ -1,7 +1,7 @@
 /**
- * パノラマ用ジャイロ制御 v55
+ * パノラマ用ジャイロ制御 v56
  * 没入モード：重力+コンパス、CSS逆回転で水平・切替抑制
- * 詳細: vendor/gyro-STABLE-v55.txt
+ * 詳細: vendor/gyro-STABLE-v56.txt
  */
 (function(global) {
   'use strict';
@@ -23,7 +23,7 @@
   var MAX_PITCH_DOWN = Math.PI * 78 / 180;
   var TRACK_WARMUP_FRAMES = 18;
   var GRAVITY_MIN = 4;
-  var BUILD = 'v55';
+  var BUILD = 'v56';
 
   var SCREEN_FORWARD = { x: 0, y: 0, z: -1 };
 
@@ -74,6 +74,7 @@
       gz = g.z;
     }
     if (!screenDelta) return { x: gx, y: gy, z: gz };
+    if (screenDelta === -90) return { x: gx, y: gy, z: gz };
     return gravityToLockFrame(gx, gy, gz, screenDelta);
   }
 
@@ -227,7 +228,9 @@
 
   function orientDegForLayout(delta) {
     var absD = Math.abs(Math.round(delta));
-    if (absD === 90) return -90;
+    if (absD === 90) {
+      return delta > 0 ? 180 : -90;
+    }
     if (absD === 180) return 180;
     return -delta;
   }
