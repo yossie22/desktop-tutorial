@@ -1,9 +1,9 @@
 /**
- * パノラマ用ジャイロ制御 v37
+ * パノラマ用ジャイロ制御 v38
  * 縦画面: v13 ベース
  * 横画面: 左右=コンパス、上下=クォータニオン
- * v37: 縦横切替後にコンパス・上下基準を必ず再セット（90°ずれ防止）
- * 詳細: vendor/gyro-STABLE-v37.txt
+ * v38: 切替後40フレーム基準固定、iPad横上下符号修正
+ * 詳細: vendor/gyro-STABLE-v38.txt
  */
 (function(global) {
   'use strict';
@@ -23,11 +23,11 @@
   var LANDSCAPE_PITCH_DOWN = Math.PI * 82 / 180;
   var LANDSCAPE_YAW_IGNORE_PITCH = 0.45;
   var LANDSCAPE_CALIB_FRAMES = 6;
-  var LANDSCAPE_PITCH_SIGN = -1;
   var SWITCH_SETTLE_FRAMES = 45;
+  var SWITCH_ARM_FRAMES = 40;
   var ROTATE_BETA_JUMP_DEG = 10;
   var NEAR_LANDSCAPE_TILT_DEG = 28;
-  var BUILD = 'v37';
+  var BUILD = 'v38';
 
   function isLandscapeAngleDeg(screenAngleDeg) {
     var a = Math.round(normalizeAngle360(screenAngleDeg));
@@ -76,7 +76,11 @@
   }
 
   function landscapePitchSign() {
-    return LANDSCAPE_PITCH_SIGN;
+    return isIPadDevice() ? 1 : -1;
+  }
+
+  function isArming(state) {
+    return state.switchArmFrames > 0;
   }
 
   function getScreenAngleDeg() {
@@ -234,6 +238,7 @@
     state.portraitReady = false;
     state.prevRotateBeta = null;
     state.settleFrames = 0;
+    state.switchArmFrames = 0;
   }
   function readHeadingDegPortrait(rawEvent) {
     if (typeof rawEvent.webkitCompassHeading === 'number' &&
@@ -325,6 +330,12 @@
       syncHeadingBaseline(state, heading);
       state.initBeta = state.fBeta;
       state.portraitReady = true;
+      state.switchArmFrames = SWITCH_ARM_FRAMES;
+      yawOff = 0;
+      pitchOff = 0;
+    } else if (isArming(state)) {
+      syncHeadingBaseline(state, heading);
+      state.initBeta = state.fBeta;
       yawOff = 0;
       pitchOff = 0;
     } else if (isDeviceRotating(rawEvent, state)) {
@@ -402,6 +413,13 @@
       state.qInit = qCurr;
       state.landscapeReady = true;
       syncHeadingBaseline(state, heading);
+      state.switchArmFrames = SWITCH_ARM_FRAMES;
+      state.lastPitchOff = 0;
+      yawOff = 0;
+      pitchOff = 0;
+    } else if (isArming(state)) {
+      state.qInit = qCurr;
+      syncHeadingBaseline(state, heading);
       state.lastPitchOff = 0;
       yawOff = 0;
       pitchOff = 0;
@@ -470,15 +488,13 @@
 
   GyroControl.prototype._recalibrateForScreenRotate = function() {
     var view = this.getView();
-    if (view) {
-      this.displayYaw = view.yaw();
-      this.displayPitch = view.pitch();
-    }
-    if (!this.base) {
-      this.base = { viewYaw: this.displayYaw, viewPitch: this.displayPitch };
-    } else {
+    if (this.base) {
       this.base.viewYaw = this.displayYaw;
       this.base.viewPitch = this.displayPitch;
+    } else if (view) {
+      this.base = { viewYaw: view.yaw(), viewPitch: view.pitch() };
+      this.displayYaw = this.base.viewYaw;
+      this.displayPitch = this.base.viewPitch;
     }
     if (this.orientState) {
       if (this.orientState.settleFrames > 0) return;
@@ -544,7 +560,8 @@
       lastPitchOff: 0,
       portraitReady: false,
       prevRotateBeta: null,
-      settleFrames: 0
+      settleFrames: 0,
+      switchArmFrames: 0
     };
 
     this._bindOrientation();
@@ -571,12 +588,33 @@
       var o = portrait
         ? trackPortrait(self.latestEvent, self.orientState)
         : trackLandscape(self.latestEvent, screenAngle, self.orientState);
-      if (!o || !o.ready) return;
+
+      if (self.orientState.settleFrames > 0 || self.orientState.switchArmFrames > 0) {
+        self.displayYaw = self.base.viewYaw;
+        self.displayPitch = self.base.viewPitch;
+        v.setYaw(self.displayYaw);
+        v.setPitch(self.displayPitch);
+      }
+
+      if (!o || !o.ready) {
+        if (self.orientState.settleFrames > 0) {
+          self.orientState.settleFrames--;
+        }
+        return;
+      }
 
       if (self.orientState.settleFrames > 0) {
         o.yawOff = 0;
         o.pitchOff = 0;
         self.orientState.settleFrames--;
+        self.displayYaw = self.base.viewYaw;
+        self.displayPitch = self.base.viewPitch;
+      }
+
+      if (self.orientState.switchArmFrames > 0) {
+        o.yawOff = 0;
+        o.pitchOff = 0;
+        self.orientState.switchArmFrames--;
         self.displayYaw = self.base.viewYaw;
         self.displayPitch = self.base.viewPitch;
       }
