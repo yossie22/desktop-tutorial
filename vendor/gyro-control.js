@@ -1,9 +1,9 @@
 /**
- * パノラマ用ジャイロ制御 v36
- * 縦画面: v13 ベース（上を向く制限を解除）
- * 横画面: 左右=コンパス、上下=クォータニオン（毎フレーム再計算）
- * v36: 切替時コンパス基準を維持、縦の上下停止バグ修正
- * 詳細: vendor/gyro-STABLE-v36.txt
+ * パノラマ用ジャイロ制御 v37
+ * 縦画面: v13 ベース
+ * 横画面: 左右=コンパス、上下=クォータニオン
+ * v37: 縦横切替後にコンパス・上下基準を必ず再セット（90°ずれ防止）
+ * 詳細: vendor/gyro-STABLE-v37.txt
  */
 (function(global) {
   'use strict';
@@ -27,7 +27,7 @@
   var SWITCH_SETTLE_FRAMES = 45;
   var ROTATE_BETA_JUMP_DEG = 10;
   var NEAR_LANDSCAPE_TILT_DEG = 28;
-  var BUILD = 'v36';
+  var BUILD = 'v37';
 
   function isLandscapeAngleDeg(screenAngleDeg) {
     var a = Math.round(normalizeAngle360(screenAngleDeg));
@@ -215,18 +215,16 @@
     return state.settleFrames > 0;
   }
 
-  function resetOrientState(state, keepHeading) {
+  function resetOrientState(state) {
     state.initBeta = null;
     state.fBeta = null;
     state.initGamma = null;
     state.fGamma = null;
-    if (!keepHeading) {
-      state.prevHeading = null;
-      state.initHeading = null;
-      state.unwrappedHeading = 0;
-      state.headingMode = true;
-    }
+    state.prevHeading = null;
+    state.initHeading = null;
+    state.unwrappedHeading = 0;
     state.gammaYawDeg = 0;
+    state.headingMode = true;
     state.lastHStepAbs = 0;
     state.qInit = null;
     state.calibCount = 0;
@@ -324,9 +322,7 @@
     var yawOff = 0;
 
     if (!state.portraitReady) {
-      if (state.initHeading == null) {
-        syncHeadingBaseline(state, heading);
-      }
+      syncHeadingBaseline(state, heading);
       state.initBeta = state.fBeta;
       state.portraitReady = true;
       yawOff = 0;
@@ -405,9 +401,7 @@
     if (!state.landscapeReady) {
       state.qInit = qCurr;
       state.landscapeReady = true;
-      if (state.initHeading == null) {
-        syncHeadingBaseline(state, heading);
-      }
+      syncHeadingBaseline(state, heading);
       state.lastPitchOff = 0;
       yawOff = 0;
       pitchOff = 0;
@@ -488,7 +482,7 @@
     }
     if (this.orientState) {
       if (this.orientState.settleFrames > 0) return;
-      resetOrientState(this.orientState, true);
+      resetOrientState(this.orientState);
       this.orientState.settleFrames = SWITCH_SETTLE_FRAMES;
     }
     if (view) {
@@ -583,6 +577,8 @@
         o.yawOff = 0;
         o.pitchOff = 0;
         self.orientState.settleFrames--;
+        self.displayYaw = self.base.viewYaw;
+        self.displayPitch = self.base.viewPitch;
       }
 
       var targetYaw = self.base.viewYaw + o.yawOff;
