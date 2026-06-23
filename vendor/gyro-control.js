@@ -1,7 +1,7 @@
 /**
- * パノラマ用ジャイロ制御 v53
+ * パノラマ用ジャイロ制御 v54
  * 没入モード：重力+コンパス、CSS逆回転で水平・切替抑制
- * 詳細: vendor/gyro-STABLE-v53.txt
+ * 詳細: vendor/gyro-STABLE-v54.txt
  */
 (function(global) {
   'use strict';
@@ -23,7 +23,7 @@
   var MAX_PITCH_DOWN = Math.PI * 78 / 180;
   var TRACK_WARMUP_FRAMES = 18;
   var GRAVITY_MIN = 4;
-  var BUILD = 'v53';
+  var BUILD = 'v54';
 
   var SCREEN_FORWARD = { x: 0, y: 0, z: -1 };
 
@@ -80,21 +80,43 @@
     };
   }
 
-  function rollFromGravity(motion, rawEvent) {
+  function rollFromGravityVec(gx, gy, gz) {
+    var len = Math.sqrt(gx * gx + gy * gy);
+    if (len < GRAVITY_MIN) return null;
+    return Math.atan2(gx, -gy);
+  }
+
+  function gravityToLockFrame(gx, gy, gz, deltaDeg) {
+    var a = degToRad(-deltaDeg);
+    var c = Math.cos(a);
+    var s = Math.sin(a);
+    return {
+      x: gx * c + gy * s,
+      y: -gx * s + gy * c,
+      z: gz
+    };
+  }
+
+  function rollFromGravity(motion, rawEvent, screenDelta) {
     var gx;
     var gy;
+    var gz = 0;
     if (motion && motion.x != null && motion.y != null) {
       gx = motion.x;
       gy = motion.y;
+      gz = motion.z || 0;
     } else {
       var g = gravityFromEuler(rawEvent);
       if (!g) return null;
       gx = g.x * 9.81;
       gy = g.y * 9.81;
+      gz = g.z * 9.81;
     }
-    var len = Math.sqrt(gx * gx + gy * gy);
-    if (len < GRAVITY_MIN) return null;
-    return Math.atan2(gx, -gy);
+    if (screenDelta === 90) {
+      var lg = gravityToLockFrame(gx, gy, gz, screenDelta);
+      return rollFromGravityVec(lg.x, lg.y, lg.z);
+    }
+    return rollFromGravityVec(gx, gy, gz);
   }
 
   function readHeadingDeg(rawEvent) {
@@ -131,17 +153,30 @@
     return yawOff;
   }
 
-  function resolvePitchRad(rawEvent, motion) {
+  function resolvePitchRad(rawEvent, motion, screenDelta) {
+    var gx;
+    var gy;
+    var gz;
     if (motion && motion.x != null && motion.y != null && motion.z != null) {
-      return pitchFromGravityRad(motion.x, motion.y, motion.z);
+      gx = motion.x;
+      gy = motion.y;
+      gz = motion.z;
+    } else {
+      var g = gravityFromEuler(rawEvent);
+      if (!g) return null;
+      gx = g.x;
+      gy = g.y;
+      gz = g.z;
     }
-    var g = gravityFromEuler(rawEvent);
-    if (!g) return null;
-    return pitchFromGravityRad(g.x, g.y, g.z);
+    if (screenDelta === 90) {
+      var lg = gravityToLockFrame(gx, gy, gz, screenDelta);
+      return pitchFromGravityRad(lg.x, lg.y, lg.z);
+    }
+    return pitchFromGravityRad(gx, gy, gz);
   }
 
-  function trackUnified(rawEvent, motion, state) {
-    var pitchSample = resolvePitchRad(rawEvent, motion);
+  function trackUnified(rawEvent, motion, state, screenDelta) {
+    var pitchSample = resolvePitchRad(rawEvent, motion, screenDelta);
     if (pitchSample == null) return null;
 
     if (state.warmup < TRACK_WARMUP_FRAMES) {
@@ -202,11 +237,35 @@
 
   function orientDegForLayout(delta) {
     var absD = Math.abs(Math.round(delta));
-    if (absD === 90) {
-      return delta === 90 ? 0 : -90;
-    }
+    if (absD === 90) return delta;
     if (absD === 180) return 180;
     return -delta;
+  }
+
+  function compensateLayoutYaw(gyro, prevCur, newCur) {
+    var lock = gyro.visual.lockAngle;
+    if (lock == null) return;
+    function normD(cur) {
+      var d = cur - lock;
+      if (d > 180) d -= 360;
+      if (d < -180) d += 360;
+      return d;
+    }
+    var prevD = normD(prevCur);
+    var newD = normD(newCur);
+    var wasPort = Math.abs(prevD) < 45;
+    var nowPort = Math.abs(newD) < 45;
+    var wasLand = Math.abs(prevD) === 90;
+    var nowLand = Math.abs(newD) === 90;
+    if (wasPort && nowLand) {
+      var adj = -newD * Math.PI / 180;
+      gyro.base.viewYaw = normalizeAngle(gyro.base.viewYaw + adj);
+      gyro.displayYaw = normalizeAngle(gyro.displayYaw + adj);
+    } else if (wasLand && nowPort) {
+      var adj2 = prevD * Math.PI / 180;
+      gyro.base.viewYaw = normalizeAngle(gyro.base.viewYaw + adj2);
+      gyro.displayYaw = normalizeAngle(gyro.displayYaw + adj2);
+    }
   }
 
   function snapScreenAngleDeg(deg, prev) {
@@ -249,8 +308,17 @@
     this.saved = null;
     this.lastLayoutKey = '';
     this.snappedCur = null;
+    this.prevSnappedCur = null;
     this.fRollDeg = null;
   }
+
+  VisualImmersive.prototype.getDelta = function() {
+    if (this.lockAngle == null || this.snappedCur == null) return 0;
+    var delta = this.snappedCur - this.lockAngle;
+    if (delta > 180) delta -= 360;
+    if (delta < -180) delta += 360;
+    return delta;
+  };
 
   VisualImmersive.prototype.start = function(motion, rawEvent) {
     if (!this.panoEl) return;
@@ -258,7 +326,9 @@
     var startAngle = normalizeAngle360(getScreenAngleDeg());
     this.lockAngle = snapScreenAngleDeg(startAngle, null);
     this.snappedCur = this.lockAngle;
-    var roll = rollFromGravity(motion, rawEvent);
+    this.prevSnappedCur = this.lockAngle;
+    var screenDelta = this.getDelta();
+    var roll = rollFromGravity(motion, rawEvent, screenDelta);
     this.initRoll = roll != null ? roll : 0;
     this.fRoll = this.initRoll;
     this.fRollDeg = 0;
@@ -290,6 +360,7 @@
     this.saved = null;
     this.lastLayoutKey = '';
     this.snappedCur = null;
+    this.prevSnappedCur = null;
     this.fRollDeg = null;
     this._updateViewerSize();
   };
@@ -320,8 +391,9 @@
     var delta = cur - this.lockAngle;
     if (delta > 180) delta -= 360;
     if (delta < -180) delta += 360;
+    var screenDelta = delta;
 
-    var roll = rollFromGravity(motion, rawEvent);
+    var roll = rollFromGravity(motion, rawEvent, screenDelta);
     if (roll != null) {
       this.fRoll = lp(this.fRoll, roll, ROLL_LP);
     }
@@ -520,10 +592,18 @@
         self.visual.start(self.latestMotion, self.latestEvent);
       }
 
-      var o = trackUnified(self.latestEvent, self.latestMotion, self.orientState);
       if (self.visual && self.visual.lockAngle != null) {
+        var prevCur = self.visual.prevSnappedCur;
         self.visual.apply(getScreenAngleDeg(), self.latestMotion, self.latestEvent);
+        if (prevCur != null && self.visual.snappedCur != null &&
+            prevCur !== self.visual.snappedCur) {
+          compensateLayoutYaw(self, prevCur, self.visual.snappedCur);
+        }
+        self.visual.prevSnappedCur = self.visual.snappedCur;
       }
+
+      var screenDelta = self.visual ? self.visual.getDelta() : 0;
+      var o = trackUnified(self.latestEvent, self.latestMotion, self.orientState, screenDelta);
 
       if (!o || !o.ready) return;
 
