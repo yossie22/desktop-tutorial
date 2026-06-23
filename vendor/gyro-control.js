@@ -1,7 +1,7 @@
 /**
- * パノラマ用ジャイロ制御 v63
- * 縦＋右回転横(270°)のみ / 切替の基準ずれ修正＋低角度のガタつき抑制
- * 詳細: vendor/gyro-STABLE-v63.txt
+ * パノラマ用ジャイロ制御 v64
+ * 縦＋右回転横(270°)のみ / コンパス生値＋画面回転時は跳びだけ吸収
+ * 詳細: vendor/gyro-STABLE-v64.txt
  */
 (function(global) {
   'use strict';
@@ -11,9 +11,10 @@
   var PITCH_MAX_STEP = 0.016;
   var YAW_MAX_STEP = 0.020;
   var HEADING_SPIKE_DEG = 55;
-  var HEADING_MIN_STEP_DEG = 0.35;
+  var HEADING_MIN_STEP_DEG = 0.2;
+  var HEADING_LP = 0.13;
   var SENSOR_LP = 0.09;
-  var YAW_DEADBAND_RAD = Math.PI * 1.1 / 180;
+  var YAW_DEADBAND_RAD = Math.PI * 0.85 / 180;
   var MAX_PITCH_UP = Math.PI * 78 / 180;
   var MAX_PITCH_DOWN = Math.PI * 78 / 180;
   var PITCH_ZENITH_START = Math.PI * 58 / 180;
@@ -21,9 +22,8 @@
   var TRACK_WARMUP_FRAMES = 18;
   var LAYOUT_FREEZE_FRAMES = 14;
   var GRAVITY_MIN = 4;
-  var BUILD = 'v63';
+  var BUILD = 'v64';
   var ALLOWED_LANDSCAPE_CUR = 270;
-  var LANDSCAPE_HEADING_OFFSET = 90;
 
   var SCREEN_FORWARD = { x: 0, y: 0, z: -1 };
 
@@ -136,20 +136,19 @@
     return null;
   }
 
-  function headingFrameOffset(screenCur) {
-    return normalizeAngle360(screenCur) === ALLOWED_LANDSCAPE_CUR ?
-      LANDSCAPE_HEADING_OFFSET : 0;
-  }
-
-  function headingForScreenYaw(rawDeg, screenCur) {
-    if (rawDeg == null) return null;
-    return normalizeAngle360(rawDeg + headingFrameOffset(screenCur));
-  }
-
   function syncHeadingBaseline(state, heading) {
     state.initHeading = heading;
     state.prevHeading = heading;
     state.unwrappedHeading = heading != null ? heading : 0;
+  }
+
+  function absorbHeadingJump(state, rawHeading) {
+    if (rawHeading == null) return;
+    state.fHeading = rawHeading;
+    state.prevHeading = rawHeading;
+    if (state.initHeading != null) {
+      state.initHeading = state.unwrappedHeading;
+    }
   }
 
   function trackYawFromHeading(heading, state) {
@@ -176,7 +175,7 @@
     return pitchFromGravityRad(g.x, g.y, g.z);
   }
 
-  function trackUnified(rawEvent, motion, state, screenDelta, screenCur) {
+  function trackUnified(rawEvent, motion, state, screenDelta) {
     var pitchSample = resolvePitchRad(rawEvent, motion, screenDelta);
     if (pitchSample == null) return null;
 
@@ -186,7 +185,11 @@
     }
 
     var rawHeading = readHeadingDeg(rawEvent);
-    var heading = headingForScreenYaw(rawHeading, screenCur);
+    var heading = rawHeading;
+    if (heading != null) {
+      state.fHeading = lp(state.fHeading, heading, HEADING_LP);
+      heading = state.fHeading;
+    }
 
     if (!state.trackingReady) {
       state.initPitch = pitchSample;
@@ -265,8 +268,6 @@
     var st = gyro.orientState;
     if (!st || !st.trackingReady || !gyro.base || !gyro.latestEvent) return;
 
-    var newCur = gyro.visual ? gyro.visual.snappedCur : 0;
-
     gyro.base.viewYaw = gyro.displayYaw;
     gyro.base.viewPitch = gyro.displayPitch;
 
@@ -277,11 +278,7 @@
       st.fPitch = pitchSample;
     }
 
-    var heading = headingForScreenYaw(readHeadingDeg(gyro.latestEvent), newCur);
-    if (heading != null) {
-      st.fHeading = heading;
-      syncHeadingBaseline(st, heading);
-    }
+    absorbHeadingJump(st, readHeadingDeg(gyro.latestEvent));
 
     st.layoutFreeze = LAYOUT_FREEZE_FRAMES;
     st.lastYawOff = 0;
@@ -639,13 +636,11 @@
       }
 
       var screenDelta = self.visual ? self.visual.getSensorRemapDelta() : 0;
-      var screenCur = self.visual ? self.visual.snappedCur : 0;
       var o = trackUnified(
         self.latestEvent,
         self.latestMotion,
         self.orientState,
-        screenDelta,
-        screenCur
+        screenDelta
       );
 
       if (!o || !o.ready) return;
