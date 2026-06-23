@@ -1,7 +1,7 @@
 /**
- * パノラマ用ジャイロ制御 v60
- * 縦＋右回転横(270°)のみ / ロールなし / 右横で自動ON
- * 詳細: vendor/gyro-STABLE-v60.txt
+ * パノラマ用ジャイロ制御 v61
+ * 縦＋右回転横(270°)のみ / 切替時の向きずれを抑える
+ * 詳細: vendor/gyro-STABLE-v61.txt
  */
 (function(global) {
   'use strict';
@@ -19,7 +19,7 @@
   var PITCH_ZENITH_END = Math.PI * 74 / 180;
   var TRACK_WARMUP_FRAMES = 18;
   var GRAVITY_MIN = 4;
-  var BUILD = 'v60';
+  var BUILD = 'v61';
   var ALLOWED_LANDSCAPE_CUR = 270;
 
   var SCREEN_FORWARD = { x: 0, y: 0, z: -1 };
@@ -231,12 +231,33 @@
     return normalizeAngle360(cur) === ALLOWED_LANDSCAPE_CUR;
   }
 
-  function resetSensorBaselineOnLayout(gyro) {
+  function isAllowedLayoutPair(prevCur, newCur) {
+    var a = normalizeAngle360(prevCur);
+    var b = normalizeAngle360(newCur);
+    if (a === b) return false;
+    return (a === 0 && b === ALLOWED_LANDSCAPE_CUR) ||
+      (a === ALLOWED_LANDSCAPE_CUR && b === 0);
+  }
+
+  function onAllowedLayoutChange(gyro) {
     var st = gyro.orientState;
-    if (!st || !st.trackingReady) return;
-    st.trackingReady = false;
-    st.initPitch = null;
-    st.warmup = Math.max(0, TRACK_WARMUP_FRAMES - 6);
+    if (!st || !st.trackingReady || !gyro.base || !gyro.latestEvent) return;
+
+    gyro.base.viewYaw = gyro.displayYaw;
+    gyro.base.viewPitch = gyro.displayPitch;
+
+    var remap = gyro.visual ? gyro.visual.getSensorRemapDelta() : 0;
+    var pitchSample = resolvePitchRad(gyro.latestEvent, gyro.latestMotion, remap);
+    if (pitchSample != null) {
+      st.initPitch = pitchSample;
+      st.fPitch = pitchSample;
+    }
+
+    var heading = readHeadingDeg(gyro.latestEvent);
+    if (heading != null) {
+      st.fHeading = heading;
+    }
+    syncHeadingBaseline(st, heading);
   }
 
   function snapScreenAngleDeg(deg, prev) {
@@ -289,7 +310,10 @@
   };
 
   VisualImmersive.prototype.getSensorRemapDelta = function() {
-    return this.snappedCur === ALLOWED_LANDSCAPE_CUR ? -90 : 0;
+    if (this.snappedCur !== ALLOWED_LANDSCAPE_CUR) return 0;
+    var delta = this.getDelta();
+    if (Math.abs(Math.round(delta)) === 90) return delta;
+    return 0;
   };
 
   VisualImmersive.prototype.start = function() {
@@ -579,8 +603,9 @@
           self.userDismissed = false;
         }
         if (prevCur != null && self.visual.snappedCur != null &&
-            prevCur !== self.visual.snappedCur) {
-          resetSensorBaselineOnLayout(self);
+            prevCur !== self.visual.snappedCur &&
+            isAllowedLayoutPair(prevCur, self.visual.snappedCur)) {
+          onAllowedLayoutChange(self);
         }
         self.visual.prevSnappedCur = self.visual.snappedCur;
       }
