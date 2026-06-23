@@ -1,9 +1,9 @@
 /**
- * パノラマ用ジャイロ制御 v32
+ * パノラマ用ジャイロ制御 v33
  * 縦画面: v13 ベース（下方向の角度制限を緩和）
  * 横画面: クォータニオン+変化量積み上げ
- * v32: 切替静止後に基準リセット（30°ずれ防止）、切替中は上下も止める
- * 詳細: vendor/gyro-STABLE-v32.txt
+ * v33: 縦横切替は一定時間すべて止める、基準を切替後に再セット
+ * 詳細: vendor/gyro-STABLE-v33.txt
  */
 (function(global) {
   'use strict';
@@ -25,9 +25,10 @@
   var LANDSCAPE_YAW_IGNORE_PITCH = 0.45;
   var LANDSCAPE_CALIB_FRAMES = 6;
   var LANDSCAPE_PITCH_SIGN = 1;
-  var ROTATE_YAW_FREEZE_FRAMES = 20;
+  var SWITCH_SETTLE_FRAMES = 45;
   var ROTATE_BETA_JUMP_DEG = 10;
-  var BUILD = 'v32';
+  var NEAR_LANDSCAPE_TILT_DEG = 28;
+  var BUILD = 'v33';
 
   function isLandscapeAngleDeg(screenAngleDeg) {
     var a = Math.round(normalizeAngle360(screenAngleDeg));
@@ -206,15 +207,13 @@
     state.headingMode = heading != null;
   }
 
-  function isDeviceRotating(rawEvent, state) {
+  function isNearLandscapeTilt(rawEvent) {
     if (rawEvent.beta == null || isNaN(rawEvent.beta)) return false;
-    if (state.prevRotateBeta == null) {
-      state.prevRotateBeta = rawEvent.beta;
-      return false;
-    }
-    var jump = Math.abs(rawEvent.beta - state.prevRotateBeta);
-    state.prevRotateBeta = rawEvent.beta;
-    return jump > ROTATE_BETA_JUMP_DEG;
+    return Math.abs(Math.abs(rawEvent.beta) - 90) < NEAR_LANDSCAPE_TILT_DEG;
+  }
+
+  function isSettling(state) {
+    return state.settleFrames > 0;
   }
 
   function readHeadingDegPortrait(rawEvent) {
@@ -226,6 +225,17 @@
       return rawEvent.alpha;
     }
     return null;
+  }
+
+  function isDeviceRotating(rawEvent, state) {
+    if (rawEvent.beta == null || isNaN(rawEvent.beta)) return false;
+    if (state.prevRotateBeta == null) {
+      state.prevRotateBeta = rawEvent.beta;
+      return false;
+    }
+    var jump = Math.abs(rawEvent.beta - state.prevRotateBeta);
+    state.prevRotateBeta = rawEvent.beta;
+    return jump > ROTATE_BETA_JUMP_DEG;
   }
 
   function readHeadingDegLandscape(rawEvent, screenAngleDeg) {
@@ -255,21 +265,9 @@
     state.prevPitchSample = null;
     state.pitchIntegral = 0;
     state.lastPitchOff = 0;
-    state.yawFreezeFrames = 0;
     state.portraitReady = false;
     state.prevRotateBeta = null;
-    state.resyncAfterFreeze = false;
-  }
-
-  function isYawFrozen(state) {
-    return state.yawFreezeFrames > 0;
-  }
-
-  function consumeYawFreeze(state) {
-    if (state.yawFreezeFrames === 1) {
-      state.resyncAfterFreeze = true;
-    }
-    if (state.yawFreezeFrames > 0) state.yawFreezeFrames--;
+    state.settleFrames = 0;
   }
 
   function trackYawFromHeading(heading, state) {
@@ -313,20 +311,27 @@
       MAX_PITCH_UP
     );
 
+    if (isSettling(state)) {
+      return {
+        ready: true,
+        yawOff: 0,
+        pitchOff: 0,
+        landscape: false,
+        pitchDownMax: MAX_PITCH_DOWN,
+        pitchUpMax: MAX_PITCH_UP
+      };
+    }
+
     var heading = readHeadingDegPortrait(rawEvent);
     var yawOff = 0;
 
-    if (state.resyncAfterFreeze) {
+    if (!state.portraitReady) {
       syncHeadingBaseline(state, heading);
       state.initBeta = state.fBeta;
-      state.resyncAfterFreeze = false;
-      yawOff = 0;
-      pitchOff = 0;
-    } else if (!state.portraitReady) {
-      syncHeadingBaseline(state, heading);
       state.portraitReady = true;
       yawOff = 0;
-    } else if (isYawFrozen(state) || isDeviceRotating(rawEvent, state)) {
+      pitchOff = 0;
+    } else if (isNearLandscapeTilt(rawEvent) || isDeviceRotating(rawEvent, state)) {
       yawOff = 0;
       pitchOff = 0;
     } else {
@@ -358,6 +363,17 @@
     var qCurr = deviceQuatLandscape(rawEvent, screenAngleDeg);
     if (!qCurr) return null;
 
+    if (isSettling(state)) {
+      return {
+        ready: true,
+        yawOff: 0,
+        pitchOff: 0,
+        landscape: true,
+        pitchDownMax: LANDSCAPE_PITCH_DOWN,
+        pitchUpMax: LANDSCAPE_PITCH_UP
+      };
+    }
+
     if (!state.landscapePrimed) {
       state.calibCount = (state.calibCount || 0) + 1;
       if (state.calibCount < LANDSCAPE_CALIB_FRAMES) {
@@ -379,27 +395,14 @@
       state.gammaYawDeg = state.fGamma - state.initGamma;
       yawOff = degToRad(state.gammaYawDeg);
       state.headingMode = false;
-    } else if (state.landscapeReady && !isYawFrozen(state)) {
+    } else if (state.landscapeReady) {
       yawOff = trackYawFromHeading(heading, state);
-    }
-
-    if (isYawFrozen(state)) {
-      yawOff = 0;
     }
 
     var pitchSample = relativePitchFromQuat(state.qInit || qCurr, qCurr) * landscapePitchSign();
     var pitchOff = 0;
 
-    if (state.resyncAfterFreeze && state.landscapeReady) {
-      syncHeadingBaseline(state, heading);
-      state.qInit = qCurr;
-      state.prevPitchSample = pitchSample;
-      state.pitchIntegral = 0;
-      state.lastPitchOff = 0;
-      state.resyncAfterFreeze = false;
-      yawOff = 0;
-      pitchOff = 0;
-    } else if (!state.landscapeReady) {
+    if (!state.landscapeReady) {
       state.qInit = qCurr;
       state.prevPitchSample = pitchSample;
       state.pitchIntegral = 0;
@@ -408,8 +411,6 @@
       state.lastPitchOff = 0;
       yawOff = 0;
       pitchOff = 0;
-    } else if (isYawFrozen(state)) {
-      pitchOff = state.lastPitchOff;
     } else {
       var sampleDelta = pitchSample - state.prevPitchSample;
       sampleDelta = normalizeAngle(sampleDelta);
@@ -486,20 +487,22 @@
   };
 
   GyroControl.prototype._recalibrateForScreenRotate = function() {
-    if (this.base) {
+    var view = this.getView();
+    if (view) {
+      this.displayYaw = view.yaw();
+      this.displayPitch = view.pitch();
+    }
+    if (!this.base) {
+      this.base = { viewYaw: this.displayYaw, viewPitch: this.displayPitch };
+    } else {
       this.base.viewYaw = this.displayYaw;
       this.base.viewPitch = this.displayPitch;
     }
     if (this.orientState) {
       resetOrientState(this.orientState);
-      this.orientState.yawFreezeFrames = ROTATE_YAW_FREEZE_FRAMES;
+      this.orientState.settleFrames = SWITCH_SETTLE_FRAMES;
     }
-    if (this.base) {
-      this.displayYaw = this.base.viewYaw;
-      this.displayPitch = this.base.viewPitch;
-    }
-    var view = this.getView();
-    if (view && this.base) {
+    if (view) {
       view.setYaw(this.displayYaw);
       view.setPitch(this.displayPitch);
     }
@@ -574,10 +577,9 @@
       prevPitchSample: null,
       pitchIntegral: 0,
       lastPitchOff: 0,
-      yawFreezeFrames: 0,
       portraitReady: false,
       prevRotateBeta: null,
-      resyncAfterFreeze: false
+      settleFrames: 0
     };
 
     this._bindOrientation();
@@ -606,14 +608,10 @@
         : trackLandscape(self.latestEvent, screenAngle, self.orientState);
       if (!o || !o.ready) return;
 
-      if (isYawFrozen(self.orientState)) {
+      if (self.orientState.settleFrames > 0) {
         o.yawOff = 0;
-        if (o.landscape) {
-          o.pitchOff = self.orientState.lastPitchOff || 0;
-        } else {
-          o.pitchOff = 0;
-        }
-        consumeYawFreeze(self.orientState);
+        o.pitchOff = 0;
+        self.orientState.settleFrames--;
       }
 
       var targetYaw = self.base.viewYaw + o.yawOff;
