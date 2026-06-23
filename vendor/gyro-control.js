@@ -1,8 +1,7 @@
 /**
- * パノラマ用ジャイロ制御 v65
- * 縦の追従は v13/v14 に戻す ＋ 右横(270°)のみ許可
- * コンパスは「画面の上端」基準（screenRelativeHeading）
- * 詳細: vendor/gyro-STABLE-v65.txt
+ * パノラマ用ジャイロ制御 v66
+ * v65 ＋ 横画面(270°)だけ上下の向きを修正
+ * 詳細: vendor/gyro-STABLE-v66.txt
  */
 (function(global) {
   'use strict';
@@ -13,7 +12,7 @@
   var YAW_MAX_STEP = 0.040;
   var HEADING_SPIKE_DEG = 55;
   var SENSOR_LP = 0.22;
-  var BUILD = 'v65';
+  var BUILD = 'v66';
   var ALLOWED_LANDSCAPE_CUR = 270;
 
   function degToRad(d) { return d * Math.PI / 180; }
@@ -127,6 +126,9 @@
 
     state.fBeta = lp(state.fBeta, normalized.beta, SENSOR_LP);
     var pitchOff = degToRad(state.initBeta - state.fBeta);
+    if (normalized.screenAngle === ALLOWED_LANDSCAPE_CUR) {
+      pitchOff = -pitchOff;
+    }
 
     var heading = readHeadingDeg(normalized);
     var yawOff = 0;
