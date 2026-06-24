@@ -39,7 +39,7 @@ var APP_DATA = {
       "course": "aa",
       "lat": 33.520345,
       "lng": 131.21794,
-      "heading": 90
+      "heading": 180
     },
     {
       "id": "1-aa002",
@@ -77,7 +77,8 @@ var APP_DATA = {
       "position": 2,
       "course": "aa",
       "lat": 33.520525,
-      "lng": 131.21764
+      "lng": 131.21764,
+      "heading": 158
     },
     {
       "id": "2-aa003",
@@ -114,6 +115,7 @@ var APP_DATA = {
       "infoHotspots": [],
       "position": 3,
       "course": "aa",
+      "heading": 158,
       "hiResPeek": {
         "imageSrc": "aa003eos.jpg",
         "yawCenter": -5,

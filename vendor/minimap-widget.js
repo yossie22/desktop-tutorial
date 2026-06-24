@@ -1,6 +1,6 @@
 /**
- * VR画面用ミニ地図（丸表示・タップで拡大）
- * APP_DATA.mapConfig と各シーンの lat/lng を使用
+ * VR画面用ミニ地図（丸表示・タップで4倍拡大）
+ * APP_DATA.mapConfig と各シーンの lat/lng / heading を使用
  */
 (function(global) {
   'use strict';
@@ -15,6 +15,11 @@
     insets: { left: 0, top: 0, right: 0, bottom: 0 }
   };
 
+  var JA_DIRS_16 = [
+    '北', '北北東', '北東', '東北東', '東', '東南東', '南東', '南南東',
+    '南', '南南西', '南西', '西南西', '西', '西北西', '北西', '北北西'
+  ];
+
   function mercatorY(lat) {
     var r = lat * Math.PI / 180;
     return Math.log(Math.tan(Math.PI / 4 + r / 2));
@@ -22,14 +27,20 @@
 
   function normalizeConfig(cfg) {
     cfg = cfg || {};
-    var out = {
+    return {
       image: cfg.image || DEFAULT_CONFIG.image,
       bounds: cfg.bounds || DEFAULT_CONFIG.bounds,
       pinOffset: cfg.pinOffset || DEFAULT_CONFIG.pinOffset,
       insets: cfg.insets || DEFAULT_CONFIG.insets,
       twoPoint: cfg.twoPoint || null
     };
-    return out;
+  }
+
+  function bearingToJaLabel(deg) {
+    if (deg == null || isNaN(deg)) return '—';
+    var d = ((deg % 360) + 360) % 360;
+    var idx = Math.round(d / 22.5) % 16;
+    return JA_DIRS_16[idx];
   }
 
   function gpsToPercent(lat, lng, config) {
@@ -89,11 +100,31 @@
     });
   }
 
+  function findPinPercent(pins, sceneId, config) {
+    if (!sceneId || !pins || !pins.length) return null;
+    var i;
+    for (i = 0; i < pins.length; i++) {
+      if (pins[i].id === sceneId) {
+        return gpsToPercent(pins[i].lat, pins[i].lng, config);
+      }
+    }
+    return null;
+  }
+
+  function pegmanSvg() {
+    return '<g class="mini-map-pegman-g" style="display:none">' +
+      '<path class="mini-map-view-cone" d="M0,0 L-7.5,-15.5 Q0,-17.5 7.5,-15.5 Z"></path>' +
+      '<circle class="mini-map-pegman-body" r="4.2" cx="0" cy="1.2"></circle>' +
+      '</g>';
+  }
+
   function MiniMapWidget(rootEl, options) {
     this.rootEl = rootEl;
     this.config = normalizeConfig(options && options.config);
     this.pins = (options && options.pins) || [];
     this.expanded = false;
+    this.dirLabelEl = (options && options.dirLabelEl) ||
+      document.getElementById('miniMapDirLabel');
     this.diskEl = rootEl.querySelector('.mini-map-disk');
     this.imgEl = rootEl.querySelector('.mini-map-img');
     this.svgEl = rootEl.querySelector('.mini-map-overlay');
@@ -143,11 +174,10 @@
     this.svgEl.innerHTML =
       trail +
       pinDots +
-      '<g class="mini-map-bearing-g" style="display:none">' +
-      '<polygon class="mini-map-bearing-wedge" points="0,-7 4,4 -4,4"></polygon>' +
-      '</g>' +
+      '<text class="mini-map-north-mark" x="50" y="9">北</text>' +
+      pegmanSvg() +
       '<circle class="mini-map-you-dot" r="3.2" style="display:none"></circle>';
-    this.bearingG = this.svgEl.querySelector('.mini-map-bearing-g');
+    this.pegmanG = this.svgEl.querySelector('.mini-map-pegman-g');
     this.youDot = this.svgEl.querySelector('.mini-map-you-dot');
   };
 
@@ -159,8 +189,17 @@
     var pos = hasPos ? gpsToPercent(state.lat, state.lng, this.config) : null;
     var yawDeg = state.yawDeg || 0;
     var northOff = state.northOff;
-    var bearing = northOff != null && !isNaN(northOff) ? northOff + yawDeg : yawDeg;
+    var hasBearing = northOff != null && !isNaN(northOff);
+    var bearing = hasBearing ? northOff + yawDeg : yawDeg;
     var activeId = state.sceneId || '';
+    var showBearing = state.showBearing !== false && hasBearing;
+
+    if (!pos && activeId) {
+      pos = findPinPercent(this.pins, activeId, this.config);
+    }
+    if (!pos && showBearing) {
+      pos = { x: 50, y: 50 };
+    }
 
     var pinEls = this.svgEl.querySelectorAll('.mini-map-pin-dot');
     var j;
@@ -170,7 +209,7 @@
     }
 
     if (this.youDot) {
-      if (hasPos && pos) {
+      if (hasPos && pos && !showBearing) {
         this.youDot.setAttribute('cx', pos.x);
         this.youDot.setAttribute('cy', pos.y);
         this.youDot.style.display = '';
@@ -179,13 +218,23 @@
       }
     }
 
-    if (this.bearingG) {
-      if (hasPos && pos && state.showBearing !== false) {
-        this.bearingG.setAttribute('transform',
+    if (this.pegmanG) {
+      if (pos && showBearing) {
+        this.pegmanG.setAttribute('transform',
           'translate(' + pos.x + ' ' + pos.y + ') rotate(' + bearing + ')');
-        this.bearingG.style.display = '';
+        this.pegmanG.style.display = '';
       } else {
-        this.bearingG.style.display = 'none';
+        this.pegmanG.style.display = 'none';
+      }
+    }
+
+    if (this.dirLabelEl) {
+      if (showBearing) {
+        this.dirLabelEl.textContent = bearingToJaLabel(bearing);
+        this.dirLabelEl.style.display = '';
+      } else {
+        this.dirLabelEl.textContent = '—';
+        this.dirLabelEl.style.display = 'none';
       }
     }
   };
@@ -196,6 +245,7 @@
     gpsToPercent: gpsToPercent,
     buildPinsFromAppData: buildPinsFromAppData,
     normalizeConfig: normalizeConfig,
+    bearingToJaLabel: bearingToJaLabel,
     DEFAULT_CONFIG: DEFAULT_CONFIG
   };
 })(typeof window !== 'undefined' ? window : this);
