@@ -67,9 +67,10 @@
     gyroButton: {
       id: 'gyroButton',
       order: 70,
-      feature: 'hasGyroHelp',
+      always: true,
       defaultTitle: 'ジャイロ機能',
-      defaultBody: 'GYROマークが右上に表示の時これを押せば緑色のボタンに変わりスマホを回せばその方向が見えるようになります。\n※スマホを横位置にしたら再度ジャイロボタンを押してください。',
+      defaultBody: '360度画面の右上に青い「GYRO」があります。押して緑色になったら、端末を傾けるとその方向を見られます。※向きを変えたときは一度OFFにして、好きな向きのまま再度ONしてください。初めてのときは「モーション」の許可を選んでください。',
+      defaultBodyPc: 'このVRはスマートフォン・タブレットでもご覧いただけます。360度画面を開くと右上に「GYRO」が出ます。端末を傾けて、いろいろな方向を見てみてください。',
       markType: 'gyro'
     },
     sideBranch: {
@@ -215,6 +216,9 @@ function buildHelpConfig(appData, userCfg) {
         if (!userTexts.routeArrows || !userTexts.routeArrows.body) {
           step.body = step.body.replace(/。$/, '') + '（全' + features.routeSceneCount + 'か所）。';
         }
+      }
+      if (def.id === 'gyroButton' && !features.hasGyroHelp) {
+        step.body = pickText(userTexts, def.id, 'bodyPc', def.defaultBodyPc || step.body);
       }
       steps.push(step);
     });
