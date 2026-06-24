@@ -22,7 +22,12 @@
 <script>
 (function loadHelpAndRender() {
   var stamp = Date.now();
-  function boot() { HelpEngine.initHelpPage('#helpRoot'); }
+  function boot() {
+    if (global.HELP_CONFIG && !global.HELP_USER) {
+      global.HELP_USER = global.HELP_CONFIG;
+    }
+    HelpEngine.initHelpPage('#helpRoot');
+  }
   var onGitHub = /github\.io$/i.test(location.hostname);
   function loadConfig() {
     var fb = document.createElement('script');

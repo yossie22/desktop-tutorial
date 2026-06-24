@@ -21,7 +21,7 @@ body {
 h1 {
   font-size: 24px;
   margin: 0;
-  color: #ffe26a;
+  color: #66e8ff;
 }
 .back {
   margin-left: auto;
@@ -116,6 +116,27 @@ h1 {
   letter-spacing: -0.3px;
   box-shadow: 0 2px 8px rgba(0,0,0,0.45);
 }
+.step-mark--counter span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: #fff;
+  border: 3px solid #ff0000;
+  color: #0066ff;
+  font-size: 22px;
+  font-weight: bold;
+  font-family: sans-serif;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.35);
+}
+.step-text strong {
+  color: #ffe26a;
+}
+.step-text {
+  color: #d8d8d8;
+}
 .step-mark--compass {
   position: relative;
   width: 56px;
@@ -187,6 +208,7 @@ h1 {
   margin-top: 18px;
 }
 strong { color: #fff; }
+.card strong { color: #ffe26a; }
 .feature-tags {
   display: flex;
   flex-wrap: wrap;

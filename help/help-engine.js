@@ -14,59 +14,78 @@
       id: 'mapPin',
       order: 10,
       always: true,
-      defaultTitle: '地図のピンを押して場所を選びます。',
-      defaultBody: '見たい場所のピンを押すと、その場所の360度画面が開きます。',
+      defaultTitle: '地図のピンを押して見たい場面へ移動。',
+      defaultBody: '',
       markType: 'pin'
     },
     lookAround: {
       id: 'lookAround',
       order: 20,
       always: true,
-      defaultTitle: '指やマウスで見回します。',
-      defaultBody: '画面をドラッグすると、上下左右を自由に見渡せます。',
+      defaultTitle: '画面の操作方法',
+      defaultBody: 'マウスや指の操作で画面を回して広く見渡せます。',
       markType: 'look'
-    },
-    gyroButton: {
-      id: 'gyroButton',
-      order: 25,
-      feature: 'hasGyroHelp',
-      defaultTitle: '右上の GYRO で、向いた方を見られます。',
-      defaultBody: 'iPad・iPhone の360度画面では、右上に青い丸の「GYRO」が出ることがあります。押して緑色になったら、端末を向けた方向に画面がついてきます。縦画面・横画面どちらでも使えます。もう一度押すと止まります。初めてのときは「モーションと画面の向きのアクセスを許可」を選んでください。',
-      markType: 'gyro'
     },
     routeArrows: {
       id: 'routeArrows',
       order: 30,
       feature: 'hasRoute',
-      defaultTitle: '黄色い矢印で次の場所へ進みます。',
-      defaultBody: '画面中央付近の黄色い上下矢印を押すと、コース上の次のシーンへ移動します。',
+      defaultTitle: '黄色矢印でとなりのシーンに移動',
+      defaultBody: '横方向の矢印が出たら横移動や別コースに移動できます。',
       markType: 'image',
       imageSrc: ASSET.arrowUp,
       blink: false
     },
+    autoPlay: {
+      id: 'autoPlay',
+      order: 40,
+      feature: 'hasRoute',
+      defaultTitle: '黄色矢印を長押しで自動再生。',
+      defaultBody: '上下の矢印を長押しで、自動で次の場所へ進みます。止めたいときは画面をタップしてください。',
+      markType: 'image',
+      imageSrc: ASSET.arrowUp,
+      blink: false
+    },
+    mapButton: {
+      id: 'mapButton',
+      order: 50,
+      always: true,
+      defaultTitle: 'Mapボタンは地図への戻りです。',
+      defaultBody: '画面左下のMapボタンから地図に戻って別のピンを選べます。',
+      markType: 'image',
+      imageSrc: ASSET.mapBtn,
+      blink: false
+    },
+    compassBearing: {
+      id: 'compassBearing',
+      order: 60,
+      always: true,
+      defaultTitle: 'カウンターは今の場所をお知らせしています。',
+      defaultBody: 'これを長押しでボリューム表示、ダブルクリック（連続タップ）で画面角度が表示されます。',
+      markType: 'counter'
+    },
+    gyroButton: {
+      id: 'gyroButton',
+      order: 70,
+      feature: 'hasGyroHelp',
+      defaultTitle: 'ジャイロ機能',
+      defaultBody: 'GYROマークが右上に表示の時これを押せば緑色のボタンに変わりスマホを回せばその方向が見えるようになります。\n※スマホを横位置にしたら再度ジャイロボタンを押してください。',
+      markType: 'gyro'
+    },
     sideBranch: {
       id: 'sideBranch',
-      order: 40,
+      order: 35,
       feature: 'hasSideBranch',
+      explicitOnly: true,
       defaultTitle: '黄色矢印が点滅したら脇道へ。',
       defaultBody: '向きを合わせると黄色矢印が点滅します。点滅している矢印を押すと、脇道や別コースへ進めます。',
       markType: 'image',
       imageSrc: ASSET.arrowRight,
       blink: true
     },
-    autoPlay: {
-      id: 'autoPlay',
-      order: 50,
-      feature: 'hasRoute',
-      defaultTitle: '黄色矢印を長押しで自動再生。',
-      defaultBody: '上下の黄色矢印を長押しすると、自動で次の場所へ進みます。止めたいときは画面をタップしてください。',
-      markType: 'image',
-      imageSrc: ASSET.arrowUp,
-      blink: false
-    },
     guideVideo: {
       id: 'guideVideo',
-      order: 60,
+      order: 75,
       feature: 'hasGuideVideo',
       defaultTitle: 'ガイド人物が案内します。',
       defaultBody: 'パノラマ内に表示される人物動画が、見どころを案内することがあります。',
@@ -75,40 +94,22 @@
     },
     hiResPeek: {
       id: 'hiResPeek',
-      order: 70,
+      order: 80,
       feature: 'hasHiResPeek',
-      defaultTitle: 'ピンクの虫眼鏡をタップします。',
-      defaultBody: '最後のシーン付近で、ピンク色の枠と虫眼鏡が点滅します。枠をタップすると高解像度の写真が開き、詳しく見られます。',
+      defaultTitle: '虫眼鏡があるところでは拡大して見えます。',
+      defaultBody: '虫眼鏡とその範囲の点滅表示が出たらクリックでくっきり見えます。',
       markType: 'magnifier',
       magnifierColor: 'pink'
     },
     hiResPeekVr: {
       id: 'hiResPeekVr',
-      order: 80,
+      order: 90,
       feature: 'hasHiResPeek',
-      defaultTitle: '左下のボタンでVRに戻ります。',
-      defaultBody: '高解像度の写真を拡大中は、左下のアイコンを押すと360度のVR画面に戻れます。',
+      defaultTitle: 'VRボタン',
+      defaultBody: '虫眼鏡で拡大表示から元のVR画像に戻ります。',
       markType: 'image',
       imageSrc: ASSET.vrBtn,
       blink: false
-    },
-    mapButton: {
-      id: 'mapButton',
-      order: 90,
-      always: true,
-      defaultTitle: '地図ボタンでいつでも地図へ戻れます。',
-      defaultBody: '迷ったときは画面左下の地図ボタンから、最初の地図に戻って別のピンを選べます。',
-      markType: 'image',
-      imageSrc: ASSET.mapBtn,
-      blink: false
-    },
-    compassBearing: {
-      id: 'compassBearing',
-      order: 95,
-      always: true,
-      defaultTitle: '番号をダブルタップするとコンパスが出ます。',
-      defaultBody: '画面右下の番号を素早く2回タップすると、右上に丸いコンパスと画面角度が出ます。コンパスの針は北を指します。画面を回すと針も方角に合わせて動きます。',
-      markType: 'compass'
     }
   };
 
@@ -196,6 +197,10 @@ function buildHelpConfig(appData, userCfg) {
       if (!def.always) {
         if (!def.feature || !features[def.feature]) return;
       }
+      if (def.explicitOnly) {
+        var explicit = userTexts[def.id];
+        if (!explicit || (!explicit.title && !explicit.body)) return;
+      }
       var step = {
         id: def.id,
         title: pickText(userTexts, def.id, 'title', def.defaultTitle),
@@ -218,15 +223,18 @@ function buildHelpConfig(appData, userCfg) {
       return (STEP_CATALOG[a.id].order || 0) - (STEP_CATALOG[b.id].order || 0);
     });
 
-    var notes = Array.isArray(userCfg.notes) && userCfg.notes.length
-      ? userCfg.notes
-      : [{
-          title: 'iPad・iPhone の場合',
-          body: '画面を指でなぞると見回せます。虫眼鏡・矢印・ピンは軽くタップしてください。',
-          tip: features.hasHiResPeekVideo
-            ? '動画がある場合、最初に画面をタップすると再生が始まることがあります。'
-            : '音がある場合、最初に画面をタップすると再生できることがあります。'
-        }];
+    var notes = [];
+    if (Array.isArray(userCfg.notes) && userCfg.notes.length) {
+      notes = userCfg.notes;
+    } else if (!Object.prototype.hasOwnProperty.call(userCfg, 'notes')) {
+      notes = [{
+        title: 'iPad・iPhone の場合',
+        body: '画面を指でなぞると見回せます。虫眼鏡・矢印・ピンは軽くタップしてください。',
+        tip: features.hasHiResPeekVideo
+          ? '動画がある場合、最初に画面をタップすると再生が始まることがあります。'
+          : '音がある場合、最初に画面をタップすると再生できることがあります。'
+      }];
+    }
 
     return {
       title: features.tourTitle + ' — 使い方',
@@ -291,6 +299,8 @@ function buildHelpConfig(appData, userCfg) {
         '<span class="help-compass-dial">N</span>' +
         '<span class="help-compass-needle"></span>' +
         '</div>';
+    } else if (step.markType === 'counter') {
+      html = '<div class="step-mark step-mark--counter" aria-hidden="true"><span>1</span></div>';
     } else if (step.imageSrc) {
       var blinkClass = step.blink ? ' blink' : '';
       html = '<div class="step-mark' + blinkClass + '">' +
@@ -318,9 +328,10 @@ function buildHelpConfig(appData, userCfg) {
     }
     if (stepsEl) {
       stepsEl.innerHTML = (cfg.steps || []).map(function(step) {
+        var bodyHtml = step.body ? '<br>' + nl2br(step.body) : '';
         return '<div class="card step">' +
           renderStepMark(step) +
-          '<div><strong>' + escapeHtml(step.title || '') + '</strong><br>' + nl2br(step.body || '') + '</div>' +
+          '<div class="step-text"><strong>' + escapeHtml(step.title || '') + '</strong>' + bodyHtml + '</div>' +
           '</div>';
       }).join('');
     }
