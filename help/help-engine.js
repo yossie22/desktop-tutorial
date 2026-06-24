@@ -97,8 +97,8 @@
       id: 'hiResPeek',
       order: 80,
       feature: 'hasHiResPeek',
-      defaultTitle: '虫眼鏡があるところでは拡大して見えます。',
-      defaultBody: '虫眼鏡とその範囲の点滅表示が出たらクリックでくっきり見えます。',
+      defaultTitle: '虫眼鏡でくっきり見られます。',
+      defaultBody: '虫眼鏡と範囲の点滅が出たらタップしてください。ゆっくり拡大して高画質で見えます。※スマートフォン・タブレットでは横画面（ランドスケープ）でのご利用をおすすめします。縦画面では拡大しすぎることがあります。',
       markType: 'magnifier',
       magnifierColor: 'pink'
     },
@@ -107,7 +107,7 @@
       order: 90,
       feature: 'hasHiResPeek',
       defaultTitle: 'VRボタン',
-      defaultBody: '虫眼鏡で拡大表示から元のVR画像に戻ります。',
+      defaultBody: '拡大表示から元のVR画像に戻ります。画面に指を置くとVRボタンが出ます。',
       markType: 'image',
       imageSrc: ASSET.vrBtn,
       blink: false
@@ -234,9 +234,10 @@ function buildHelpConfig(appData, userCfg) {
       notes = [{
         title: 'iPad・iPhone の場合',
         body: '画面を指でなぞると見回せます。虫眼鏡・矢印・ピンは軽くタップしてください。',
-        tip: features.hasHiResPeekVideo
-          ? '動画がある場合、最初に画面をタップすると再生が始まることがあります。'
-          : '音がある場合、最初に画面をタップすると再生できることがあります。'
+        tip: (features.hasHiResPeek ? '虫眼鏡の拡大は横画面（ランドスケープ）がおすすめです。縦画面では拡大しすぎることがあります。' : '') +
+          (features.hasHiResPeekVideo
+            ? (features.hasHiResPeek ? ' ' : '') + '動画がある場合、拡大が終わってから再生が始まります。'
+            : (!features.hasHiResPeek ? '音がある場合、最初に画面をタップすると再生できることがあります。' : ''))
       }];
     }
 
