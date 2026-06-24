@@ -57,7 +57,7 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #000; }
 #gyroButton.visible { opacity: 0.88; pointer-events: auto; }
 #gyroButton.is-on { background: rgba(22, 155, 78, 0.94); }
 #gyroButton::after {
-  content: 'v68';
+  content: 'v69';
   position: absolute;
   bottom: -2px;
   right: -2px;
@@ -865,7 +865,7 @@ body.embed-shadow #hiResPeekOverlay { display: none !important; }
 </div>
 
 <script src="vendor/marzipano.js"></script>
-<script src="vendor/gyro-control.js?v=68"></script>
+<script src="vendor/gyro-control.js?v=69"></script>
 <script>
 // ポータル画像は data.js の imageHotspots（sourceScene / sceneStartId で出発地に紐付け）
 
@@ -1862,8 +1862,7 @@ if (typeof GyroControl !== 'undefined' && GyroControl.isSupportedDevice() && gyr
   sceneGyro = new GyroControl(function() { return currentView; });
   sceneGyro.setGetViewer(function() { return viewer; });
   sceneGyro.setPanoElement(panoElement);
-  sceneGyro.setAutoLandscape(true);
-  GyroControl.installPassiveAutoLandscape(sceneGyro);
+  sceneGyro.setAutoLandscape(false);
   sceneGyro.setHooks({
     onStart: function() {
       try { viewer.controls().disable(); } catch (e0) {}
