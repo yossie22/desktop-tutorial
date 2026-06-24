@@ -23,8 +23,8 @@
 (function loadHelpAndRender() {
   var stamp = Date.now();
   function boot() {
-    if (global.HELP_CONFIG && !global.HELP_USER) {
-      global.HELP_USER = global.HELP_CONFIG;
+    if (window.HELP_CONFIG && !window.HELP_USER) {
+      window.HELP_USER = window.HELP_CONFIG;
     }
     HelpEngine.initHelpPage('#helpRoot');
   }
