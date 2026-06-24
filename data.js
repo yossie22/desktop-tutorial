@@ -131,7 +131,7 @@ var APP_DATA = {
         "maskType": "softRect",
         "maskStrength": 70,
         "magnifierColor": "pink",
-        "contentCrop": { "left": 0, "top": 0.46, "width": 0.54, "height": 0.54 },
+        "contentCrop": { "left": 0, "top": 0.54, "width": 0.46, "height": 0.46 },
         "videoSrc": "video/fairy.webm",
         "videoSrcIos": "video/fairy.mp4",
         "videoX": 15.5,

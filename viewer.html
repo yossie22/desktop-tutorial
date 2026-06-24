@@ -859,7 +859,7 @@ body.embed-shadow #pano:active { cursor: grabbing; }
   position: fixed;
   inset: 0;
   z-index: 2500;
-  background: #000;
+  background: transparent;
   touch-action: none;
   display: none;
   opacity: 0;
@@ -879,15 +879,33 @@ body.embed-shadow #pano:active { cursor: grabbing; }
   overflow: hidden;
   touch-action: none;
   cursor: grab;
+  background: rgba(0, 0, 0, 0.18);
 }
-#hiResPeekView.is-dragging { cursor: grabbing; }
+#hiResPeekBackdropCanvas {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 0;
+  filter: blur(26px) saturate(1.08) brightness(0.62);
+}
 #hiResPeekMediaStage {
   position: absolute;
   left: 50%;
   top: 50%;
   transform-origin: center center;
   pointer-events: none;
+  z-index: 1;
 }
+#hiResPeekCropCanvas {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: block;
+  pointer-events: none;
+}
+#hiResPeekView.is-dragging { cursor: grabbing; }
 #hiResPeekBaseImg {
   position: absolute;
   left: 0;
@@ -1012,7 +1030,9 @@ body.embed-shadow #hiResPeekOverlay { display: none !important; }
 <div id="hiResPeekOverlay" aria-hidden="true">
   <img id="hiResPeekVrBtn" src="VR-removebg-preview.png?v=2" alt="VRに戻る">
   <div id="hiResPeekView">
+    <canvas id="hiResPeekBackdropCanvas" class="hi-res-peek-backdrop" aria-hidden="true"></canvas>
     <div id="hiResPeekMediaStage">
+      <canvas id="hiResPeekCropCanvas" aria-hidden="true"></canvas>
       <img id="hiResPeekBaseImg" alt="">
       <div id="hiResPeekShadowWrap" class="hi-res-peek-shadow-wrap" hidden>
         <img id="hiResPeekShadowImg" class="hi-res-peek-shadow-img" alt="">
@@ -1373,7 +1393,7 @@ data.scenes.forEach(function(scene) {
 });
 
 // ビルド識別（どのファイルが実行されているか確認用）
-var BUILD_STAMP = '2026-06-24-hiResPeekCrop';
+var BUILD_STAMP = '2026-06-24-hiResPeekCrop2';
 var guideVideoPreloadBySrc = {};
 var guideVideoSessionDone = {};
 console.log('🧩 viewer build:', BUILD_STAMP);
@@ -1475,13 +1495,61 @@ function hiResPeekBoundsFromConfig(cfg, iw, ih) {
 function hiResPeekResolveContentBounds(cfg, img) {
   var iw = img.naturalWidth;
   var ih = img.naturalHeight;
+  var fromCfg = hiResPeekBoundsFromConfig(cfg, iw, ih);
+  if (fromCfg) return fromCfg;
   if (!cfg || cfg.trimBlack !== false) {
     var auto = hiResPeekDetectContentBounds(img);
     if (auto.w < iw * 0.97 || auto.h < ih * 0.97) return auto;
   }
-  var fromCfg = hiResPeekBoundsFromConfig(cfg, iw, ih);
-  if (fromCfg) return fromCfg;
   return { x: 0, y: 0, w: iw, h: ih };
+}
+
+function hiResPeekDrawBackdrop(view, img, bounds, vw, vh) {
+  var bc = document.getElementById('hiResPeekBackdropCanvas');
+  if (!bc || !view || !img || !img.naturalWidth || !bounds) return;
+  var dpr = Math.min(window.devicePixelRatio || 1, 2);
+  bc.width = Math.max(1, Math.round(vw * dpr));
+  bc.height = Math.max(1, Math.round(vh * dpr));
+  bc.style.width = vw + 'px';
+  bc.style.height = vh + 'px';
+  bc.style.display = 'block';
+  var ctx = bc.getContext('2d');
+  if (!ctx) return;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, vw, vh);
+  try {
+    var cover = Math.max(vw / bounds.w, vh / bounds.h) * 1.12;
+    var dw = bounds.w * cover;
+    var dh = bounds.h * cover;
+    ctx.drawImage(img, bounds.x, bounds.y, bounds.w, bounds.h,
+      (vw - dw) / 2, (vh - dh) / 2, dw, dh);
+  } catch (e) {
+    bc.style.display = 'none';
+  }
+}
+
+function hiResPeekUpdateCropCanvas(stage, img, bounds) {
+  var cc = document.getElementById('hiResPeekCropCanvas');
+  if (!cc || !stage || !img || !img.naturalWidth || !bounds) return false;
+  cc.width = bounds.w;
+  cc.height = bounds.h;
+  cc.style.width = bounds.w + 'px';
+  cc.style.height = bounds.h + 'px';
+  cc.style.display = 'block';
+  var ctx = cc.getContext('2d');
+  if (!ctx) return false;
+  ctx.clearRect(0, 0, bounds.w, bounds.h);
+  try {
+    ctx.drawImage(img, bounds.x, bounds.y, bounds.w, bounds.h, 0, 0, bounds.w, bounds.h);
+    img.style.visibility = 'hidden';
+    img.style.opacity = '0';
+    return true;
+  } catch (e) {
+    cc.style.display = 'none';
+    img.style.visibility = '';
+    img.style.opacity = '1';
+    return false;
+  }
 }
 var hiResPeekHotspotEl = null;
 var hiResPeekActiveCfg = null;
@@ -1862,20 +1930,26 @@ function fitHiResPeekImage() {
   var bounds = hiResPeekResolveContentBounds(cfg, img);
   if (!bounds.w || !bounds.h) bounds = { x: 0, y: 0, w: iw, h: ih };
   hiResPeekViewState.contentBounds = bounds;
-  hiResPeekViewState.baseScale = Math.max(vw / bounds.w, vh / bounds.h);
+  hiResPeekViewState.baseScale = Math.max(vw / bounds.w, vh / bounds.h) * 1.04;
   hiResPeekViewState.zoom = 1;
   hiResPeekViewState.panX = 0;
   hiResPeekViewState.panY = 0;
   stage.style.width = bounds.w + 'px';
   stage.style.height = bounds.h + 'px';
-  img.style.position = 'absolute';
-  img.style.left = (-bounds.x) + 'px';
-  img.style.top = (-bounds.y) + 'px';
-  img.style.width = iw + 'px';
-  img.style.height = ih + 'px';
+  var usedCanvas = hiResPeekUpdateCropCanvas(stage, img, bounds);
+  if (!usedCanvas) {
+    img.style.position = 'absolute';
+    img.style.left = (-bounds.x) + 'px';
+    img.style.top = (-bounds.y) + 'px';
+    img.style.width = iw + 'px';
+    img.style.height = ih + 'px';
+    img.style.visibility = '';
+    img.style.opacity = '1';
+  }
+  hiResPeekDrawBackdrop(view, img, bounds, vw, vh);
   syncHiResPeekVideoLayout(cfg);
   applyHiResPeekTransform();
-  console.log('🔍 高画質覗き: 切り抜き表示', bounds.w + '×' + bounds.h, '（元画像', iw + '×' + ih + '）');
+  console.log('🔍 高画質覗き: 切り抜き', bounds.x + ',' + bounds.y, bounds.w + '×' + bounds.h, '／元', iw + '×' + ih);
 }
 
 function setHiResPeekZoom(nextZoom, anchorX, anchorY) {
@@ -1910,7 +1984,7 @@ function openHiResPeekOverlay() {
   overlay.setAttribute('aria-hidden', 'false');
   overlay.style.display = 'block';
   baseImg.style.opacity = '0';
-  baseImg.crossOrigin = 'anonymous';
+  baseImg.removeAttribute('crossorigin');
   var url = hiResPeekImageUrl(cfg.imageSrc);
   function showHiResPeekImageReady() {
     requestAnimationFrame(function() {
@@ -1918,7 +1992,12 @@ function openHiResPeekOverlay() {
         fitHiResPeekImage();
         setupHiResPeekOverlayVideo(cfg);
         syncHiResPeekShadowLayer(cfg);
-        baseImg.style.opacity = '1';
+        var cc = document.getElementById('hiResPeekCropCanvas');
+        if (cc && cc.style.display !== 'none') {
+          baseImg.style.opacity = '0';
+        } else {
+          baseImg.style.opacity = '1';
+        }
       });
     });
   }
@@ -1945,7 +2024,14 @@ function closeHiResPeekOverlay() {
   hideHiResPeekVrUi();
   teardownHiResPeekOverlayVideo();
   overlay.classList.remove('open');
-  if (baseImg) baseImg.style.opacity = '0';
+  if (baseImg) {
+    baseImg.style.opacity = '0';
+    baseImg.style.visibility = '';
+  }
+  var bc = document.getElementById('hiResPeekBackdropCanvas');
+  if (bc) bc.style.display = 'none';
+  var cc = document.getElementById('hiResPeekCropCanvas');
+  if (cc) cc.style.display = 'none';
   setTimeout(function() {
     if (!hiResPeekOpen) {
       overlay.setAttribute('aria-hidden', 'true');
