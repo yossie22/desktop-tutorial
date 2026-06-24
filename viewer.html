@@ -1386,7 +1386,63 @@ var hiResPeekPinch = null;
 var hiResPeekHintTimer = null;
 var hiResPeekVrBtnEl = null;
 var hiResPeekUiTimeout = null;
-var hiResPeekViewState = { baseScale: 1, zoom: 1, panX: 0, panY: 0 };
+var hiResPeekViewState = { baseScale: 1, zoom: 1, panX: 0, panY: 0, contentBounds: null };
+
+function hiResPeekDetectContentBounds(img, threshold) {
+  var w = img.naturalWidth;
+  var h = img.naturalHeight;
+  if (!w || !h) return { x: 0, y: 0, w: w, h: h };
+  threshold = threshold == null ? 14 : threshold;
+  var sampleW = Math.min(320, w);
+  var sampleH = Math.min(320, h);
+  var canvas = document.createElement('canvas');
+  canvas.width = sampleW;
+  canvas.height = sampleH;
+  var ctx = canvas.getContext('2d', { willReadFrequently: true });
+  if (!ctx) return { x: 0, y: 0, w: w, h: h };
+  ctx.drawImage(img, 0, 0, sampleW, sampleH);
+  var data;
+  try {
+    data = ctx.getImageData(0, 0, sampleW, sampleH).data;
+  } catch (e) {
+    return { x: 0, y: 0, w: w, h: h };
+  }
+  var minX = sampleW;
+  var minY = sampleH;
+  var maxX = 0;
+  var maxY = 0;
+  var x;
+  var y;
+  var i;
+  var r;
+  var g;
+  var b;
+  for (y = 0; y < sampleH; y++) {
+    for (x = 0; x < sampleW; x++) {
+      i = (y * sampleW + x) * 4;
+      r = data[i];
+      g = data[i + 1];
+      b = data[i + 2];
+      if (r > threshold || g > threshold || b > threshold) {
+        if (x < minX) minX = x;
+        if (y < minY) minY = y;
+        if (x > maxX) maxX = x;
+        if (y > maxY) maxY = y;
+      }
+    }
+  }
+  if (maxX < minX) return { x: 0, y: 0, w: w, h: h };
+  var scaleX = w / sampleW;
+  var scaleY = h / sampleH;
+  var padX = Math.max(2, Math.round(w * 0.012));
+  var padY = Math.max(2, Math.round(h * 0.012));
+  var bx = Math.max(0, Math.floor(minX * scaleX) - padX);
+  var by = Math.max(0, Math.floor(minY * scaleY) - padY);
+  var bw = Math.min(w - bx, Math.ceil((maxX - minX + 1) * scaleX) + padX * 2);
+  var bh = Math.min(h - by, Math.ceil((maxY - minY + 1) * scaleY) + padY * 2);
+  if (bw < w * 0.2 || bh < h * 0.2) return { x: 0, y: 0, w: w, h: h };
+  return { x: bx, y: by, w: bw, h: bh };
+}
 var hiResPeekHotspotEl = null;
 var hiResPeekActiveCfg = null;
 
@@ -1756,15 +1812,22 @@ function fitHiResPeekImage() {
   var vh = view.clientHeight;
   var iw = img.naturalWidth;
   var ih = img.naturalHeight;
-  hiResPeekViewState.baseScale = Math.max(vw / iw, vh / ih);
+  var cfg = currentSceneObj ? getHiResPeekConfig(currentSceneObj.data) : null;
+  var trimBlack = !cfg || cfg.trimBlack !== false;
+  var bounds = trimBlack ? hiResPeekDetectContentBounds(img) : { x: 0, y: 0, w: iw, h: ih };
+  if (!bounds.w || !bounds.h) bounds = { x: 0, y: 0, w: iw, h: ih };
+  hiResPeekViewState.contentBounds = bounds;
+  hiResPeekViewState.baseScale = Math.max(vw / bounds.w, vh / bounds.h);
   hiResPeekViewState.zoom = 1;
-  hiResPeekViewState.panX = 0;
-  hiResPeekViewState.panY = 0;
+  var cx = bounds.x + bounds.w / 2;
+  var cy = bounds.y + bounds.h / 2;
+  var s = hiResPeekViewState.baseScale;
+  hiResPeekViewState.panX = (iw / 2 - cx) * s;
+  hiResPeekViewState.panY = (ih / 2 - cy) * s;
   stage.style.width = iw + 'px';
   stage.style.height = ih + 'px';
   img.style.width = iw + 'px';
   img.style.height = ih + 'px';
-  var cfg = currentSceneObj ? getHiResPeekConfig(currentSceneObj.data) : null;
   syncHiResPeekVideoLayout(cfg);
   applyHiResPeekTransform();
 }
