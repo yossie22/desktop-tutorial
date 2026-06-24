@@ -1373,7 +1373,7 @@ data.scenes.forEach(function(scene) {
 });
 
 // ビルド識別（どのファイルが実行されているか確認用）
-var BUILD_STAMP = '2026-06-16-compassHeading';
+var BUILD_STAMP = '2026-06-24-hiResPeekCrop';
 var guideVideoPreloadBySrc = {};
 var guideVideoSessionDone = {};
 console.log('🧩 viewer build:', BUILD_STAMP);
@@ -1388,13 +1388,38 @@ var hiResPeekVrBtnEl = null;
 var hiResPeekUiTimeout = null;
 var hiResPeekViewState = { baseScale: 1, zoom: 1, panX: 0, panY: 0, contentBounds: null };
 
+function hiResPeekIsContentPixel(r, g, b, threshold) {
+  var lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  return lum > threshold;
+}
+
+function hiResPeekRowContentRatio(data, sampleW, y, threshold) {
+  var x;
+  var count = 0;
+  for (x = 0; x < sampleW; x++) {
+    var i = (y * sampleW + x) * 4;
+    if (hiResPeekIsContentPixel(data[i], data[i + 1], data[i + 2], threshold)) count++;
+  }
+  return count / sampleW;
+}
+
+function hiResPeekColContentRatio(data, sampleW, sampleH, x, threshold) {
+  var y;
+  var count = 0;
+  for (y = 0; y < sampleH; y++) {
+    var i = (y * sampleW + x) * 4;
+    if (hiResPeekIsContentPixel(data[i], data[i + 1], data[i + 2], threshold)) count++;
+  }
+  return count / sampleH;
+}
+
 function hiResPeekDetectContentBounds(img, threshold) {
   var w = img.naturalWidth;
   var h = img.naturalHeight;
   if (!w || !h) return { x: 0, y: 0, w: w, h: h };
-  threshold = threshold == null ? 14 : threshold;
-  var sampleW = Math.min(320, w);
-  var sampleH = Math.min(320, h);
+  threshold = threshold == null ? 10 : threshold;
+  var sampleW = Math.min(400, w);
+  var sampleH = Math.min(400, h);
   var canvas = document.createElement('canvas');
   canvas.width = sampleW;
   canvas.height = sampleH;
@@ -1405,43 +1430,58 @@ function hiResPeekDetectContentBounds(img, threshold) {
   try {
     data = ctx.getImageData(0, 0, sampleW, sampleH).data;
   } catch (e) {
+    console.warn('⚠️ 高画質覗き: 画像解析できません（黒余白の自動除去をスキップ）');
     return { x: 0, y: 0, w: w, h: h };
   }
-  var minX = sampleW;
-  var minY = sampleH;
-  var maxX = 0;
-  var maxY = 0;
-  var x;
-  var y;
-  var i;
-  var r;
-  var g;
-  var b;
-  for (y = 0; y < sampleH; y++) {
-    for (x = 0; x < sampleW; x++) {
-      i = (y * sampleW + x) * 4;
-      r = data[i];
-      g = data[i + 1];
-      b = data[i + 2];
-      if (r > threshold || g > threshold || b > threshold) {
-        if (x < minX) minX = x;
-        if (y < minY) minY = y;
-        if (x > maxX) maxX = x;
-        if (y > maxY) maxY = y;
-      }
-    }
-  }
-  if (maxX < minX) return { x: 0, y: 0, w: w, h: h };
+  var top = 0;
+  var bottom = sampleH - 1;
+  var left = 0;
+  var right = sampleW - 1;
+  var minRatio = 0.012;
+  while (top < bottom && hiResPeekRowContentRatio(data, sampleW, top, threshold) < minRatio) top++;
+  while (bottom > top && hiResPeekRowContentRatio(data, sampleW, bottom, threshold) < minRatio) bottom--;
+  while (left < right && hiResPeekColContentRatio(data, sampleW, sampleH, left, threshold) < minRatio) left++;
+  while (right > left && hiResPeekColContentRatio(data, sampleW, sampleH, right, threshold) < minRatio) right--;
+  if (right <= left || bottom <= top) return { x: 0, y: 0, w: w, h: h };
   var scaleX = w / sampleW;
   var scaleY = h / sampleH;
-  var padX = Math.max(2, Math.round(w * 0.012));
-  var padY = Math.max(2, Math.round(h * 0.012));
-  var bx = Math.max(0, Math.floor(minX * scaleX) - padX);
-  var by = Math.max(0, Math.floor(minY * scaleY) - padY);
-  var bw = Math.min(w - bx, Math.ceil((maxX - minX + 1) * scaleX) + padX * 2);
-  var bh = Math.min(h - by, Math.ceil((maxY - minY + 1) * scaleY) + padY * 2);
-  if (bw < w * 0.2 || bh < h * 0.2) return { x: 0, y: 0, w: w, h: h };
+  var padX = Math.max(2, Math.round(w * 0.01));
+  var padY = Math.max(2, Math.round(h * 0.01));
+  var bx = Math.max(0, Math.floor(left * scaleX) - padX);
+  var by = Math.max(0, Math.floor(top * scaleY) - padY);
+  var br = Math.min(w - 1, Math.ceil((right + 1) * scaleX) + padX);
+  var bb = Math.min(h - 1, Math.ceil((bottom + 1) * scaleY) + padY);
+  var bw = Math.max(1, br - bx);
+  var bh = Math.max(1, bb - by);
+  if (bw >= w * 0.97 && bh >= h * 0.97) return { x: 0, y: 0, w: w, h: h };
   return { x: bx, y: by, w: bw, h: bh };
+}
+
+function hiResPeekBoundsFromConfig(cfg, iw, ih) {
+  if (!cfg || !cfg.contentCrop) return null;
+  var cc = cfg.contentCrop;
+  var fx = cc.left != null ? Number(cc.left) : (cc.x != null ? Number(cc.x) : 0);
+  var fy = cc.top != null ? Number(cc.top) : (cc.y != null ? Number(cc.y) : 0);
+  var fw = cc.width != null ? Number(cc.width) : (cc.w != null ? Number(cc.w) : 1);
+  var fh = cc.height != null ? Number(cc.height) : (cc.h != null ? Number(cc.h) : 1);
+  if (!isFinite(fx) || !isFinite(fy) || !isFinite(fw) || !isFinite(fh)) return null;
+  var bx = Math.max(0, Math.min(iw - 1, Math.round(fx * iw)));
+  var by = Math.max(0, Math.min(ih - 1, Math.round(fy * ih)));
+  var bw = Math.max(1, Math.min(iw - bx, Math.round(fw * iw)));
+  var bh = Math.max(1, Math.min(ih - by, Math.round(fh * ih)));
+  return { x: bx, y: by, w: bw, h: bh };
+}
+
+function hiResPeekResolveContentBounds(cfg, img) {
+  var iw = img.naturalWidth;
+  var ih = img.naturalHeight;
+  if (!cfg || cfg.trimBlack !== false) {
+    var auto = hiResPeekDetectContentBounds(img);
+    if (auto.w < iw * 0.97 || auto.h < ih * 0.97) return auto;
+  }
+  var fromCfg = hiResPeekBoundsFromConfig(cfg, iw, ih);
+  if (fromCfg) return fromCfg;
+  return { x: 0, y: 0, w: iw, h: ih };
 }
 var hiResPeekHotspotEl = null;
 var hiResPeekActiveCfg = null;
@@ -1681,9 +1721,10 @@ function syncHiResPeekShadowLayer(cfg) {
   var iw = baseImg.naturalWidth || parseInt(baseImg.style.width, 10) || 0;
   var ih = baseImg.naturalHeight || parseInt(baseImg.style.height, 10) || 0;
   if (!iw || !ih) return;
+  var crop = hiResPeekViewState.contentBounds || { x: 0, y: 0, w: iw, h: ih };
   wrap.hidden = false;
-  wrap.style.left = '0';
-  wrap.style.top = '0';
+  wrap.style.left = (-crop.x) + 'px';
+  wrap.style.top = (-crop.y) + 'px';
   wrap.style.width = iw + 'px';
   wrap.style.height = ih + 'px';
   img.style.width = '100%';
@@ -1747,13 +1788,14 @@ function syncHiResPeekVideoLayout(cfg) {
     syncHiResPeekShadowLayer(cfg);
     return;
   }
+  var crop = hiResPeekViewState.contentBounds || { x: 0, y: 0, w: iw, h: ih };
   var w = Math.max(8, iw * vc.widthPct / 100);
   var ar = vid.videoWidth > 0 && vid.videoHeight > 0 ? vid.videoHeight / vid.videoWidth : 1.35;
   var h = w * ar;
   var x = iw * vc.xPct / 100 - w / 2;
   var y = ih * vc.yPct / 100 - h / 2;
-  wrap.style.left = x + 'px';
-  wrap.style.top = y + 'px';
+  wrap.style.left = (x - crop.x) + 'px';
+  wrap.style.top = (y - crop.y) + 'px';
   wrap.style.width = w + 'px';
   wrap.style.height = h + 'px';
   syncHiResPeekShadowLayer(cfg);
@@ -1808,28 +1850,32 @@ function fitHiResPeekImage() {
   var stage = document.getElementById('hiResPeekMediaStage');
   var img = document.getElementById('hiResPeekBaseImg');
   if (!view || !stage || !img || !img.naturalWidth) return;
-  var vw = view.clientWidth;
-  var vh = view.clientHeight;
+  var vw = view.clientWidth || window.innerWidth;
+  var vh = view.clientHeight || window.innerHeight;
+  if (!vw || !vh) {
+    requestAnimationFrame(fitHiResPeekImage);
+    return;
+  }
   var iw = img.naturalWidth;
   var ih = img.naturalHeight;
   var cfg = currentSceneObj ? getHiResPeekConfig(currentSceneObj.data) : null;
-  var trimBlack = !cfg || cfg.trimBlack !== false;
-  var bounds = trimBlack ? hiResPeekDetectContentBounds(img) : { x: 0, y: 0, w: iw, h: ih };
+  var bounds = hiResPeekResolveContentBounds(cfg, img);
   if (!bounds.w || !bounds.h) bounds = { x: 0, y: 0, w: iw, h: ih };
   hiResPeekViewState.contentBounds = bounds;
   hiResPeekViewState.baseScale = Math.max(vw / bounds.w, vh / bounds.h);
   hiResPeekViewState.zoom = 1;
-  var cx = bounds.x + bounds.w / 2;
-  var cy = bounds.y + bounds.h / 2;
-  var s = hiResPeekViewState.baseScale;
-  hiResPeekViewState.panX = (iw / 2 - cx) * s;
-  hiResPeekViewState.panY = (ih / 2 - cy) * s;
-  stage.style.width = iw + 'px';
-  stage.style.height = ih + 'px';
+  hiResPeekViewState.panX = 0;
+  hiResPeekViewState.panY = 0;
+  stage.style.width = bounds.w + 'px';
+  stage.style.height = bounds.h + 'px';
+  img.style.position = 'absolute';
+  img.style.left = (-bounds.x) + 'px';
+  img.style.top = (-bounds.y) + 'px';
   img.style.width = iw + 'px';
   img.style.height = ih + 'px';
   syncHiResPeekVideoLayout(cfg);
   applyHiResPeekTransform();
+  console.log('🔍 高画質覗き: 切り抜き表示', bounds.w + '×' + bounds.h, '（元画像', iw + '×' + ih + '）');
 }
 
 function setHiResPeekZoom(nextZoom, anchorX, anchorY) {
@@ -1864,12 +1910,17 @@ function openHiResPeekOverlay() {
   overlay.setAttribute('aria-hidden', 'false');
   overlay.style.display = 'block';
   baseImg.style.opacity = '0';
+  baseImg.crossOrigin = 'anonymous';
   var url = hiResPeekImageUrl(cfg.imageSrc);
   function showHiResPeekImageReady() {
-    fitHiResPeekImage();
-    setupHiResPeekOverlayVideo(cfg);
-    syncHiResPeekShadowLayer(cfg);
-    requestAnimationFrame(function() { baseImg.style.opacity = '1'; });
+    requestAnimationFrame(function() {
+      requestAnimationFrame(function() {
+        fitHiResPeekImage();
+        setupHiResPeekOverlayVideo(cfg);
+        syncHiResPeekShadowLayer(cfg);
+        baseImg.style.opacity = '1';
+      });
+    });
   }
   baseImg.onerror = function() {
     console.warn('⚠️ 高画質画像を読み込めません:', cfg.imageSrc);
