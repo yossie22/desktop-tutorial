@@ -137,7 +137,11 @@ var APP_DATA = {
         "videoY": 79,
         "videoWidth": 24.5,
         "videoMatte": "lighten",
-        "videoLoop": false
+        "videoLoop": false,
+        "pasteScaleBoost": 2,
+        "autoZoomMs": 10000,
+        "autoZoomFit": "height",
+        "autoZoomSpeed": 1
       }
     }
   ],

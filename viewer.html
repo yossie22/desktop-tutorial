@@ -12,7 +12,10 @@
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 html, body { width: 100%; height: 100%; overflow: hidden; background: #000; }
-#pano { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+:root { --hi-res-peek-fade: 1.65s; }
+body.hi-res-peek-fast-out { --hi-res-peek-fade: 0.75s; }
+#pano { position: absolute; top: 0; left: 0; width: 100%; height: 100%; transition: opacity var(--hi-res-peek-fade) ease-in-out; }
+body.hi-res-peek-active #pano { opacity: 0; }
 
 /* 十字キー（測定用：白） */
 #crosshair {
@@ -865,7 +868,7 @@ body.embed-shadow #pano:active { cursor: grabbing; }
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
-  transition: opacity 1.2s ease-in-out, visibility 1.2s ease-in-out;
+  transition: opacity var(--hi-res-peek-fade) ease-in-out, visibility var(--hi-res-peek-fade) ease-in-out;
 }
 #hiResPeekOverlay.open {
   display: block;
@@ -880,10 +883,20 @@ body.embed-shadow #pano:active { cursor: grabbing; }
   overflow: hidden;
   display: none;
   pointer-events: none;
+  filter: brightness(1.1) saturate(0.84) contrast(0.96);
 }
 #hiResPeekVrPane canvas {
   width: 100% !important;
   height: 100% !important;
+}
+/* 下地VRだけをうっすら白く（高画質画像にはかからない） */
+#hiResPeekVrWash {
+  position: absolute;
+  inset: 0;
+  z-index: 0.5;
+  display: none;
+  pointer-events: none;
+  background: rgba(255, 255, 255, 0.2);
 }
 #hiResPeekView {
   position: absolute;
@@ -902,6 +915,15 @@ body.embed-shadow #pano:active { cursor: grabbing; }
   pointer-events: none;
   z-index: 2;
 }
+#hiResPeekMediaStage::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  box-shadow:
+    inset 0 0 24px rgba(255, 255, 255, 0.11),
+    0 0 32px rgba(255, 255, 255, 0.06);
+}
 #hiResPeekView.is-dragging { cursor: grabbing; }
 #hiResPeekBaseImg {
   position: absolute;
@@ -914,7 +936,7 @@ body.embed-shadow #pano:active { cursor: grabbing; }
   pointer-events: none;
   user-select: none;
   -webkit-user-drag: none;
-  transition: opacity 1.2s ease-in-out;
+  transition: opacity 1.4s ease-in-out;
 }
 .hi-res-peek-video-wrap {
   position: absolute;
@@ -1026,6 +1048,7 @@ body.embed-shadow #hiResPeekOverlay { display: none !important; }
 
 <div id="hiResPeekOverlay" aria-hidden="true">
   <div id="hiResPeekVrPane" aria-hidden="true"></div>
+  <div id="hiResPeekVrWash" aria-hidden="true"></div>
   <img id="hiResPeekVrBtn" src="VR-removebg-preview.png?v=2" alt="VRに戻る">
   <div id="hiResPeekView">
     <div id="hiResPeekMediaStage">
@@ -1389,20 +1412,23 @@ data.scenes.forEach(function(scene) {
 });
 
 // ビルド識別（どのファイルが実行されているか確認用）
-var BUILD_STAMP = '2026-06-24-hiResPeekVrPane';
+var BUILD_STAMP = '2026-06-24-hiResPeekTune';
 var guideVideoPreloadBySrc = {};
 var guideVideoSessionDone = {};
 console.log('🧩 viewer build:', BUILD_STAMP);
 
 // ===== 高画質覗き（VR上の枠タップでEOS切り替え表示） =====
-var HI_RES_PEEK_FADE_MS = 1200;
+var HI_RES_PEEK_FADE_IN_MS = 1700;
+var HI_RES_PEEK_FADE_OUT_MS = 800;
+var hiResPeekAutoZoomAnim = null;
+var hiResPeekVideoPlayPending = false;
 var hiResPeekOpen = false;
 var hiResPeekPanDrag = null;
 var hiResPeekPinch = null;
 var hiResPeekHintTimer = null;
 var hiResPeekVrBtnEl = null;
 var hiResPeekUiTimeout = null;
-var hiResPeekViewState = { baseScale: 1, zoom: 1, panX: 0, panY: 0 };
+var hiResPeekViewState = { baseScale: 1, zoom: 1, panX: 0, panY: 0, backdropFovRad: 0 };
 var hiResPeekVrBackdropViewer = null;
 var hiResPeekVrBackdropScene = null;
 var hiResPeekHotspotEl = null;
@@ -1410,8 +1436,10 @@ var hiResPeekActiveCfg = null;
 
 function hiResPeekSetupVrBackdropPane(cfg) {
   var pane = document.getElementById('hiResPeekVrPane');
+  var wash = document.getElementById('hiResPeekVrWash');
   if (!pane || !currentSceneObj || !cfg) return;
   pane.style.display = 'block';
+  if (wash) wash.style.display = 'block';
   if (!hiResPeekVrBackdropViewer) {
     hiResPeekVrBackdropViewer = new Marzipano.Viewer(pane);
   }
@@ -1439,16 +1467,138 @@ function hiResPeekSetupVrBackdropPane(cfg) {
     view: view
   });
   hiResPeekVrBackdropScene.switchTo();
+  hiResPeekViewState.backdropFovRad = wideFov;
   console.log('🔍 高画質覗き: VR背景を表示 yaw=' + (cfg.yawCenter || 0) + '° pitch=' + (cfg.pitchCenter || 0) + '°');
+}
+
+function hiResPeekVerticalFovRad(horizontalFovRad, aspect) {
+  if (!aspect || !isFinite(aspect)) aspect = 1;
+  return 2 * Math.atan(Math.tan(horizontalFovRad / 2) / aspect);
+}
+
+function hiResPeekUsePasteMode(cfg) {
+  if (!cfg) return false;
+  if (cfg.pasteToVr === false) return false;
+  if (cfg.pasteToVr === true) return true;
+  return hiResPeekShootMode(cfg) === 'range' &&
+    (cfg.rangeAngleYaw != null || cfg.rangeAnglePitch != null);
+}
+
+function hiResPeekPasteBaseScale(vw, vh, iw, ih, cfg, backdropFovRad) {
+  var yawDeg = Number(cfg.rangeAngleYaw);
+  var pitchDeg = Number(cfg.rangeAnglePitch);
+  if (!isFinite(yawDeg) || yawDeg <= 0) yawDeg = 28;
+  if (!isFinite(pitchDeg) || pitchDeg <= 0) pitchDeg = 28;
+  var yawRad = degToRad(yawDeg);
+  var pitchRad = degToRad(pitchDeg);
+  var aspect = vw / vh;
+  var vFovRad = hiResPeekVerticalFovRad(backdropFovRad, aspect);
+  var hTan = Math.tan(backdropFovRad / 2);
+  var vTan = Math.tan(vFovRad / 2);
+  if (hTan < 1e-6) hTan = 1e-6;
+  if (vTan < 1e-6) vTan = 1e-6;
+  var scaleW = (vw * Math.tan(yawRad / 2)) / (hTan * iw);
+  var scaleH = (vh * Math.tan(pitchRad / 2)) / (vTan * ih);
+  var boost = cfg.pasteScaleBoost != null ? Number(cfg.pasteScaleBoost) : 2;
+  if (!isFinite(boost) || boost < 1) boost = 2;
+  return Math.min(scaleW, scaleH) * boost;
+}
+
+function hiResPeekComputeAutoZoomTarget(cfg) {
+  if (cfg && cfg.autoZoomTarget != null) {
+    var fixed = Number(cfg.autoZoomTarget);
+    if (isFinite(fixed) && fixed > 1.01) return Math.min(5, fixed);
+  }
+  var view = document.getElementById('hiResPeekView');
+  var img = document.getElementById('hiResPeekBaseImg');
+  if (!view || !img || !img.naturalWidth) return 1.5;
+  var vw = view.clientWidth || window.innerWidth;
+  var vh = view.clientHeight || window.innerHeight;
+  var iw = img.naturalWidth;
+  var ih = img.naturalHeight;
+  var base = hiResPeekViewState.baseScale;
+  if (!base || base <= 0) return 1.5;
+  var fitMode = cfg && cfg.autoZoomFit ? String(cfg.autoZoomFit) : 'height';
+  var zoomTarget;
+  if (fitMode === 'cover') {
+    zoomTarget = Math.max(vw / (iw * base), vh / (ih * base));
+  } else if (fitMode === 'contain') {
+    zoomTarget = Math.min(vw / (iw * base), vh / (ih * base));
+  } else {
+    zoomTarget = vh / (ih * base);
+    if (cfg && cfg.autoZoomHeightPad != null) {
+      var hPad = Number(cfg.autoZoomHeightPad);
+      if (isFinite(hPad) && hPad > 0 && hPad <= 1) zoomTarget *= hPad;
+    }
+  }
+  if (cfg && cfg.autoZoomCoverPad != null && fitMode === 'cover') {
+    var pad = Number(cfg.autoZoomCoverPad);
+    if (isFinite(pad) && pad > 0) zoomTarget *= pad;
+  }
+  return Math.max(1.02, Math.min(5, zoomTarget));
+}
+
+function hiResPeekAutoZoomDurationMs(cfg) {
+  var baseMs = cfg && cfg.autoZoomMs != null ? Number(cfg.autoZoomMs) : 10000;
+  if (!isFinite(baseMs) || baseMs < 400) baseMs = 10000;
+  var speed = cfg && cfg.autoZoomSpeed != null ? Number(cfg.autoZoomSpeed) : 1;
+  if (!isFinite(speed) || speed <= 0) speed = 1;
+  return Math.round(baseMs / speed);
+}
+
+function hiResPeekCancelAutoZoom() {
+  if (hiResPeekAutoZoomAnim) {
+    cancelAnimationFrame(hiResPeekAutoZoomAnim);
+    hiResPeekAutoZoomAnim = null;
+  }
+}
+
+function hiResPeekStartAutoZoom(cfg) {
+  hiResPeekCancelAutoZoom();
+  if (!cfg || cfg.autoZoom === false) {
+    hiResPeekPlayOverlayVideo();
+    return;
+  }
+  var targetZoom = hiResPeekComputeAutoZoomTarget(cfg);
+  var duration = hiResPeekAutoZoomDurationMs(cfg);
+  if (!isFinite(targetZoom) || targetZoom <= 1.01) {
+    hiResPeekPlayOverlayVideo();
+    return;
+  }
+  var start = performance.now();
+  var z0 = 1;
+  var view = document.getElementById('hiResPeekView');
+  if (!view) return;
+  var cx = view.clientWidth / 2;
+  var cy = view.clientHeight / 2;
+  hiResPeekViewState.zoom = 1;
+  applyHiResPeekTransform();
+  function frame(now) {
+    if (!hiResPeekOpen) return;
+    var t = Math.min(1, (now - start) / duration);
+    var ease = t * t * (3 - 2 * t);
+    var z1 = z0 + (targetZoom - z0) * ease;
+    setHiResPeekZoom(z1, cx, cy, true);
+    if (t < 1) {
+      hiResPeekAutoZoomAnim = requestAnimationFrame(frame);
+    } else {
+      hiResPeekAutoZoomAnim = null;
+      hiResPeekPlayOverlayVideo();
+    }
+  }
+  hiResPeekAutoZoomAnim = requestAnimationFrame(frame);
 }
 
 function hiResPeekTeardownVrBackdropPane() {
   var pane = document.getElementById('hiResPeekVrPane');
+  var wash = document.getElementById('hiResPeekVrWash');
   if (hiResPeekVrBackdropViewer && hiResPeekVrBackdropScene) {
     try { hiResPeekVrBackdropViewer.destroyScene(hiResPeekVrBackdropScene); } catch (e1) {}
     hiResPeekVrBackdropScene = null;
   }
   if (pane) pane.style.display = 'none';
+  if (wash) wash.style.display = 'none';
+  hiResPeekViewState.backdropFovRad = 0;
 }
 
 function destroyHiResPeekHotspot() {
@@ -1764,7 +1914,19 @@ function syncHiResPeekVideoLayout(cfg) {
   syncHiResPeekShadowLayer(cfg);
 }
 
-function setupHiResPeekOverlayVideo(cfg) {
+function hiResPeekPlayOverlayVideo() {
+  if (!hiResPeekOpen) return;
+  var vid = document.getElementById('hiResPeekOverlayVideo');
+  if (!vid) return;
+  if (!vid.currentSrc && !vid.src && !vid.querySelector('source')) return;
+  hiResPeekVideoPlayPending = false;
+  var p = vid.play();
+  if (p && p.catch) p.catch(function() {});
+}
+
+function setupHiResPeekOverlayVideo(cfg, opts) {
+  opts = opts || {};
+  var deferPlay = !!opts.deferPlay;
   var vid = document.getElementById('hiResPeekOverlayVideo');
   if (!vid) return;
   var vc = hiResPeekVideoConfig(cfg);
@@ -1772,11 +1934,11 @@ function setupHiResPeekOverlayVideo(cfg) {
     syncHiResPeekVideoLayout(cfg);
     return;
   }
+  hiResPeekVideoPlayPending = deferPlay;
   appendHiResPeekVideoSources(vid, vc);
   function onMeta() {
     syncHiResPeekVideoLayout(cfg);
-    var p = vid.play();
-    if (p && p.catch) p.catch(function() {});
+    if (!deferPlay) hiResPeekPlayOverlayVideo();
   }
   vid.onloadedmetadata = onMeta;
   vid.onerror = function() {
@@ -1808,7 +1970,7 @@ function applyHiResPeekTransform() {
   stage.style.transform = 'translate(calc(-50% + ' + hiResPeekViewState.panX + 'px), calc(-50% + ' + hiResPeekViewState.panY + 'px)) scale(' + s + ')';
 }
 
-function fitHiResPeekImage() {
+function fitHiResPeekImage(keepZoom) {
   var view = document.getElementById('hiResPeekView');
   var stage = document.getElementById('hiResPeekMediaStage');
   var img = document.getElementById('hiResPeekBaseImg');
@@ -1816,16 +1978,24 @@ function fitHiResPeekImage() {
   var vw = view.clientWidth || window.innerWidth;
   var vh = view.clientHeight || window.innerHeight;
   if (!vw || !vh) {
-    requestAnimationFrame(fitHiResPeekImage);
+    requestAnimationFrame(function() { fitHiResPeekImage(keepZoom); });
     return;
   }
   var iw = img.naturalWidth;
   var ih = img.naturalHeight;
   var cfg = currentSceneObj ? getHiResPeekConfig(currentSceneObj.data) : null;
-  hiResPeekViewState.baseScale = Math.min(vw / iw, vh / ih);
-  hiResPeekViewState.zoom = 1;
-  hiResPeekViewState.panX = 0;
-  hiResPeekViewState.panY = 0;
+  var usePaste = hiResPeekUsePasteMode(cfg) && hiResPeekViewState.backdropFovRad > 0;
+  if (usePaste) {
+    hiResPeekViewState.baseScale = hiResPeekPasteBaseScale(
+      vw, vh, iw, ih, cfg, hiResPeekViewState.backdropFovRad);
+  } else {
+    hiResPeekViewState.baseScale = Math.min(vw / iw, vh / ih);
+  }
+  if (!keepZoom) {
+    hiResPeekViewState.zoom = 1;
+    hiResPeekViewState.panX = 0;
+    hiResPeekViewState.panY = 0;
+  }
   stage.style.width = iw + 'px';
   stage.style.height = ih + 'px';
   img.style.position = 'absolute';
@@ -1837,10 +2007,11 @@ function fitHiResPeekImage() {
   img.style.opacity = '1';
   syncHiResPeekVideoLayout(cfg);
   applyHiResPeekTransform();
-  console.log('🔍 高画質覗き: 高画質画像 全体表示', iw + '×' + ih);
+  console.log('🔍 高画質覗き:', usePaste ? 'VRに貼り付け' : '全体表示', iw + '×' + ih);
 }
 
-function setHiResPeekZoom(nextZoom, anchorX, anchorY) {
+function setHiResPeekZoom(nextZoom, anchorX, anchorY, fromAutoZoom) {
+  if (!fromAutoZoom) hiResPeekCancelAutoZoom();
   var view = document.getElementById('hiResPeekView');
   var img = document.getElementById('hiResPeekBaseImg');
   if (!view || !img || !img.naturalWidth) return;
@@ -1868,19 +2039,27 @@ function openHiResPeekOverlay() {
   var baseImg = document.getElementById('hiResPeekBaseImg');
   if (!overlay || !baseImg) return;
   hiResPeekOpen = true;
+  document.body.classList.add('hi-res-peek-active');
   overlay.setAttribute('aria-hidden', 'false');
   overlay.style.display = 'block';
   hiResPeekSetupVrBackdropPane(cfg);
   updateHiResPeekFrameVisibility();
+  document.body.classList.remove('hi-res-peek-fast-out');
   baseImg.style.opacity = '0';
+  baseImg.style.transition = 'opacity 1.4s ease-in-out';
   var url = hiResPeekImageUrl(cfg.imageSrc);
+  var deferVideo = cfg.autoZoom !== false;
   function showHiResPeekImageReady() {
     requestAnimationFrame(function() {
       requestAnimationFrame(function() {
-        fitHiResPeekImage();
-        setupHiResPeekOverlayVideo(cfg);
+        fitHiResPeekImage(false);
+        setupHiResPeekOverlayVideo(cfg, { deferPlay: deferVideo });
         syncHiResPeekShadowLayer(cfg);
-        baseImg.style.opacity = '1';
+        setTimeout(function() {
+          if (!hiResPeekOpen) return;
+          baseImg.style.opacity = '1';
+          hiResPeekStartAutoZoom(cfg);
+        }, 350);
       });
     });
   }
@@ -1902,22 +2081,28 @@ function closeHiResPeekOverlay() {
   var baseImg = document.getElementById('hiResPeekBaseImg');
   if (!overlay) return;
   hiResPeekOpen = false;
+  hiResPeekCancelAutoZoom();
+  hiResPeekVideoPlayPending = false;
   hiResPeekPanDrag = null;
   hiResPeekPinch = null;
   hideHiResPeekVrUi();
   teardownHiResPeekOverlayVideo();
-  hiResPeekTeardownVrBackdropPane();
+  document.body.classList.add('hi-res-peek-fast-out');
+  document.body.classList.remove('hi-res-peek-active');
   overlay.classList.remove('open');
   if (baseImg) {
+    baseImg.style.transition = 'opacity 0.75s ease-in-out';
     baseImg.style.opacity = '0';
     baseImg.style.visibility = '';
   }
   setTimeout(function() {
     if (!hiResPeekOpen) {
+      hiResPeekTeardownVrBackdropPane();
       overlay.setAttribute('aria-hidden', 'true');
       overlay.style.display = 'none';
+      document.body.classList.remove('hi-res-peek-fast-out');
     }
-  }, HI_RES_PEEK_FADE_MS);
+  }, HI_RES_PEEK_FADE_OUT_MS);
   updateHiResPeekFrameVisibility();
 }
 
@@ -1949,6 +2134,7 @@ function bindHiResPeekUi() {
 
   view.addEventListener('mousedown', function(e) {
     if (!hiResPeekOpen || e.button !== 0) return;
+    hiResPeekCancelAutoZoom();
     showHiResPeekVrUi();
     hiResPeekPanDrag = { x0: e.clientX, y0: e.clientY, panX: hiResPeekViewState.panX, panY: hiResPeekViewState.panY };
     view.classList.add('is-dragging');
@@ -1977,6 +2163,7 @@ function bindHiResPeekUi() {
 
   view.addEventListener('touchstart', function(e) {
     if (!hiResPeekOpen) return;
+    hiResPeekCancelAutoZoom();
     showHiResPeekVrUi();
     if (e.touches.length === 2) {
       hiResPeekPinch = {
@@ -2019,7 +2206,7 @@ function bindHiResPeekUi() {
   });
 
   window.addEventListener('resize', function() {
-    if (hiResPeekOpen) fitHiResPeekImage();
+    if (hiResPeekOpen) fitHiResPeekImage(true);
   });
 }
 
