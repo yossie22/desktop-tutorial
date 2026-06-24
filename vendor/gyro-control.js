@@ -1,8 +1,7 @@
 /**
- * パノラマ用ジャイロ制御 v69
- * ON直後はセンサー安定待ち（跳び防止）
- * 4方向どれでもその向きのまま GYRO ON（回転したら OFF）
- * 詳細: vendor/gyro-STABLE-v69.txt
+ * パノラマ用ジャイロ制御 v70
+ * v69 ＋ ボタン右の横（90°）で上下の符号を反転
+ * 詳細: vendor/gyro-STABLE-v70.txt
  */
 (function(global) {
   'use strict';
@@ -16,7 +15,8 @@
   var SENSOR_LP = 0.22;
   var STARTUP_SETTLE_FRAMES = 20;
   var LOCK_JUMP_REJECT_DEG = 8;
-  var BUILD = 'v69';
+  var BUILD = 'v70';
+  var LANDSCAPE_RIGHT_CUR = 90;
   var LANDSCAPE_LEFT_CUR = 270;
 
   function degToRad(d) { return d * Math.PI / 180; }
@@ -137,7 +137,8 @@
   }
 
   function pitchNeedsInvert(screenAngle) {
-    return normalizeAngle360(screenAngle) === LANDSCAPE_LEFT_CUR;
+    var a = normalizeAngle360(screenAngle);
+    return a === LANDSCAPE_RIGHT_CUR || a === LANDSCAPE_LEFT_CUR;
   }
 
   function resetSensorBaseline(state) {
