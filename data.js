@@ -104,7 +104,8 @@ var APP_DATA = {
           "playYawRange": 15,
           "srcIos": "video/guide_alpha_ios.mp4",
           "srcHevc": "video/海軍.mp4",
-          "footShadow": false
+          "footShadow": false,
+          "footShadowConfig": {}
         }
       ]
     },

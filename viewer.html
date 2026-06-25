@@ -1449,7 +1449,7 @@ data.scenes.forEach(function(scene) {
 });
 
 // ビルド識別（どのファイルが実行されているか確認用）
-var BUILD_STAMP = '2026-06-25-shadowFollowPano';
+var BUILD_STAMP = '2026-06-25-shadowPanoHotspot';
 var guideVideoPreloadBySrc = {};
 var guideVideoSessionDone = {};
 console.log('🧩 viewer build:', BUILD_STAMP);
@@ -4871,24 +4871,12 @@ function applyGuideGroundShadow(entry, vh) {
   if (entry.guidePlaceYaw == null || entry.guidePlacePitch == null) return;
   entry.vh = vh;
   var c = suggestFootShadowConfigForEntry(entry, resolveFootShadowConfig(vh));
-  if (c.extended) {
-    if (entry.groundShadowHotspotHandle) {
-      try {
-        if (typeof entry.groundShadowHotspotHandle.destroy === 'function') {
-          entry.groundShadowHotspotHandle.destroy();
-        }
-      } catch (eHs) {}
-      entry.groundShadowHotspotHandle = null;
-      entry.groundShadowEl = null;
-    }
-    updateShadowScreenOverlay(entry, c, imgPath);
-    scheduleShadowPaintLayoutPost();
-    return;
-  }
+  // 画面固定オーバーレイはパノラマ回転に追従しない → 常にホットスポットで貼る
   if (entry.shadowScreenOverlayEl && entry.shadowScreenOverlayEl.parentNode) {
     try { entry.shadowScreenOverlayEl.parentNode.removeChild(entry.shadowScreenOverlayEl); } catch (eOv) {}
     entry.shadowScreenOverlayEl = null;
   }
+  detachShadowScreenOverlaySync(entry);
   var radius = entry.guideRadius || 850;
   var pos = guideShadowPlacePosition(entry, c);
   if (entry.groundShadowEl && entry.groundShadowHotspotHandle) {
@@ -4938,10 +4926,6 @@ function shadowEmbedOverlayTick() {
   if (!embedShadowMode) {
     shadowEmbedOverlayRaf = 0;
     return;
-  }
-  var entry = window.sceneVideoEls && window.sceneVideoEls[0];
-  if (entry && entry.shadowScreenOverlayEl) {
-    updateShadowScreenOverlayGeometry(entry);
   }
   scheduleShadowPaintLayoutPost();
   shadowEmbedOverlayRaf = requestAnimationFrame(shadowEmbedOverlayTick);
@@ -5119,7 +5103,11 @@ function buildShadowPaintLayout() {
   }
   var extended = footShadowExtendedRange(entry.vh || {});
   var tallMap = computeTallShadowMapRect(wrapR);
-  if (extended) {
+  if (extended && entry.groundShadowEl) {
+    var imgEl2 = entry.groundShadowEl.querySelector('img.foot-shadow-png');
+    var gr = (imgEl2 || entry.groundShadowEl).getBoundingClientRect();
+    shadowR = (gr.width > 8 && gr.height > 8) ? gr : tallMap;
+  } else if (extended) {
     shadowR = tallMap;
   } else if (!shadowR || shadowR.width < 8) {
     shadowR = estimateShadowScreenRect(entry, wrapR);
