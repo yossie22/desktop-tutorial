@@ -278,7 +278,21 @@ body.gyro-active #pano { touch-action: none; }
 .ctrl-val{font-family:sans-serif;font-size:12px;margin-left:7px;min-width:38px;}
 #speedVal{color:#aaddff;}#zoomVal{color:#aaffaa;}#fadeVal{color:#ffccdd;}
 
-#mapButton { position: absolute; bottom: 30px; left: 20px; width: 70px; height: 70px; cursor: pointer; z-index: 100; opacity: 0; transition: opacity 0.5s ease; pointer-events: none; }
+#mapButton {
+  position: absolute;
+  bottom: 30px;
+  left: 20px;
+  width: 70px;
+  height: 70px;
+  cursor: pointer;
+  z-index: 100;
+  opacity: 0;
+  transition: opacity 0.5s ease;
+  pointer-events: none;
+  object-fit: contain;
+  background: transparent;
+  border: none;
+}
 #mapButton.visible { opacity: 0.7; pointer-events: auto; }
 #counter { position: absolute; bottom: 30px; left: 100px; width: 40px; height: 40px; background: white; border: 3px solid #ff0000; border-radius: 50%; display: flex; justify-content: center; align-items: center; font-size: 15px; font-weight: 900; color: #0066ff; z-index: 100; opacity: 0; transition: opacity 0.5s ease; pointer-events: none; user-select: none; line-height: 1; letter-spacing: -0.5px; padding: 0; overflow: hidden; }
 #counter.visible { opacity: 0.7; pointer-events: auto; }
@@ -862,7 +876,7 @@ body.embed-shadow #pano:active { cursor: grabbing; }
   position: fixed;
   inset: 0;
   z-index: 2500;
-  background: #000;
+  background: transparent;
   touch-action: none;
   display: none;
   opacity: 0;
@@ -883,7 +897,6 @@ body.embed-shadow #pano:active { cursor: grabbing; }
   overflow: hidden;
   display: none;
   pointer-events: none;
-  filter: brightness(1.1) saturate(0.84) contrast(0.96);
 }
 #hiResPeekVrPane canvas {
   width: 100% !important;
@@ -896,7 +909,7 @@ body.embed-shadow #pano:active { cursor: grabbing; }
   z-index: 0.5;
   display: none;
   pointer-events: none;
-  background: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0);
 }
 #hiResPeekView {
   position: absolute;
@@ -942,6 +955,8 @@ body.embed-shadow #pano:active { cursor: grabbing; }
   position: absolute;
   pointer-events: none;
   overflow: visible;
+  opacity: 1;
+  transition: opacity 1.4s ease-in-out;
 }
 .hi-res-peek-shadow-wrap {
   position: absolute;
@@ -990,6 +1005,26 @@ body.embed-shadow #pano:active { cursor: grabbing; }
 }
 #hiResPeekHint {
   display: none;
+}
+.hi-res-peek-zoom-hint {
+  position: absolute;
+  right: 16px;
+  bottom: 18px;
+  z-index: 20;
+  padding: 5px 10px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.52);
+  color: #fff;
+  font-family: sans-serif;
+  font-size: 13px;
+  font-weight: bold;
+  line-height: 1.35;
+  letter-spacing: 0.02em;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.65);
+  pointer-events: none;
+  opacity: 0;
+  white-space: nowrap;
+  transition: opacity 0.65s ease-in-out;
 }
 body.embed-placer #hiResPeekOverlay,
 body.embed-shadow #hiResPeekOverlay { display: none !important; }
@@ -1060,6 +1095,7 @@ body.embed-shadow #hiResPeekOverlay { display: none !important; }
         <video id="hiResPeekOverlayVideo" class="hi-res-peek-overlay-video" playsinline webkit-playsinline muted loop></video>
       </div>
     </div>
+    <div id="hiResPeekZoomHint" class="hi-res-peek-zoom-hint" hidden aria-live="polite"></div>
   </div>
 </div>
 
@@ -1413,7 +1449,7 @@ data.scenes.forEach(function(scene) {
 });
 
 // ビルド識別（どのファイルが実行されているか確認用）
-var BUILD_STAMP = '2026-06-24-peekBgm';
+var BUILD_STAMP = '2026-06-25-zoomHint4s';
 var guideVideoPreloadBySrc = {};
 var guideVideoSessionDone = {};
 console.log('🧩 viewer build:', BUILD_STAMP);
@@ -1433,20 +1469,28 @@ function panoTileSourceForScene(sd, appData) {
 // ===== 高画質覗き（VR上の枠タップでEOS切り替え表示） =====
 var HI_RES_PEEK_FADE_IN_MS = 1700;
 var HI_RES_PEEK_FADE_OUT_MS = 800;
+var HI_RES_PEEK_VIDEO_FADE_MS = 1400;
+var HI_RES_PEEK_ZOOM_HINT_FADE_MS = 800;
+var HI_RES_PEEK_ZOOM_HINT_HOLD_MS = 2400;
 var hiResPeekAutoZoomAnim = null;
 var hiResPeekVideoPlayPending = false;
 var hiResPeekOpen = false;
 var hiResPeekPanDrag = null;
 var hiResPeekPinch = null;
 var hiResPeekHintTimer = null;
+var hiResPeekHintHideTimer = null;
 var hiResPeekVrBtnEl = null;
 var hiResPeekUiTimeout = null;
-var hiResPeekViewState = { baseScale: 1, zoom: 1, panX: 0, panY: 0, backdropFovRad: 0 };
+var hiResPeekViewState = { baseScale: 1, zoom: 1, panX: 0, panY: 0, backdropFovRad: 0, zoomAnchorX: null, zoomAnchorY: null };
 var hiResPeekVrBackdropViewer = null;
 var hiResPeekVrBackdropScene = null;
 var hiResPeekHotspotEl = null;
 var hiResPeekActiveCfg = null;
 var hiResPeekBgmAudio = null;
+var hiResPeekKeepLivePanoActive = false;
+var hiResPeekLiveFrameRect = null;
+var hiResPeekFrozenView = null;
+var hiResPeekViewChangeStop = null;
 
 function hiResPeekBgmFile(cfg) {
   if (!cfg || !cfg.peekBgm) return '';
@@ -1528,6 +1572,7 @@ function hiResPeekSetupVrBackdropPane(cfg) {
   });
   hiResPeekVrBackdropScene.switchTo();
   hiResPeekViewState.backdropFovRad = wideFov;
+  hiResPeekApplyVrBackdropTone(0, cfg);
   console.log('🔍 高画質覗き: VR背景を表示 yaw=' + (cfg.yawCenter || 0) + '° pitch=' + (cfg.pitchCenter || 0) + '°');
 }
 
@@ -1542,6 +1587,115 @@ function hiResPeekUsePasteMode(cfg) {
   if (cfg.pasteToVr === true) return true;
   return hiResPeekShootMode(cfg) === 'range' &&
     (cfg.rangeAngleYaw != null || cfg.rangeAnglePitch != null);
+}
+
+function hiResPeekKeepLivePano(cfg) {
+  return hiResPeekUsePasteMode(cfg);
+}
+
+function hiResPeekImageFadeOpacity(t) {
+  if (t < 0.1) return 0;
+  var u = Math.min(1, (t - 0.1) / 0.85);
+  return u * u * (3 - 2 * u);
+}
+
+function hiResPeekFreezeLivePanoView() {
+  if (!currentView) return;
+  var p = currentView.parameters();
+  hiResPeekFrozenView = { yaw: p.yaw, pitch: p.pitch, fov: p.fov };
+  function onViewChange() {
+    if (!hiResPeekOpen || !hiResPeekFrozenView || !currentView) return;
+    try {
+      currentView.setParameters({
+        yaw: hiResPeekFrozenView.yaw,
+        pitch: hiResPeekFrozenView.pitch,
+        fov: hiResPeekFrozenView.fov
+      });
+    } catch (e0) {}
+  }
+  if (hiResPeekViewChangeStop) {
+    try { hiResPeekViewChangeStop(); } catch (e1) {}
+  }
+  currentView.addEventListener('change', onViewChange);
+  hiResPeekViewChangeStop = function() {
+    if (currentView) currentView.removeEventListener('change', onViewChange);
+    hiResPeekViewChangeStop = null;
+  };
+}
+
+function hiResPeekUnfreezeLivePanoView() {
+  hiResPeekFrozenView = null;
+  hiResPeekKeepLivePanoActive = false;
+  hiResPeekLiveFrameRect = null;
+  hiResPeekViewState.zoomAnchorX = null;
+  hiResPeekViewState.zoomAnchorY = null;
+  if (hiResPeekViewChangeStop) {
+    try { hiResPeekViewChangeStop(); } catch (e0) {}
+    hiResPeekViewChangeStop = null;
+  }
+}
+
+function hiResPeekCaptureHotspotFrameRect() {
+  if (!hiResPeekHotspotEl) return null;
+  var view = document.getElementById('hiResPeekView');
+  if (!view) return null;
+  var zone = hiResPeekHotspotEl.querySelector('.hires-peek-soft-zone');
+  var el = zone || hiResPeekHotspotEl;
+  var r = el.getBoundingClientRect();
+  var vr = view.getBoundingClientRect();
+  if (r.width < 8 || r.height < 8) return null;
+  return {
+    cx: r.left + r.width / 2 - vr.left,
+    cy: r.top + r.height / 2 - vr.top,
+    width: r.width,
+    height: r.height
+  };
+}
+
+function hiResPeekApplyLivePanoFrameFit(frameRect, cfg) {
+  var view = document.getElementById('hiResPeekView');
+  var img = document.getElementById('hiResPeekBaseImg');
+  if (!view || !img || !img.naturalWidth || !frameRect) return false;
+  var iw = img.naturalWidth;
+  var ih = img.naturalHeight;
+  var startMul = cfg && cfg.peekStartScale != null ? Number(cfg.peekStartScale) : 2;
+  if (!isFinite(startMul) || startMul < 1) startMul = 2;
+  var fit = Math.min(frameRect.width * startMul / iw, frameRect.height * startMul / ih);
+  if (!isFinite(fit) || fit <= 0) return false;
+  hiResPeekViewState.baseScale = fit;
+  hiResPeekViewState.zoom = 1;
+  hiResPeekViewState.zoomAnchorX = frameRect.cx;
+  hiResPeekViewState.zoomAnchorY = frameRect.cy;
+  var vw = view.clientWidth || window.innerWidth;
+  var vh = view.clientHeight || window.innerHeight;
+  hiResPeekViewState.panX = frameRect.cx - vw / 2;
+  hiResPeekViewState.panY = frameRect.cy - vh / 2;
+  applyHiResPeekTransform();
+  return true;
+}
+
+function hiResPeekSetupLivePanoPaste(cfg) {
+  var pane = document.getElementById('hiResPeekVrPane');
+  var wash = document.getElementById('hiResPeekVrWash');
+  if (pane) pane.style.display = 'none';
+  if (wash) {
+    wash.style.display = 'block';
+    wash.style.background = 'rgba(255, 255, 255, 0)';
+    wash.style.transition = 'none';
+  }
+  var fov = currentView ? currentView.parameters().fov : 1.1;
+  if (!isFinite(fov) || fov <= 0) fov = 1.1;
+  hiResPeekViewState.backdropFovRad = fov;
+  hiResPeekApplyVrBackdropTone(0, cfg);
+  console.log('🔍 高画質覗き: 今のVRの上に貼り付け fov=' + radToDeg(fov).toFixed(1) + '°');
+}
+
+function hiResPeekSetupPeekBackground(cfg) {
+  if (hiResPeekKeepLivePano(cfg)) {
+    hiResPeekSetupLivePanoPaste(cfg);
+  } else {
+    hiResPeekSetupVrBackdropPane(cfg);
+  }
 }
 
 function hiResPeekPasteBaseScale(vw, vh, iw, ih, cfg, backdropFovRad) {
@@ -1606,6 +1760,43 @@ function hiResPeekAutoZoomDurationMs(cfg) {
   return Math.round(baseMs / speed);
 }
 
+function hiResPeekVrWashMax(cfg) {
+  var v = cfg && cfg.vrWashMax != null ? Number(cfg.vrWashMax) : 0.14;
+  if (!isFinite(v) || v < 0) v = 0.14;
+  return Math.min(0.3, v);
+}
+
+function hiResPeekApplyVrBackdropTone(t, cfg) {
+  var wash = document.getElementById('hiResPeekVrWash');
+  var pane = document.getElementById('hiResPeekVrPane');
+  var u = Math.max(0, Math.min(1, t));
+  var ease = u * u * (3 - 2 * u);
+  var washMax = hiResPeekVrWashMax(cfg);
+  if (wash) {
+    wash.style.transition = 'none';
+    wash.style.background = 'rgba(255, 255, 255, ' + (washMax * ease).toFixed(3) + ')';
+  }
+  if (pane) {
+    if (ease <= 0.001) {
+      pane.style.filter = '';
+    } else {
+      var b = 1 + 0.08 * ease;
+      var s = 1 - 0.12 * ease;
+      pane.style.filter = 'brightness(' + b.toFixed(3) + ') saturate(' + s.toFixed(3) + ') contrast(0.97)';
+    }
+  }
+}
+
+function hiResPeekResetVrBackdropTone() {
+  var wash = document.getElementById('hiResPeekVrWash');
+  var pane = document.getElementById('hiResPeekVrPane');
+  if (wash) {
+    wash.style.background = '';
+    wash.style.transition = '';
+  }
+  if (pane) pane.style.filter = '';
+}
+
 function hiResPeekCancelAutoZoom() {
   if (hiResPeekAutoZoomAnim) {
     cancelAnimationFrame(hiResPeekAutoZoomAnim);
@@ -1615,23 +1806,33 @@ function hiResPeekCancelAutoZoom() {
 
 function hiResPeekStartAutoZoom(cfg) {
   hiResPeekCancelAutoZoom();
+  var baseImg = document.getElementById('hiResPeekBaseImg');
+  var livePano = hiResPeekKeepLivePanoActive;
   if (!cfg || cfg.autoZoom === false) {
-    hiResPeekPlayOverlayVideo();
+    hiResPeekApplyVrBackdropTone(1, cfg);
+    if (baseImg) baseImg.style.opacity = '1';
+    hiResPeekFinishZoomReveal(cfg);
     return;
   }
   var targetZoom = hiResPeekComputeAutoZoomTarget(cfg);
   var duration = hiResPeekAutoZoomDurationMs(cfg);
   if (!isFinite(targetZoom) || targetZoom <= 1.01) {
-    hiResPeekPlayOverlayVideo();
+    hiResPeekApplyVrBackdropTone(1, cfg);
+    if (baseImg) baseImg.style.opacity = '1';
+    hiResPeekFinishZoomReveal(cfg);
     return;
   }
   var start = performance.now();
-  var z0 = 1;
+  var z0 = hiResPeekViewState.zoom || 1;
   var view = document.getElementById('hiResPeekView');
   if (!view) return;
-  var cx = view.clientWidth / 2;
-  var cy = view.clientHeight / 2;
-  hiResPeekViewState.zoom = 1;
+  var cx = hiResPeekViewState.zoomAnchorX != null ? hiResPeekViewState.zoomAnchorX : view.clientWidth / 2;
+  var cy = hiResPeekViewState.zoomAnchorY != null ? hiResPeekViewState.zoomAnchorY : view.clientHeight / 2;
+  hiResPeekApplyVrBackdropTone(0, cfg);
+  if (baseImg) {
+    baseImg.style.transition = 'none';
+    baseImg.style.opacity = '1';
+  }
   applyHiResPeekTransform();
   function frame(now) {
     if (!hiResPeekOpen) return;
@@ -1639,11 +1840,14 @@ function hiResPeekStartAutoZoom(cfg) {
     var ease = t * t * (3 - 2 * t);
     var z1 = z0 + (targetZoom - z0) * ease;
     setHiResPeekZoom(z1, cx, cy, true);
+    hiResPeekApplyVrBackdropTone(t, cfg);
     if (t < 1) {
       hiResPeekAutoZoomAnim = requestAnimationFrame(frame);
     } else {
       hiResPeekAutoZoomAnim = null;
-      hiResPeekPlayOverlayVideo();
+      hiResPeekApplyVrBackdropTone(1, cfg);
+      if (baseImg) baseImg.style.opacity = '1';
+      hiResPeekFinishZoomReveal(cfg);
     }
   }
   hiResPeekAutoZoomAnim = requestAnimationFrame(frame);
@@ -1658,6 +1862,8 @@ function hiResPeekTeardownVrBackdropPane() {
   }
   if (pane) pane.style.display = 'none';
   if (wash) wash.style.display = 'none';
+  hiResPeekResetVrBackdropTone();
+  hiResPeekUnfreezeLivePanoView();
   hiResPeekViewState.backdropFovRad = 0;
 }
 
@@ -1781,7 +1987,20 @@ function buildHiResPeekZoneElement(cfg) {
   return host;
 }
 
+function updateHiResPeekMapBtnVisibility() {
+  if (!mapBtnEl) return;
+  if (hiResPeekOpen) {
+    mapBtnEl.classList.remove('visible');
+    mapBtnEl.style.visibility = 'hidden';
+    mapBtnEl.style.pointerEvents = 'none';
+  } else {
+    mapBtnEl.style.visibility = '';
+    mapBtnEl.style.pointerEvents = '';
+  }
+}
+
 function updateHiResPeekFrameVisibility() {
+  updateHiResPeekMapBtnVisibility();
   if (!hiResPeekHotspotEl || !hiResPeekActiveCfg || !currentView) return;
   if (hiResPeekOpen) {
     hiResPeekHotspotEl.classList.add('hires-peek-frame-hidden');
@@ -1825,6 +2044,63 @@ function attachHiResPeekHotspot(sceneId, sceneData) {
 
 function showHiResPeekHintFade() {
   showHiResPeekVrUi();
+}
+
+function hiResPeekZoomHintText(cfg) {
+  if (cfg && cfg.peekZoomHint === false) return '';
+  if (cfg && cfg.peekZoomHint) return String(cfg.peekZoomHint).trim();
+  return 'マウスや指でもっと拡大！';
+}
+
+function hiResPeekClearZoomHintTimers() {
+  clearTimeout(hiResPeekHintTimer);
+  clearTimeout(hiResPeekHintHideTimer);
+  hiResPeekHintTimer = null;
+  hiResPeekHintHideTimer = null;
+}
+
+function hiResPeekHideZoomHint() {
+  hiResPeekClearZoomHintTimers();
+  var el = document.getElementById('hiResPeekZoomHint');
+  if (!el) return;
+  el.style.opacity = '0';
+  el.hidden = true;
+  el.style.display = 'none';
+  el.textContent = '';
+}
+
+function hiResPeekShowZoomHint(cfg) {
+  var text = hiResPeekZoomHintText(cfg);
+  if (!text || !hiResPeekOpen) return;
+  var el = document.getElementById('hiResPeekZoomHint');
+  if (!el) return;
+  hiResPeekClearZoomHintTimers();
+  el.textContent = text;
+  el.hidden = false;
+  el.style.display = 'block';
+  el.style.transition = 'none';
+  el.style.opacity = '0';
+  hiResPeekHintTimer = setTimeout(function() {
+    if (!hiResPeekOpen || el.hidden) return;
+    el.style.transition = 'opacity ' + (HI_RES_PEEK_ZOOM_HINT_FADE_MS / 1000) + 's ease-in-out';
+    el.style.opacity = '1';
+    hiResPeekHintTimer = setTimeout(function() {
+      if (!hiResPeekOpen) return;
+      el.style.opacity = '0';
+      hiResPeekHintHideTimer = setTimeout(function() {
+        if (el) {
+          el.hidden = true;
+          el.style.display = 'none';
+          el.textContent = '';
+        }
+      }, HI_RES_PEEK_ZOOM_HINT_FADE_MS);
+    }, HI_RES_PEEK_ZOOM_HINT_HOLD_MS);
+  }, 250);
+}
+
+function hiResPeekFinishZoomReveal(cfg) {
+  hiResPeekPlayOverlayVideo(true);
+  hiResPeekShowZoomHint(cfg);
 }
 
 function showHiResPeekVrUi() {
@@ -1971,15 +2247,27 @@ function syncHiResPeekVideoLayout(cfg) {
   wrap.style.top = y + 'px';
   wrap.style.width = w + 'px';
   wrap.style.height = h + 'px';
+  if (hiResPeekVideoPlayPending) wrap.style.opacity = '0';
   syncHiResPeekShadowLayer(cfg);
 }
 
-function hiResPeekPlayOverlayVideo() {
+function hiResPeekPlayOverlayVideo(withFade) {
   if (!hiResPeekOpen) return;
   var vid = document.getElementById('hiResPeekOverlayVideo');
+  var wrap = document.getElementById('hiResPeekVideoWrap');
   if (!vid) return;
   if (!vid.currentSrc && !vid.src && !vid.querySelector('source')) return;
   hiResPeekVideoPlayPending = false;
+  if (wrap && !wrap.hidden && withFade) {
+    wrap.style.transition = 'opacity ' + (HI_RES_PEEK_VIDEO_FADE_MS / 1000) + 's ease-in-out';
+    wrap.style.opacity = '0';
+    requestAnimationFrame(function() {
+      requestAnimationFrame(function() {
+        if (!hiResPeekOpen || wrap.hidden) return;
+        wrap.style.opacity = '1';
+      });
+    });
+  }
   var p = vid.play();
   if (p && p.catch) p.catch(function() {});
 }
@@ -1996,11 +2284,21 @@ function setupHiResPeekOverlayVideo(cfg, opts) {
   }
   hiResPeekVideoPlayPending = deferPlay;
   appendHiResPeekVideoSources(vid, vc);
+  var wrap = document.getElementById('hiResPeekVideoWrap');
+  if (wrap && deferPlay) {
+    wrap.style.opacity = '0';
+    wrap.style.transition = 'none';
+  }
   function onMeta() {
     syncHiResPeekVideoLayout(cfg);
-    if (!deferPlay) hiResPeekPlayOverlayVideo();
+    if (!deferPlay) hiResPeekPlayOverlayVideo(true);
   }
   vid.onloadedmetadata = onMeta;
+  vid.onended = function() {
+    if (!wrap || wrap.hidden) return;
+    wrap.style.transition = 'opacity ' + (HI_RES_PEEK_VIDEO_FADE_MS / 1000) + 's ease-out';
+    wrap.style.opacity = '0';
+  };
   vid.onerror = function() {
     console.warn('⚠️ 高画質覗き動画を読み込めません:', vc.src);
   };
@@ -2018,7 +2316,12 @@ function teardownHiResPeekOverlayVideo() {
   vid.removeAttribute('src');
   while (vid.firstChild) vid.removeChild(vid.firstChild);
   vid.onloadedmetadata = null;
-  if (wrap) wrap.hidden = true;
+  vid.onended = null;
+  if (wrap) {
+    wrap.hidden = true;
+    wrap.style.opacity = '';
+    wrap.style.transition = '';
+  }
   if (shadowWrap) shadowWrap.hidden = true;
   if (shadowImg) shadowImg.removeAttribute('src');
 }
@@ -2064,7 +2367,9 @@ function fitHiResPeekImage(keepZoom) {
   img.style.width = iw + 'px';
   img.style.height = ih + 'px';
   img.style.visibility = '';
-  img.style.opacity = '1';
+  if (!(hiResPeekOpen && hiResPeekKeepLivePanoActive && hiResPeekAutoZoomAnim)) {
+    img.style.opacity = '1';
+  }
   syncHiResPeekVideoLayout(cfg);
   applyHiResPeekTransform();
   console.log('🔍 高画質覗き:', usePaste ? 'VRに貼り付け' : '全体表示', iw + '×' + ih);
@@ -2098,26 +2403,41 @@ function openHiResPeekOverlay() {
   var overlay = document.getElementById('hiResPeekOverlay');
   var baseImg = document.getElementById('hiResPeekBaseImg');
   if (!overlay || !baseImg) return;
+  var keepLive = hiResPeekKeepLivePano(cfg);
+  hiResPeekKeepLivePanoActive = keepLive;
   hiResPeekOpen = true;
-  document.body.classList.add('hi-res-peek-active');
+  if (!keepLive) {
+    document.body.classList.add('hi-res-peek-active');
+  }
   overlay.setAttribute('aria-hidden', 'false');
   overlay.style.display = 'block';
-  hiResPeekSetupVrBackdropPane(cfg);
+  hiResPeekSetupPeekBackground(cfg);
+  if (keepLive) {
+    hiResPeekLiveFrameRect = hiResPeekCaptureHotspotFrameRect();
+    hiResPeekFreezeLivePanoView();
+  }
   updateHiResPeekFrameVisibility();
   document.body.classList.remove('hi-res-peek-fast-out');
   baseImg.style.opacity = '0';
-  baseImg.style.transition = 'opacity 1.4s ease-in-out';
+  baseImg.style.transition = keepLive ? 'none' : 'opacity 1.4s ease-in-out';
   var url = hiResPeekImageUrl(cfg.imageSrc);
   var deferVideo = cfg.autoZoom !== false;
   function showHiResPeekImageReady() {
     requestAnimationFrame(function() {
       requestAnimationFrame(function() {
         fitHiResPeekImage(false);
+        if (keepLive && hiResPeekLiveFrameRect) {
+          hiResPeekApplyLivePanoFrameFit(hiResPeekLiveFrameRect, cfg);
+        }
+        if (keepLive) {
+          baseImg.style.opacity = '1';
+          baseImg.style.transition = 'none';
+        }
         setupHiResPeekOverlayVideo(cfg, { deferPlay: deferVideo });
         syncHiResPeekShadowLayer(cfg);
         setTimeout(function() {
           if (!hiResPeekOpen) return;
-          baseImg.style.opacity = '1';
+          if (!keepLive) baseImg.style.opacity = '1';
           hiResPeekStartAutoZoom(cfg);
         }, 350);
       });
@@ -2142,6 +2462,8 @@ function closeHiResPeekOverlay() {
   var baseImg = document.getElementById('hiResPeekBaseImg');
   if (!overlay) return;
   hiResPeekOpen = false;
+  hiResPeekHideZoomHint();
+  hiResPeekUnfreezeLivePanoView();
   hiResPeekCancelAutoZoom();
   stopHiResPeekBgm();
   restoreBgmAfterVideo();
@@ -2438,7 +2760,11 @@ function showUI() {
   var yellowArrowIds = ['arrowUp', 'arrowDown', 'arrowLeft', 'arrowRight'];
 
   uiArrowsShown = true;
-  standardUI.forEach(function(el) { if(el) el.classList.add('visible'); });
+  standardUI.forEach(function(el) {
+    if (!el) return;
+    if (el === mapBtnEl && hiResPeekOpen) return;
+    el.classList.add('visible');
+  });
   syncYellowArrowVisibility();
 
   if (showExtras) {

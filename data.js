@@ -157,7 +157,6 @@ var APP_DATA = {
     "insets": { "left": 0, "top": 0, "right": 0, "bottom": 0 }
   },
   "name": "Local 1024tiles",
-  // 黒90度（270度VR・第1段階）… 観光地・三脚撮影向け。ポール撮影の作品（アジサイ等）ではOFF
   "panoramaBlack90": {
     "enabled": false,
     "faces": ["b"]
