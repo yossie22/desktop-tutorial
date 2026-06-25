@@ -1449,7 +1449,7 @@ data.scenes.forEach(function(scene) {
 });
 
 // ビルド識別（どのファイルが実行されているか確認用）
-var BUILD_STAMP = '2026-06-25-zoomHintHold4s';
+var BUILD_STAMP = '2026-06-25-peekBgmIosStop';
 var guideVideoPreloadBySrc = {};
 var guideVideoSessionDone = {};
 console.log('🧩 viewer build:', BUILD_STAMP);
@@ -1501,6 +1501,21 @@ function stopHiResPeekBgm() {
   if (!hiResPeekBgmAudio) return;
   var a = hiResPeekBgmAudio;
   hiResPeekBgmAudio = null;
+  if (a.__fadeTimer) {
+    clearInterval(a.__fadeTimer);
+    clearTimeout(a.__fadeTimer);
+    a.__fadeTimer = null;
+  }
+  if (a.__fadeInTimer) {
+    clearInterval(a.__fadeInTimer);
+    a.__fadeInTimer = null;
+  }
+  // iPad/Safari は volume が変えられないためフェードが終わらず止まらない
+  if (typeof guideDeviceIsIosSafari === 'function' && guideDeviceIsIosSafari()) {
+    try { a.pause(); a.currentTime = 0; } catch (e0) {}
+    try { a.removeAttribute('src'); } catch (e1) {}
+    return;
+  }
   fadeOutAudio(a, function() {
     try { a.pause(); } catch (e0) {}
     try { a.removeAttribute('src'); } catch (e1) {}
@@ -8259,15 +8274,28 @@ function restoreBgmAfterVideo() {
 }
 
 function fadeOutAudio(audio, callback) {
-  if (!audio || audio.volume === 0) {
+  if (!audio) {
     if (callback) callback();
     return;
   }
   if (audio.__fadeTimer) {
     clearInterval(audio.__fadeTimer);
+    clearTimeout(audio.__fadeTimer);
     audio.__fadeTimer = null;
   }
-  
+  // iPad/Safari: volume は常に 1 のまま → フェードが完了せず pause されない
+  if (typeof guideDeviceIsIosSafari === 'function' && guideDeviceIsIosSafari()) {
+    audio.__fadeTimer = setTimeout(function() {
+      audio.__fadeTimer = null;
+      if (callback) callback();
+    }, bgmFadeOutDuration);
+    return;
+  }
+  if (audio.volume === 0) {
+    if (callback) callback();
+    return;
+  }
+
   var startVol = audio.volume;
   var stepCount = bgmFadeOutDuration / 50;  // 50ms間隔
   var stepVol = startVol / stepCount;
