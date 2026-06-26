@@ -1,3 +1,4 @@
+// GENERATOR_HISTORY: [{"sceneId":"4-bb001","text":"ここは霊山の第2展望台 !!  虫眼鏡でキンランのアップ　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　になります。　VRボタンで戻ります。","fontSize":15,"fontFamily":"'Hiragino Kaku Gothic Pro','ヒラギノ角ゴ Pro W3',sans-serif","color":"#ffffff","pitch":1.45,"yaw":0.74},{"sceneId":"2-aa003","text":"虫眼鏡の枠クリックで拡大画面に移り いよいよ……","fontSize":15,"fontFamily":"'Hiragino Kaku Gothic Pro','ヒラギノ角ゴ Pro W3',sans-serif","color":"#ffffff","pitch":1.45,"yaw":0.74},{"sceneId":"1-aa002","text":"右回転で場違いの人物？登場です。","fontSize":15,"fontFamily":"'Hiragino Kaku Gothic Pro','ヒラギノ角ゴ Pro W3',sans-serif","color":"#ffffff","pitch":1.45,"yaw":0.74},{"sceneId":"0-aa001","text":"見回して空中に別景色（ポータル移動）が現れたら　　　　　　　　　　　　　　　　　　クリックで地図以外の場所に跳びます！","fontSize":15,"fontFamily":"'Hiragino Kaku Gothic Pro','ヒラギノ角ゴ Pro W3',sans-serif","color":"#ffffff","pitch":1.45,"yaw":0.74},{"sceneId":"4-bb001","text":"ここは霊山の第2展望台 !!  虫眼鏡でキンランのアップになります。","fontSize":19,"fontFamily":"'Hiragino Kaku Gothic Pro','ヒラギノ角ゴ Pro W3',sans-serif","color":"#ffffff","pitch":1.45,"yaw":0.74}]
 var APP_DATA = {
   "tourTitle": "アジサイの妖精",
   "tourDescription": "アジサイの妖精が現れます。",
@@ -42,7 +43,7 @@ var APP_DATA = {
           "title": "見回して空中に別景色（ポータル移動）が現れたら　　　　　　　　　　　　　　　　　　クリックで地図以外の場所に跳びます！",
           "text": "見回して空中に別景色（ポータル移動）が現れたら　　　　　　　　　　　　　　　　　　クリックで地図以外の場所に跳びます！",
           "style": {
-            "fontSize": "19px",
+            "fontSize": "15px",
             "fontFamily": "'Hiragino Kaku Gothic Pro','ヒラギノ角ゴ Pro W3',sans-serif",
             "color": "#ffffff"
           }
@@ -115,7 +116,7 @@ var APP_DATA = {
           "title": "右回転で場違いの人物？登場です。",
           "text": "右回転で場違いの人物？登場です。",
           "style": {
-            "fontSize": "19px",
+            "fontSize": "15px",
             "fontFamily": "'Hiragino Kaku Gothic Pro','ヒラギノ角ゴ Pro W3',sans-serif",
             "color": "#ffffff"
           }
@@ -195,7 +196,7 @@ var APP_DATA = {
           "title": "虫眼鏡の枠クリックで拡大画面に移り いよいよ……",
           "text": "虫眼鏡の枠クリックで拡大画面に移り いよいよ……",
           "style": {
-            "fontSize": "19px",
+            "fontSize": "15px",
             "fontFamily": "'Hiragino Kaku Gothic Pro','ヒラギノ角ゴ Pro W3',sans-serif",
             "color": "#ffffff"
           }
@@ -274,7 +275,7 @@ var APP_DATA = {
           "title": "ここは霊山の第2展望台 !!  虫眼鏡でキンランのアップ　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　になります。　VRボタンで戻ります。",
           "text": "ここは霊山の第2展望台 !!  虫眼鏡でキンランのアップ　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　になります。　VRボタンで戻ります。",
           "style": {
-            "fontSize": "19px",
+            "fontSize": "15px",
             "fontFamily": "'Hiragino Kaku Gothic Pro','ヒラギノ角ゴ Pro W3',sans-serif",
             "color": "#ffffff"
           }
