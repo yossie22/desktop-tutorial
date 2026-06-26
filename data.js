@@ -1,4 +1,3 @@
-// GENERATOR_HISTORY: [{"sceneId":"4-bb001","text":"ここは霊山の第2展望台 !!  虫眼鏡でキンランのアップ　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　になります。　VRボタンで戻ります。","fontSize":19,"fontFamily":"'Hiragino Kaku Gothic Pro','ヒラギノ角ゴ Pro W3',sans-serif","color":"#ffffff","pitch":1.45,"yaw":0.74},{"sceneId":"2-aa003","text":"虫眼鏡の枠クリックで拡大画面に移り いよいよ……","fontSize":19,"fontFamily":"'Hiragino Kaku Gothic Pro','ヒラギノ角ゴ Pro W3',sans-serif","color":"#ffffff","pitch":1.45,"yaw":0.74},{"sceneId":"1-aa002","text":"右回転で場違いの人物？登場です。","fontSize":19,"fontFamily":"'Hiragino Kaku Gothic Pro','ヒラギノ角ゴ Pro W3',sans-serif","color":"#ffffff","pitch":1.45,"yaw":0.74},{"sceneId":"0-aa001","text":"見回して空中に別景色（ポータル移動）が現れたら　　　　　　　　　　　　　　　　　　クリックで地図以外の場所に跳びます！","fontSize":19,"fontFamily":"'Hiragino Kaku Gothic Pro','ヒラギノ角ゴ Pro W3',sans-serif","color":"#ffffff","pitch":1.45,"yaw":0.74},{"sceneId":"4-bb001","text":"ここは霊山の第2展望台 !!  虫眼鏡でキンランのアップになります。","fontSize":19,"fontFamily":"'Hiragino Kaku Gothic Pro','ヒラギノ角ゴ Pro W3',sans-serif","color":"#ffffff","pitch":1.45,"yaw":0.74}]
 var APP_DATA = {
   "tourTitle": "アジサイの妖精",
   "tourDescription": "アジサイの妖精が現れます。",
@@ -286,25 +285,26 @@ var APP_DATA = {
       "hiResPeeks": [
         {
           "imageSrc": "bb001-1eos.png",
-          "yawCenter": -30,
-          "pitchCenter": 45,
-          "frameWidth": 126,
-          "frameHeight": 94,
+          "yawCenter": -31,
+          "pitchCenter": 43,
+          "frameWidth": 157,
+          "frameHeight": 126,
           "frameRadius": 900,
-          "rangeAngleYaw": 8,
-          "rangeAnglePitch": 6,
-          "showAngleYaw": 4,
-          "showAnglePitch": 3,
+          "rangeAngleYaw": 10,
+          "rangeAnglePitch": 8,
+          "showAngleYaw": 27,
+          "showAnglePitch": 19,
           "shootMode": "macro",
           "maskType": "softEllipse",
           "maskStrength": 85,
           "magnifierColor": "gold",
-          "autoZoom": false
+          "autoZoom": false,
+          "autoZoomMs": 10000
         },
         {
           "imageSrc": "bb001-2eos.png",
           "yawCenter": -9,
-          "pitchCenter": 55,
+          "pitchCenter": 54,
           "frameRadius": 900,
           "rangeAngleYaw": 22,
           "rangeAnglePitch": 14,
@@ -316,7 +316,8 @@ var APP_DATA = {
           "magnifierColor": "pink",
           "autoZoom": false,
           "frameWidth": 350,
-          "frameHeight": 221
+          "frameHeight": 221,
+          "autoZoomMs": 10000
         }
       ]
     }
