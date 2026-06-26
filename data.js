@@ -1,3 +1,4 @@
+// GENERATOR_HISTORY: [{"sceneId":"0-aa001","text":"見回して空中に別景色（ポータル移動）が現れたら　　　　　　　　　　　　　　　　　　クリックで地図以外の場所に跳びます！","fontSize":19,"fontFamily":"'Hiragino Kaku Gothic Pro','ヒラギノ角ゴ Pro W3',sans-serif","color":"#ffffff","pitch":1.45,"yaw":0.74},{"sceneId":"4-bb001","text":"ここは霊山の第2展望台 !!  虫眼鏡でキンランのアップになります。","fontSize":19,"fontFamily":"'Hiragino Kaku Gothic Pro','ヒラギノ角ゴ Pro W3',sans-serif","color":"#ffffff","pitch":1.45,"yaw":0.74},{"sceneId":"1-aa002","text":"右回転で場違いの人物？登場です。","fontSize":19,"fontFamily":"'Hiragino Kaku Gothic Pro','ヒラギノ角ゴ Pro W3',sans-serif","color":"#ffffff","pitch":1.45,"yaw":0.74},{"sceneId":"2-aa003","text":"虫眼鏡の枠クリックで拡大画面に移り いよいよ……","fontSize":19,"fontFamily":"'Hiragino Kaku Gothic Pro','ヒラギノ角ゴ Pro W3',sans-serif","color":"#ffffff","pitch":1.45,"yaw":0.74}]
 var APP_DATA = {
   "tourTitle": "アジサイの妖精",
   "tourDescription": "アジサイの妖精が現れます。",
@@ -34,7 +35,20 @@ var APP_DATA = {
           "target": "0-aa001"
         }
       ],
-      "infoHotspots": [],
+      "infoHotspots": [
+        {
+          "yaw": 0.74,
+          "pitch": 1.45,
+          "rotation": 0,
+          "title": "見回して空中に別景色（ポータル移動）が現れたら　　　　　　　　　　　　　　　　　　クリックで地図以外の場所に跳びます！",
+          "text": "見回して空中に別景色（ポータル移動）が現れたら　　　　　　　　　　　　　　　　　　クリックで地図以外の場所に跳びます！",
+          "style": {
+            "fontSize": "19px",
+            "fontFamily": "'Hiragino Kaku Gothic Pro','ヒラギノ角ゴ Pro W3',sans-serif",
+            "color": "#ffffff"
+          }
+        }
+      ],
       "position": 1,
       "course": "aa",
       "lat": 33.520345,
@@ -47,8 +61,8 @@ var APP_DATA = {
           "src": "portal.png",
           "width": 700,
           "height": 700,
-          "yawCenter": 90,
-          "yawRange": 20,
+          "yawCenter": 80,
+          "yawRange": 18,
           "targetScene": "4-bb001",
           "targetYaw": 0,
           "targetPitch": 0,
@@ -56,7 +70,9 @@ var APP_DATA = {
           "dispTime": 6000,
           "startHoldTime": 2500,
           "effect": "grow",
-          "resetDisplay": false
+          "resetDisplay": false,
+          "pitchCenter": -30,
+          "pitchRange": 35
         }
       ]
     },
@@ -92,7 +108,20 @@ var APP_DATA = {
           "target": "1-aa002"
         }
       ],
-      "infoHotspots": [],
+      "infoHotspots": [
+        {
+          "yaw": 0.74,
+          "pitch": 1.45,
+          "rotation": 0,
+          "title": "右回転で場違いの人物？登場です。",
+          "text": "右回転で場違いの人物？登場です。",
+          "style": {
+            "fontSize": "19px",
+            "fontFamily": "'Hiragino Kaku Gothic Pro','ヒラギノ角ゴ Pro W3',sans-serif",
+            "color": "#ffffff"
+          }
+        }
+      ],
       "position": 2,
       "course": "aa",
       "lat": 33.520525,
@@ -159,7 +188,20 @@ var APP_DATA = {
           "target": "2-aa003"
         }
       ],
-      "infoHotspots": [],
+      "infoHotspots": [
+        {
+          "yaw": 0.74,
+          "pitch": 1.45,
+          "rotation": 0,
+          "title": "虫眼鏡の枠クリックで拡大画面に移り いよいよ……",
+          "text": "虫眼鏡の枠クリックで拡大画面に移り いよいよ……",
+          "style": {
+            "fontSize": "19px",
+            "fontFamily": "'Hiragino Kaku Gothic Pro','ヒラギノ角ゴ Pro W3',sans-serif",
+            "color": "#ffffff"
+          }
+        }
+      ],
       "position": 3,
       "course": "aa",
       "heading": 158,
@@ -225,9 +267,58 @@ var APP_DATA = {
           "target": "4-bb001"
         }
       ],
-      "infoHotspots": [],
+      "infoHotspots": [
+        {
+          "yaw": 0.74,
+          "pitch": 1.45,
+          "rotation": 0,
+          "title": "ここは霊山の第2展望台 !!  虫眼鏡でキンランのアップになります。",
+          "text": "ここは霊山の第2展望台 !!  虫眼鏡でキンランのアップになります。",
+          "style": {
+            "fontSize": "19px",
+            "fontFamily": "'Hiragino Kaku Gothic Pro','ヒラギノ角ゴ Pro W3',sans-serif",
+            "color": "#ffffff"
+          }
+        }
+      ],
       "position": 1,
-      "course": "bb"
+      "course": "bb",
+      "hiResPeeks": [
+        {
+          "imageSrc": "bb001-1eos.png",
+          "yawCenter": -30,
+          "pitchCenter": 45,
+          "frameWidth": 126,
+          "frameHeight": 94,
+          "frameRadius": 900,
+          "rangeAngleYaw": 8,
+          "rangeAnglePitch": 6,
+          "showAngleYaw": 4,
+          "showAnglePitch": 3,
+          "shootMode": "macro",
+          "maskType": "softEllipse",
+          "maskStrength": 85,
+          "magnifierColor": "gold",
+          "autoZoom": false
+        },
+        {
+          "imageSrc": "bb001-2eos.png",
+          "yawCenter": -9,
+          "pitchCenter": 55,
+          "frameRadius": 900,
+          "rangeAngleYaw": 22,
+          "rangeAnglePitch": 14,
+          "showAngleYaw": 18,
+          "showAnglePitch": 16,
+          "shootMode": "macro",
+          "maskType": "softEllipse",
+          "maskStrength": 65,
+          "magnifierColor": "pink",
+          "autoZoom": false,
+          "frameWidth": 350,
+          "frameHeight": 221
+        }
+      ]
     }
   ],
   "mapConfig": {

@@ -834,15 +834,20 @@ body.embed-shadow #pano:active { cursor: grabbing; }
   touch-action: manipulation;
 }
 .hires-peek-zone-host.mode-macro {
-  width: 56px !important;
-  height: 56px !important;
+  width: 1px !important;
+  height: 1px !important;
+  overflow: visible;
 }
 .hires-peek-zone-host.mode-macro .hires-peek-magnifier {
   right: auto;
   bottom: auto;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
+  left: 0;
+  top: 0;
+  width: 50px;
+  height: 50px;
+  margin-left: -21px;
+  margin-top: -21px;
+  transform: none;
 }
 .hires-peek-zone-host.hires-peek-blink .hires-peek-soft-fill {
   animation: hires-peek-zone-pulse 3.4s ease-in-out infinite;
@@ -870,9 +875,18 @@ body.embed-shadow #pano:active { cursor: grabbing; }
   display: block;
   filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.55));
 }
-.hires-peek-magnifier.color-pink { color: #ff4da6; }
+.hires-peek-magnifier.color-pink {
+  color: #ff4da6;
+  filter: drop-shadow(0 0 2px #000) drop-shadow(0 0 5px rgba(0,0,0,0.85));
+}
 .hires-peek-magnifier.color-green { color: #4de67a; }
-.hires-peek-magnifier.color-gold { color: #f5c518; }
+.hires-peek-magnifier.color-gold {
+  color: #ffd84d;
+  filter: drop-shadow(0 0 2px #000) drop-shadow(0 0 5px rgba(0,0,0,0.9));
+}
+.hires-peek-magnifier.color-gold svg {
+  filter: drop-shadow(0 0 2px #000) drop-shadow(0 2px 8px rgba(0,0,0,0.65));
+}
 .hires-peek-zone-host.hires-peek-blink .hires-peek-magnifier {
   animation: hires-peek-mag-blink 2.8s ease-in-out infinite;
 }
@@ -1153,6 +1167,17 @@ window.TILES_BASE = "tiles1024";
           }
         }
       }
+      sc.forEach(function(scene) {
+        if (!scene || !scene.imageHotspots || !scene.imageHotspots.length) return;
+        scene.imageHotspots.forEach(function(ih, idx) {
+          var tv = resolvePortalTargetView(ih);
+          console.log('🎎 data.js ポータル[' + idx + '] scene=' + (ih.sceneStartId || scene.id) +
+            ' → ' + (ih.targetScene || '?') +
+            ' | 表示 yaw=' + (ih.yawCenter != null ? ih.yawCenter : '?') + '° pitch=' + portalCenterPitchDeg(ih) + '°' +
+            ' | 着地点 yaw=' + (tv.yaw != null ? radToDeg(tv.yaw).toFixed(1) : '?') +
+            '° pitch=' + (tv.pitch != null ? radToDeg(tv.pitch).toFixed(1) : '?') + '°');
+        });
+      });
     } catch (eLog) {}
   }
 
@@ -1457,7 +1482,7 @@ data.scenes.forEach(function(scene) {
 });
 
 // ビルド識別（どのファイルが実行されているか確認用）
-var BUILD_STAMP = '2026-06-25-sceneSounds';
+var BUILD_STAMP = '2026-06-25-hiResPeekNoZoom';
 var guideVideoPreloadBySrc = {};
 var guideVideoSessionDone = {};
 console.log('🧩 viewer build:', BUILD_STAMP);
@@ -1494,6 +1519,11 @@ var hiResPeekVrBackdropViewer = null;
 var hiResPeekVrBackdropScene = null;
 var hiResPeekHotspotEl = null;
 var hiResPeekActiveCfg = null;
+var hiResPeekHotspots = [];
+var hiResPeekOpeningCfg = null;
+var hiResPeekOpeningHotspotEl = null;
+var hiResPeekInteractActive = false;
+var HI_RES_PEEK_MAX = 10;
 var hiResPeekBgmAudio = null;
 var hiResPeekKeepLivePanoActive = false;
 var hiResPeekLiveFrameRect = null;
@@ -1738,12 +1768,13 @@ function hiResPeekUnfreezeLivePanoView() {
 }
 
 function hiResPeekCaptureHotspotFrameRect() {
-  if (!hiResPeekHotspotEl) return null;
+  var el = hiResPeekOpeningHotspotEl || hiResPeekHotspotEl;
+  if (!el) return null;
   var view = document.getElementById('hiResPeekView');
   if (!view) return null;
-  var zone = hiResPeekHotspotEl.querySelector('.hires-peek-soft-zone');
-  var el = zone || hiResPeekHotspotEl;
-  var r = el.getBoundingClientRect();
+  var zone = el.querySelector('.hires-peek-soft-zone');
+  var target = zone || el;
+  var r = target.getBoundingClientRect();
   var vr = view.getBoundingClientRect();
   if (r.width < 8 || r.height < 8) return null;
   return {
@@ -1855,7 +1886,8 @@ function hiResPeekComputeAutoZoomTarget(cfg) {
 }
 
 function hiResPeekAutoZoomDurationMs(cfg) {
-  var baseMs = cfg && cfg.autoZoomMs != null ? Number(cfg.autoZoomMs) : 10000;
+  var defMs = hiResPeekShootMode(cfg) === 'macro' ? 12000 : 10000;
+  var baseMs = cfg && cfg.autoZoomMs != null ? Number(cfg.autoZoomMs) : defMs;
   if (!isFinite(baseMs) || baseMs < 400) baseMs = 10000;
   var speed = cfg && cfg.autoZoomSpeed != null ? Number(cfg.autoZoomSpeed) : 1;
   if (!isFinite(speed) || speed <= 0) speed = 1;
@@ -1906,6 +1938,24 @@ function hiResPeekCancelAutoZoom() {
   }
 }
 
+function hiResPeekRevealNoZoom(cfg) {
+  hiResPeekCancelAutoZoom();
+  hiResPeekApplyVrBackdropTone(1, cfg);
+  var baseImg = document.getElementById('hiResPeekBaseImg');
+  if (!baseImg) {
+    hiResPeekFinishZoomReveal(cfg);
+    return;
+  }
+  baseImg.style.transition = 'opacity 0.85s ease-in-out';
+  requestAnimationFrame(function() {
+    requestAnimationFrame(function() {
+      if (!hiResPeekOpen) return;
+      baseImg.style.opacity = '1';
+      hiResPeekFinishZoomReveal(cfg);
+    });
+  });
+}
+
 function hiResPeekStartAutoZoom(cfg) {
   hiResPeekCancelAutoZoom();
   var baseImg = document.getElementById('hiResPeekBaseImg');
@@ -1930,10 +1980,17 @@ function hiResPeekStartAutoZoom(cfg) {
   if (!view) return;
   var cx = hiResPeekViewState.zoomAnchorX != null ? hiResPeekViewState.zoomAnchorX : view.clientWidth / 2;
   var cy = hiResPeekViewState.zoomAnchorY != null ? hiResPeekViewState.zoomAnchorY : view.clientHeight / 2;
+  var isMacro = hiResPeekShootMode(cfg) === 'macro';
   hiResPeekApplyVrBackdropTone(0, cfg);
   if (baseImg) {
     baseImg.style.transition = 'none';
-    baseImg.style.opacity = '1';
+    if (livePano) {
+      baseImg.style.opacity = '1';
+    } else if (isMacro) {
+      baseImg.style.opacity = '0';
+    } else {
+      baseImg.style.opacity = '1';
+    }
   }
   applyHiResPeekTransform();
   function frame(now) {
@@ -1943,6 +2000,9 @@ function hiResPeekStartAutoZoom(cfg) {
     var z1 = z0 + (targetZoom - z0) * ease;
     setHiResPeekZoom(z1, cx, cy, true);
     hiResPeekApplyVrBackdropTone(t, cfg);
+    if (baseImg && (livePano || isMacro)) {
+      baseImg.style.opacity = String(hiResPeekImageFadeOpacity(t));
+    }
     if (t < 1) {
       hiResPeekAutoZoomAnim = requestAnimationFrame(frame);
     } else {
@@ -1970,14 +2030,21 @@ function hiResPeekTeardownVrBackdropPane() {
 }
 
 function destroyHiResPeekHotspot() {
-  if (window.hiResPeekHotspotHandle && currentScene) {
+  if (hiResPeekHotspots.length && currentScene) {
+    hiResPeekHotspots.forEach(function(item) {
+      try { currentScene.hotspotContainer().destroyHotspot(item.handle); } catch (e) {}
+    });
+  } else if (window.hiResPeekHotspotHandle && currentScene) {
     try {
       currentScene.hotspotContainer().destroyHotspot(window.hiResPeekHotspotHandle);
     } catch (e) {}
-    window.hiResPeekHotspotHandle = null;
   }
+  window.hiResPeekHotspotHandle = null;
+  hiResPeekHotspots = [];
   hiResPeekHotspotEl = null;
   hiResPeekActiveCfg = null;
+  hiResPeekOpeningCfg = null;
+  hiResPeekOpeningHotspotEl = null;
 }
 
 function hiResPeekShootMode(cfg) {
@@ -1987,13 +2054,16 @@ function hiResPeekShootMode(cfg) {
 
 function hiResPeekFrameViewThresholds(cfg) {
   if (cfg.showAngleYaw != null || cfg.showAnglePitch != null) {
-    return {
-      yaw: cfg.showAngleYaw != null ? Number(cfg.showAngleYaw) : 14,
-      pitch: cfg.showAnglePitch != null ? Number(cfg.showAnglePitch) : 10
-    };
+    var yawTh = cfg.showAngleYaw != null ? Number(cfg.showAngleYaw) : 14;
+    var pitchTh = cfg.showAnglePitch != null ? Number(cfg.showAnglePitch) : 10;
+    if (hiResPeekShootMode(cfg) === 'macro') {
+      yawTh = Math.max(14, yawTh);
+      pitchTh = Math.max(14, pitchTh);
+    }
+    return { yaw: yawTh, pitch: pitchTh };
   }
   if (hiResPeekShootMode(cfg) === 'macro') {
-    return { yaw: 12, pitch: 10 };
+    return { yaw: 14, pitch: 12 };
   }
   var size = hiResPeekEffectiveFrameSize(cfg);
   var r = cfg.frameRadius != null ? Number(cfg.frameRadius) : 900;
@@ -2001,6 +2071,11 @@ function hiResPeekFrameViewThresholds(cfg) {
     yaw: Math.max(8, radToDeg(Math.atan((size.width * 0.5) / r)) + 4),
     pitch: Math.max(6, radToDeg(Math.atan((size.height * 0.5) / r)) + 3)
   };
+}
+
+function markPanoUserInteract() {
+  hiResPeekInteractActive = true;
+  showUI();
 }
 
 function hiResPeekEffectiveFrameSize(cfg) {
@@ -2052,7 +2127,7 @@ function applyHiResPeekMaskStyle(fill, cfg) {
   }
 }
 
-function buildHiResPeekZoneElement(cfg) {
+function buildHiResPeekZoneElement(cfg, hostRef) {
   var isMacro = hiResPeekShootMode(cfg) === 'macro';
   var host = document.createElement('div');
   host.className = 'hires-peek-zone-host hires-peek-frame-hidden ' + (isMacro ? 'mode-macro' : 'mode-range');
@@ -2070,10 +2145,11 @@ function buildHiResPeekZoneElement(cfg) {
     applyHiResPeekMaskStyle(fill, cfg);
     zone.appendChild(fill);
     host.appendChild(zone);
-    bindPortalTap(zone, function() { openHiResPeekOverlay(); });
+    bindPortalTap(zone, function() { openHiResPeekOverlay(cfg, host); });
   } else {
-    host.style.width = '56px';
-    host.style.height = '56px';
+    host.style.width = '1px';
+    host.style.height = '1px';
+    host.style.overflow = 'visible';
   }
 
   var magColor = cfg.magnifierColor || (isMacro ? 'pink' : 'green');
@@ -2085,7 +2161,8 @@ function buildHiResPeekZoneElement(cfg) {
   mag.setAttribute('aria-label', '高画質虫眼鏡');
   mag.innerHTML = hiResPeekMagnifierSvg();
   host.appendChild(mag);
-  bindPortalTap(mag, function() { openHiResPeekOverlay(); });
+  bindPortalTap(mag, function() { openHiResPeekOverlay(cfg, host); });
+  if (hostRef) hostRef.el = host;
   return host;
 }
 
@@ -2103,45 +2180,60 @@ function updateHiResPeekMapBtnVisibility() {
 
 function updateHiResPeekFrameVisibility() {
   updateHiResPeekMapBtnVisibility();
-  if (!hiResPeekHotspotEl || !hiResPeekActiveCfg || !currentView) return;
+  if (!currentView) return;
   if (hiResPeekOpen) {
-    hiResPeekHotspotEl.classList.add('hires-peek-frame-hidden');
-    hiResPeekHotspotEl.classList.remove('hires-peek-blink');
+    hiResPeekHotspots.forEach(function(item) {
+      item.el.classList.add('hires-peek-frame-hidden');
+      item.el.classList.remove('hires-peek-blink');
+    });
+    if (hiResPeekHotspotEl) {
+      hiResPeekHotspotEl.classList.add('hires-peek-frame-hidden');
+      hiResPeekHotspotEl.classList.remove('hires-peek-blink');
+    }
     return;
   }
   var yaw = radToDeg(normalizeAngle(currentView.parameters().yaw));
   var pitch = radToDeg(currentView.parameters().pitch);
-  var yawC = Number(hiResPeekActiveCfg.yawCenter) || 0;
-  var pitchC = Number(hiResPeekActiveCfg.pitchCenter) || 0;
-  var th = hiResPeekFrameViewThresholds(hiResPeekActiveCfg);
-  var inView = Math.abs(angleDiffDeg(yaw, yawC)) <= th.yaw && Math.abs(pitch - pitchC) <= th.pitch;
-  var show = inView && uiArrowsShown;
-  hiResPeekHotspotEl.classList.toggle('hires-peek-frame-hidden', !show);
-  hiResPeekHotspotEl.classList.toggle('hires-peek-blink', show);
+  function applyOne(el, cfg) {
+    if (!el || !cfg) return;
+    var yawC = Number(cfg.yawCenter) || 0;
+    var pitchC = Number(cfg.pitchCenter) || 0;
+    var th = hiResPeekFrameViewThresholds(cfg);
+    var inView = Math.abs(angleDiffDeg(yaw, yawC)) <= th.yaw && Math.abs(pitch - pitchC) <= th.pitch;
+    var show = inView && hiResPeekInteractActive;
+    el.classList.toggle('hires-peek-frame-hidden', !show);
+    el.classList.toggle('hires-peek-blink', show);
+  }
+  hiResPeekHotspots.forEach(function(item) { applyOne(item.el, item.cfg); });
 }
 
 function attachHiResPeekHotspot(sceneId, sceneData) {
   destroyHiResPeekHotspot();
   if (embedPlacerMode || embedShadowMode) return;
-  var cfg = getHiResPeekConfig(sceneData);
-  if (!cfg || !currentScene) return;
+  var cfgs = getHiResPeekConfigs(sceneData);
+  if (!cfgs.length || !currentScene) return;
 
-  var isMacro = hiResPeekShootMode(cfg) === 'macro';
-  var wrap = buildHiResPeekZoneElement(cfg);
-  var yaw = degToRad(Number(cfg.yawCenter) || 0);
-  var pitch = degToRad(Number(cfg.pitchCenter) || 0);
-  var radius = cfg.frameRadius != null ? Number(cfg.frameRadius) : (isMacro ? 720 : 900);
-
-  hiResPeekHotspotEl = wrap;
-  hiResPeekActiveCfg = cfg;
-
-  window.hiResPeekHotspotHandle = currentScene.hotspotContainer().createHotspot(
-    wrap,
-    { yaw: yaw, pitch: pitch },
-    { perspective: { radius: radius } }
-  );
+  cfgs.forEach(function(cfg, idx) {
+    var isMacro = hiResPeekShootMode(cfg) === 'macro';
+    var wrap = buildHiResPeekZoneElement(cfg);
+    wrap.style.zIndex = String(50 + idx);
+    var yaw = degToRad(Number(cfg.yawCenter) || 0);
+    var pitch = degToRad(Number(cfg.pitchCenter) || 0);
+    var radius = cfg.frameRadius != null ? Number(cfg.frameRadius) : (isMacro ? 720 : 900);
+    var handle = currentScene.hotspotContainer().createHotspot(
+      wrap,
+      { yaw: yaw, pitch: pitch },
+      { perspective: { radius: radius } }
+    );
+    hiResPeekHotspots.push({ el: wrap, handle: handle, cfg: cfg });
+    console.log('🔍 高画質覗き: ' + (isMacro ? '接写' : '範囲') + ' ' + (cfg.imageSrc || '') + ' yaw=' + (cfg.yawCenter || 0) + '°');
+  });
+  if (hiResPeekHotspots.length) {
+    hiResPeekHotspotEl = hiResPeekHotspots[0].el;
+    hiResPeekActiveCfg = hiResPeekHotspots[0].cfg;
+    window.hiResPeekHotspotHandle = hiResPeekHotspots[0].handle;
+  }
   updateHiResPeekFrameVisibility();
-  console.log('🔍 高画質覗き: ' + (isMacro ? '接写' : '範囲') + ' yaw=' + (cfg.yawCenter || 0) + '°');
 }
 
 function showHiResPeekHintFade() {
@@ -2219,11 +2311,19 @@ function hideHiResPeekVrUi() {
   if (hiResPeekVrBtnEl) hiResPeekVrBtnEl.classList.remove('visible');
 }
 
-function getHiResPeekConfig(sceneData) {
-  if (!sceneData || !sceneData.hiResPeek) return null;
+function getHiResPeekConfigs(sceneData) {
+  if (!sceneData) return [];
+  if (sceneData.hiResPeeks && Array.isArray(sceneData.hiResPeeks)) {
+    return sceneData.hiResPeeks.filter(function(p) { return p && p.imageSrc; }).slice(0, HI_RES_PEEK_MAX);
+  }
   var p = sceneData.hiResPeek;
-  if (!p.imageSrc) return null;
-  return p;
+  return (p && p.imageSrc) ? [p] : [];
+}
+
+function getHiResPeekConfig(sceneData) {
+  if (hiResPeekOpen && hiResPeekOpeningCfg) return hiResPeekOpeningCfg;
+  var list = getHiResPeekConfigs(sceneData);
+  return list.length ? list[0] : null;
 }
 
 function hiResPeekIosVideoSrc(cfg) {
@@ -2499,12 +2599,20 @@ function setHiResPeekZoom(nextZoom, anchorX, anchorY, fromAutoZoom) {
   applyHiResPeekTransform();
 }
 
-function openHiResPeekOverlay() {
-  var cfg = currentSceneObj ? getHiResPeekConfig(currentSceneObj.data) : null;
+function openHiResPeekOverlay(cfg, hotspotEl) {
+  if (!cfg) {
+    var list = currentSceneObj ? getHiResPeekConfigs(currentSceneObj.data) : [];
+    cfg = list.length ? list[0] : null;
+  }
   if (!cfg || hiResPeekOpen) return;
+  hiResPeekOpeningCfg = cfg;
+  hiResPeekOpeningHotspotEl = hotspotEl || null;
+  hiResPeekActiveCfg = cfg;
+  if (hotspotEl) hiResPeekHotspotEl = hotspotEl;
   var overlay = document.getElementById('hiResPeekOverlay');
   var baseImg = document.getElementById('hiResPeekBaseImg');
   if (!overlay || !baseImg) return;
+  var isMacroOpen = hiResPeekShootMode(cfg) === 'macro';
   var keepLive = hiResPeekKeepLivePano(cfg);
   hiResPeekKeepLivePanoActive = keepLive;
   hiResPeekOpen = true;
@@ -2521,9 +2629,10 @@ function openHiResPeekOverlay() {
   updateHiResPeekFrameVisibility();
   document.body.classList.remove('hi-res-peek-fast-out');
   baseImg.style.opacity = '0';
-  baseImg.style.transition = keepLive ? 'none' : 'opacity 1.4s ease-in-out';
+  var useZoom = cfg.autoZoom !== false;
+  baseImg.style.transition = (keepLive || (isMacroOpen && useZoom)) ? 'none' : 'opacity 0.85s ease-in-out';
   var url = hiResPeekImageUrl(cfg.imageSrc);
-  var deferVideo = cfg.autoZoom !== false;
+  var deferVideo = useZoom;
   function showHiResPeekImageReady() {
     requestAnimationFrame(function() {
       requestAnimationFrame(function() {
@@ -2537,11 +2646,15 @@ function openHiResPeekOverlay() {
         }
         setupHiResPeekOverlayVideo(cfg, { deferPlay: deferVideo });
         syncHiResPeekShadowLayer(cfg);
+        if (!keepLive && !useZoom) {
+          hiResPeekRevealNoZoom(cfg);
+          return;
+        }
         setTimeout(function() {
           if (!hiResPeekOpen) return;
-          if (!keepLive) baseImg.style.opacity = '1';
+          if (!keepLive && !isMacroOpen) baseImg.style.opacity = '1';
           hiResPeekStartAutoZoom(cfg);
-        }, 350);
+        }, keepLive ? 350 : 200);
       });
     });
   }
@@ -2566,6 +2679,8 @@ function closeHiResPeekOverlay() {
   hiResPeekOpen = false;
   hiResPeekHideZoomHint();
   hiResPeekUnfreezeLivePanoView();
+  hiResPeekOpeningCfg = null;
+  hiResPeekOpeningHotspotEl = null;
   hiResPeekCancelAutoZoom();
   stopHiResPeekBgm();
   restoreBgmAfterVideo();
@@ -2703,7 +2818,10 @@ bindIOSGuideVideoKick();
 bindHiResPeekUi();
 
 // ★画面タッチで自動再生停止（黄色矢印と同じ方式）
-panoElement.addEventListener('mousedown', function() {
+panoElement.addEventListener('mousedown', function(e) {
+  if (!(e.target && e.target.closest && e.target.closest('.portal-hotspot, .portal-hit-area'))) {
+    markPanoUserInteract();
+  }
   if (typeof autoMoveActive !== 'undefined' && autoMoveActive) {
     stopAutoMove(true);
     console.log('⛔ タッチで自動再生停止');
@@ -2714,6 +2832,7 @@ panoElement.addEventListener('touchstart', function(e) {
   if (e.target && e.target.closest && e.target.closest('.portal-hotspot, .portal-hit-area')) {
     return;
   }
+  markPanoUserInteract();
   if (typeof autoMoveActive !== 'undefined' && autoMoveActive) {
     stopAutoMove(true);
     console.log('⛔ タッチで自動再生停止');
@@ -2887,6 +3006,7 @@ function showUI() {
   clearTimeout(uiTimeout);
   uiTimeout = setTimeout(function() {
     uiArrowsShown = false;
+    hiResPeekInteractActive = false;
     standardUI.concat([compassContEl, crosshairEl, volumeUI]).forEach(function(el) { if(el) el.classList.remove('visible'); });
     yellowArrowIds.forEach(function(id) {
       var el = document.getElementById(id);
@@ -2968,6 +3088,39 @@ function portalRangeDeg(ih) {
 
 function portalPlacementYawRad(ih) {
   return degToRad(portalCenterDeg(ih));
+}
+
+function portalCenterPitchDeg(ih) {
+  if (ih == null || ih.pitchCenter == null || ih.pitchCenter === '') return 0;
+  var n = Number(ih.pitchCenter);
+  return isFinite(n) ? n : 0;
+}
+
+function portalPitchRangeDeg(ih) {
+  if (typeof ih.pitchRange === 'number' && !isNaN(ih.pitchRange)) return Math.max(0, ih.pitchRange);
+  return Math.max(15, portalRangeDeg(ih));
+}
+
+function portalPlacementPitchRad(ih) {
+  return degToRad(portalCenterPitchDeg(ih));
+}
+
+/** 旧 data.js で度数のまま入っている targetYaw/targetPitch を補正 */
+function normalizePortalTargetRad(val, isPitch) {
+  if (val == null || val === '' || !isFinite(Number(val))) return undefined;
+  var n = Number(val);
+  var limit = isPitch ? (Math.PI / 2 + 0.01) : (Math.PI + 0.01);
+  if (Math.abs(n) > limit) return degToRad(n);
+  return n;
+}
+
+function resolvePortalTargetView(ih) {
+  if (!ih) return { yaw: undefined, pitch: undefined };
+  var yaw = normalizePortalTargetRad(ih.targetYaw, false);
+  var pitch = normalizePortalTargetRad(ih.targetPitch, true);
+  if (yaw === undefined && ih.targetYaw === 0) yaw = 0;
+  if (pitch === undefined && ih.targetPitch === 0) pitch = 0;
+  return { yaw: yaw, pitch: pitch };
 }
 
 function isRevealPortal(ih) {
@@ -3150,6 +3303,9 @@ function playPortalDiveTransition(hs) {
   var startFov = portalDiveFovRad(ih, 'start');
   var endFov = resolvePortalDiveEndFov(ih, ih.targetScene);
   var useBlur = ih.diveBlur !== false;
+  var targetView = resolvePortalTargetView(ih);
+  var targetYaw = targetView.yaw;
+  var targetPitch = targetView.pitch;
   var targetScene = ih.targetScene;
   var sameScene = currentSceneObj && currentSceneObj.data.id === targetScene;
 
@@ -3172,10 +3328,10 @@ function playPortalDiveTransition(hs) {
     if (token !== portalDiveAnimToken) return;
 
     if (sameScene) {
-      if (ih.targetYaw !== undefined && ih.targetPitch !== undefined && currentView) {
+      if (targetYaw !== undefined && targetPitch !== undefined && currentView) {
         currentView.setParameters({
-          yaw: ih.targetYaw,
-          pitch: ih.targetPitch,
+          yaw: targetYaw,
+          pitch: targetPitch,
           fov: startFov
         });
       } else if (currentView) {
@@ -3183,7 +3339,7 @@ function playPortalDiveTransition(hs) {
       }
       animateViewFov(currentView, startFov, endFov, dur, token);
     } else {
-      switchScene(targetScene, ih.targetYaw, ih.targetPitch, startFov, true);
+      switchScene(targetScene, targetYaw, targetPitch, startFov, true);
       setTimeout(function() {
         if (token !== portalDiveAnimToken || !currentView) return;
         animateViewFov(currentView, startFov, endFov, dur, token);
@@ -3251,6 +3407,7 @@ function onPortalHotspotTap(hs) {
   }
   if (!ih.targetScene) return;
   setPortalTappable(hs, false);
+  var targetAngles = resolvePortalTargetView(ih);
   var targetId = resolveSceneId(ih.targetScene) || ih.targetScene;
   if (!scenesData[targetId]) {
     console.warn('⚠️ ポータル移動先が見つかりません:', ih.targetScene);
@@ -3261,8 +3418,8 @@ function onPortalHotspotTap(hs) {
     playPortalDiveTransition(hs);
     return;
   }
-  console.log('🎎 hotspot タップ → ' + targetId + ' に移動');
-  switchScene(targetId, ih.targetYaw, ih.targetPitch, currentView.parameters().fov, true);
+  console.log('🎎 hotspot タップ → ' + targetId + ' に移動 (pitch=' + (targetAngles.pitch != null ? radToDeg(targetAngles.pitch).toFixed(1) : '?') + '°)');
+  switchScene(targetId, targetAngles.yaw, targetAngles.pitch, currentView.parameters().fov, true);
 }
 
 function isSupportedVideoSrc(src) {
@@ -3843,11 +4000,15 @@ function playLinkedPortalVideo(hs) {
     setPortalTappable(hs, false);
 
     if (ih.targetSceneAfterVideo) {
+      var afterVideoView = resolvePortalTargetView({
+        targetYaw: ih.targetYawAfterVideo,
+        targetPitch: ih.targetPitchAfterVideo
+      });
       setTimeout(function() {
         switchScene(
           ih.targetSceneAfterVideo,
-          ih.targetYawAfterVideo,
-          ih.targetPitchAfterVideo,
+          afterVideoView.yaw,
+          afterVideoView.pitch,
           currentView.parameters().fov,
           true
         );
@@ -3862,18 +4023,19 @@ function playLinkedPortalVideo(hs) {
     if (ih.targetScene) {
       var sameScene = currentSceneObj && currentSceneObj.data && currentSceneObj.data.id === ih.targetScene;
       // 先に pano の向きを合わせてから overlay を閉じる（77°が見えるのを防ぐ）
+      var endPortalView = resolvePortalTargetView(ih);
       if (sameScene) {
-        if (currentView && ih.targetYaw !== undefined && ih.targetPitch !== undefined) {
+        if (currentView && endPortalView.yaw !== undefined && endPortalView.pitch !== undefined) {
           currentView.setParameters({
-            yaw: ih.targetYaw,
-            pitch: ih.targetPitch,
+            yaw: endPortalView.yaw,
+            pitch: endPortalView.pitch,
             fov: currentView.parameters().fov
           });
           requestAnimationFrame(function() {
             if (!currentView) return;
             currentView.setParameters({
-              yaw: ih.targetYaw,
-              pitch: ih.targetPitch,
+              yaw: endPortalView.yaw,
+              pitch: endPortalView.pitch,
               fov: currentView.parameters().fov
             });
             // 次フレームで閉じる（確実に向きが反映された後にフェード開始）
@@ -3885,8 +4047,8 @@ function playLinkedPortalVideo(hs) {
       // 別シーンへ移動する場合も、overlay を残したまま switch してから閉じる
       switchScene(
         ih.targetScene,
-        ih.targetYaw,
-        ih.targetPitch,
+        endPortalView.yaw,
+        endPortalView.pitch,
         currentView.parameters().fov,
         true
       );
@@ -4186,6 +4348,28 @@ function applyViewParamsToScene(sceneObj, params, label) {
   } catch (e) {
     console.warn('⚠ 向き適用失敗:', e);
   }
+}
+
+/** ポータル移動直後、フェード中に pitch が 0° に戻るのを防ぐ */
+function lockPortalArrivalView(sceneObj, viewParams, holdMs) {
+  if (!sceneObj || !sceneObj.view || !viewParams || embedPlacerMode) return;
+  var view = sceneObj.view;
+  var sceneId = sceneObj.data.id;
+  var endAt = Date.now() + holdMs;
+  function snap(tag) {
+    if (Date.now() > endAt) return false;
+    if (!currentSceneObj || currentSceneObj.data.id !== sceneId) return false;
+    applyViewParamsToScene(sceneObj, viewParams, tag);
+    return true;
+  }
+  function onChange() { snap('lock'); }
+  view.addEventListener('change', onChange);
+  [0, 40, 120, 280, 600, 1000, 1600, 2400, 3200].forEach(function(ms) {
+    if (ms <= holdMs) setTimeout(function() { snap('t' + ms); }, ms);
+  });
+  setTimeout(function() {
+    try { view.removeEventListener('change', onChange); } catch (e0) {}
+  }, holdMs + 120);
 }
 
 function bindVideo2DTap(wrap, vid, vh) {
@@ -5152,7 +5336,7 @@ function suggestFootShadowConfigForEntry(entry, cfg) {
   if (embedShadowMode) {
     out.widthPx = Math.max(out.widthPx, Math.round(wrapW * 1.5));
     if ((cfg.scaleY == null || cfg.scaleY < 2) && out.scaleY < 2.4) out.scaleY = 2.8;
-    if (cfg.offsetPitchDeg == null || cfg.offsetPitchDeg > -5) out.offsetPitchDeg = -14;
+    if (cfg.offsetPitchDeg == null) out.offsetPitchDeg = -14;
   }
   return out;
 }
@@ -6541,6 +6725,9 @@ function switchScene(sceneId, yaw, pitch, fov, fromPortalHotspot, keepFullscreen
     setTimeout(function() { reapply('50ms'); }, 50);
     setTimeout(function() { reapply('fade後'); }, Math.max(80, crossfadeDur + 80));
     setTimeout(function() { reapply('再確認'); }, crossfadeDur + 280);
+    if (fromPortalHotspot) {
+      lockPortalArrivalView(obj, viewParams, Math.max(3500, crossfadeDur + 1500));
+    }
   }
 
   if (oldVideoHandles.length) {
@@ -6674,9 +6861,16 @@ function switchScene(sceneId, yaw, pitch, fov, fromPortalHotspot, keepFullscreen
       bindPortalTap(hitArea, function() { onPortalHotspotTap(hsRef); });
       
       var placeYaw = portalPlacementYawRad(ih);
-      var placePitch = 0;
+      var placePitch = portalPlacementPitchRad(ih);
 
-      // ★hotspot を VR 空間に配置（中心角度へ。球面 yaw/pitch の個別設定は使わない）
+      console.log('🎎 ポータル配置: ' + sceneId + ' → ' + (ih.targetScene || '?') +
+        ' yaw=' + portalCenterDeg(ih) + '° pitch=' + portalCenterPitchDeg(ih) + '°' +
+        ' | 着地点pitch=' + (function() {
+          var tv = resolvePortalTargetView(ih);
+          return tv.pitch != null ? radToDeg(tv.pitch).toFixed(1) : '?';
+        })() + '°');
+
+      // ★hotspot を VR 空間に配置（yawCenter / pitchCenter）
       currentScene.hotspotContainer().createHotspot(wrapper,
         { yaw: placeYaw, pitch: placePitch },
         { perspective: { radius: ih.radius || 800 } }
@@ -6781,7 +6975,10 @@ function updateUI() {
       if (currentSceneObj && currentSceneObj.data.id === hs.sceneId && !window[hs.flagKey]) {
         var center = portalCenterDeg(hs.ih);
         var range = portalRangeDeg(hs.ih);
-        var inRange = Math.abs(angleDiffDeg(yawDeg, center)) <= range;
+        var pitchCenter = portalCenterPitchDeg(hs.ih);
+        var pitchRange = portalPitchRangeDeg(hs.ih);
+        var inRange = Math.abs(angleDiffDeg(yawDeg, center)) <= range &&
+          Math.abs(pitch - pitchCenter) <= pitchRange;
         
         if (inRange) {
           var fadeMs = portalFadeMs(hs.ih);
