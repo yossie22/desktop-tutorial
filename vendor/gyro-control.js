@@ -1,6 +1,6 @@
 /**
- * パノラマ用ジャイロ制御 v78.2
- * Step1: 横上下 v70純正 / Step1b: 横は生beta(v74)・270°符号反転
+ * パノラマ用ジャイロ制御 v78.3
+ * v78.2の生betaをやめ変換betaに戻す / 270°だけ符号反転追加
  */
 (function(global) {
   'use strict';
@@ -14,7 +14,7 @@
   var SENSOR_LP = 0.22;
   var STARTUP_SETTLE_FRAMES = 20;
   var LOCK_JUMP_REJECT_DEG = 8;
-  var BUILD = 'v78.2';
+  var BUILD = 'v78.3';
   var LANDSCAPE_RIGHT_CUR = 90;
   var LANDSCAPE_LEFT_CUR = 270;
 
@@ -152,23 +152,14 @@
     state.lastPitchOffDeg = null;
   }
 
-  function pitchBetaForTilt(normalized, rawEvent) {
-    if (isLandscapeScreen(normalized.screenAngle) &&
-        rawEvent && rawEvent.beta != null && !isNaN(rawEvent.beta)) {
-      return rawEvent.beta;
-    }
-    return normalized.beta;
-  }
-
-  function trackOrientation(normalized, state, rawEvent) {
+  function trackOrientation(normalized, state) {
     if (!normalized || normalized.beta == null) return null;
 
     var useHeading = state.headingSource !== 'gamma';
-    var tiltBeta = pitchBetaForTilt(normalized, rawEvent);
 
     if (state.initBeta == null) {
-      state.initBeta = tiltBeta;
-      state.fBeta = tiltBeta;
+      state.initBeta = normalized.beta;
+      state.fBeta = normalized.beta;
       state.initGamma = normalized.gamma;
       state.fGamma = normalized.gamma;
       state.prevHeading = useHeading ? readHeadingDeg(normalized) : null;
@@ -180,7 +171,7 @@
       return { ready: false };
     }
 
-    state.fBeta = lp(state.fBeta, tiltBeta, SENSOR_LP);
+    state.fBeta = lp(state.fBeta, normalized.beta, SENSOR_LP);
     var pitchOff = degToRad(state.initBeta - state.fBeta);
     var screenAngle = normalizeAngle360(normalized.screenAngle);
     if (screenAngle === LANDSCAPE_RIGHT_CUR) {
@@ -498,12 +489,12 @@
           source = self.orientState.headingSource;
         }
         var settleNorm = normalizeSensorEvent(self.latestEvent, snapped, source);
-        if (settleNorm) trackOrientation(settleNorm, self.orientState, self.latestEvent);
+        if (settleNorm) trackOrientation(settleNorm, self.orientState);
         return;
       }
 
       var normalized = normalizeSensorEvent(self.latestEvent, snapped, source);
-      var o = trackOrientation(normalized, self.orientState, self.latestEvent);
+      var o = trackOrientation(normalized, self.orientState);
       if (!o || !o.ready) return;
 
       if (self.orientState.justLocked) {
@@ -511,7 +502,7 @@
         if (Math.abs(radToDeg(o.yawOff)) > LOCK_JUMP_REJECT_DEG ||
             Math.abs(radToDeg(o.pitchOff)) > LOCK_JUMP_REJECT_DEG) {
           resetSensorBaseline(self.orientState);
-          if (normalized) trackOrientation(normalized, self.orientState, self.latestEvent);
+          if (normalized) trackOrientation(normalized, self.orientState);
           return;
         }
       }
