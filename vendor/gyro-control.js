@@ -1,6 +1,6 @@
 /**
- * パノラマ用ジャイロ制御 v78.4
- * 横上下: 生gamma・90°/270°で符号を分ける（v42）
+ * パノラマ用ジャイロ制御 v78.5
+ * 横上下: iPad=gamma / iPhone=beta / 端末ごとに符号を分ける
  */
 (function(global) {
   'use strict';
@@ -14,7 +14,7 @@
   var SENSOR_LP = 0.22;
   var STARTUP_SETTLE_FRAMES = 20;
   var LOCK_JUMP_REJECT_DEG = 8;
-  var BUILD = 'v78.4';
+  var BUILD = 'v78.5';
   var LANDSCAPE_RIGHT_CUR = 90;
   var LANDSCAPE_LEFT_CUR = 270;
 
@@ -140,11 +140,17 @@
     return a === LANDSCAPE_RIGHT_CUR || a === LANDSCAPE_LEFT_CUR;
   }
 
+  function isIPadDevice() {
+    var ua = navigator.userAgent || '';
+    if (/iPad/i.test(ua)) return true;
+    return navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1;
+  }
+
   function resetSensorBaseline(state) {
     state.initBeta = null;
     state.fBeta = null;
-    state.landscapeG = null;
-    state.fLandscapeG = null;
+    state.landscapeP = null;
+    state.fLandscapeP = null;
     state.initGamma = null;
     state.fGamma = null;
     state.prevHeading = null;
@@ -154,14 +160,30 @@
     state.lastPitchOffDeg = null;
   }
 
-  function readLandscapeGamma(rawEvent, normalized) {
-    if (rawEvent && rawEvent.gamma != null && !isNaN(rawEvent.gamma)) {
-      return rawEvent.gamma;
+  function readLandscapePitchSensor(rawEvent, normalized) {
+    if (isIPadDevice()) {
+      if (rawEvent && rawEvent.gamma != null && !isNaN(rawEvent.gamma)) {
+        return rawEvent.gamma;
+      }
+      if (normalized.gamma != null && !isNaN(normalized.gamma)) {
+        return normalized.gamma;
+      }
+      return 0;
     }
-    if (normalized.gamma != null && !isNaN(normalized.gamma)) {
-      return normalized.gamma;
+    if (rawEvent && rawEvent.beta != null && !isNaN(rawEvent.beta)) {
+      return rawEvent.beta;
+    }
+    if (normalized.beta != null && !isNaN(normalized.beta)) {
+      return normalized.beta;
     }
     return 0;
+  }
+
+  function landscapePitchSign(screenAngle) {
+    if (screenAngle === LANDSCAPE_RIGHT_CUR) {
+      return isIPadDevice() ? -1 : 1;
+    }
+    return isIPadDevice() ? 1 : -1;
   }
 
   function trackOrientation(normalized, state, rawEvent) {
@@ -171,11 +193,11 @@
     var screenAngle = normalizeAngle360(normalized.screenAngle);
     var landscape = isLandscapeScreen(screenAngle);
 
-    if (landscape ? state.landscapeG == null : state.initBeta == null) {
+    if (landscape ? state.landscapeP == null : state.initBeta == null) {
       if (landscape) {
-        var g0 = readLandscapeGamma(rawEvent, normalized);
-        state.landscapeG = g0;
-        state.fLandscapeG = g0;
+        var p0 = readLandscapePitchSensor(rawEvent, normalized);
+        state.landscapeP = p0;
+        state.fLandscapeP = p0;
       } else {
         state.initBeta = normalized.beta;
         state.fBeta = normalized.beta;
@@ -193,10 +215,10 @@
 
     var pitchOff;
     if (landscape) {
-      var g = readLandscapeGamma(rawEvent, normalized);
-      state.fLandscapeG = lp(state.fLandscapeG, g, SENSOR_LP);
-      var delta = state.fLandscapeG - state.landscapeG;
-      pitchOff = degToRad(screenAngle === LANDSCAPE_RIGHT_CUR ? -delta : delta);
+      var p = readLandscapePitchSensor(rawEvent, normalized);
+      state.fLandscapeP = lp(state.fLandscapeP, p, SENSOR_LP);
+      var delta = state.fLandscapeP - state.landscapeP;
+      pitchOff = degToRad(landscapePitchSign(screenAngle) * delta);
       var pitchOffDeg = radToDeg(pitchOff);
       if (state.lastPitchOffDeg != null &&
           Math.abs(pitchOffDeg - state.lastPitchOffDeg) > PITCH_SPIKE_DEG) {
