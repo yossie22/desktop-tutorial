@@ -1,6 +1,6 @@
 /**
- * パノラマ用ジャイロ制御 v70.2
- * v70.1 ＋ 横画面の上下を変換後betaに戻す（90°のみ符号反転）
+ * パノラマ用ジャイロ制御 v70.3
+ * 横90°＝生beta・跳び無視なし / 横270°＝変換beta・符号反転
  */
 (function(global) {
   'use strict';
@@ -14,7 +14,7 @@
   var SENSOR_LP = 0.22;
   var STARTUP_SETTLE_FRAMES = 20;
   var LOCK_JUMP_REJECT_DEG = 8;
-  var BUILD = 'v70.2';
+  var BUILD = 'v70.3';
   var LANDSCAPE_RIGHT_CUR = 90;
   var LANDSCAPE_LEFT_CUR = 270;
 
@@ -158,24 +158,38 @@
     return { min: degToRad(-89), max: degToRad(80) };
   }
 
+  function applyPitchSpikeGuard(pitchOff, state) {
+    var pitchOffDeg = radToDeg(pitchOff);
+    if (state.lastPitchOffDeg != null &&
+        Math.abs(pitchOffDeg - state.lastPitchOffDeg) > PITCH_SPIKE_DEG) {
+      return degToRad(state.lastPitchOffDeg);
+    }
+    state.lastPitchOffDeg = pitchOffDeg;
+    return pitchOff;
+  }
+
   function computePitchOff(normalized, state, rawBeta) {
     var screenAngle = normalizeAngle360(normalized.screenAngle);
     var pitchOff;
 
-    if (isLandscapeScreen(screenAngle)) {
+    /* ボタン右（90°）: iPadは生beta。跳び無視は固まる原因になるので使わない */
+    if (screenAngle === LANDSCAPE_RIGHT_CUR && rawBeta != null && isFinite(rawBeta)) {
+      if (state.landPitchInit == null) {
+        state.landPitchInit = rawBeta;
+        state.landPitchF = rawBeta;
+      }
+      state.landPitchF = lp(state.landPitchF, rawBeta, SENSOR_LP);
+      pitchOff = degToRad(state.landPitchInit - state.landPitchF);
+      pitchOff = -pitchOff;
+      return pitchOff;
+    }
+
+    /* ボタン左（270°）: 変換betaが滑らか。上下が逆なので符号反転 */
+    if (screenAngle === LANDSCAPE_LEFT_CUR) {
       state.fBeta = lp(state.fBeta, normalized.beta, SENSOR_LP);
       pitchOff = degToRad(state.initBeta - state.fBeta);
-      if (screenAngle === LANDSCAPE_RIGHT_CUR) {
-        pitchOff = -pitchOff;
-      }
-      var pitchOffDeg = radToDeg(pitchOff);
-      if (state.lastPitchOffDeg != null &&
-          Math.abs(pitchOffDeg - state.lastPitchOffDeg) > PITCH_SPIKE_DEG) {
-        pitchOff = degToRad(state.lastPitchOffDeg);
-      } else {
-        state.lastPitchOffDeg = pitchOffDeg;
-      }
-      return pitchOff;
+      pitchOff = -pitchOff;
+      return applyPitchSpikeGuard(pitchOff, state);
     }
 
     state.fBeta = lp(state.fBeta, normalized.beta, SENSOR_LP);
@@ -207,6 +221,11 @@
       state.fBeta = normalized.beta;
       state.initGamma = normalized.gamma;
       state.fGamma = normalized.gamma;
+      if (normalizeAngle360(normalized.screenAngle) === LANDSCAPE_RIGHT_CUR &&
+          rawBeta != null && isFinite(rawBeta)) {
+        state.landPitchInit = rawBeta;
+        state.landPitchF = rawBeta;
+      }
       state.prevHeading = useHeading ? readHeadingDeg(normalized) : null;
       state.initHeading = state.prevHeading;
       state.unwrappedHeading = state.prevHeading != null ? state.prevHeading : 0;
