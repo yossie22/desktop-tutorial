@@ -1,6 +1,6 @@
 /**
- * パノラマ用ジャイロ制御 v78.5
- * 横上下: iPad=gamma / iPhone=beta / 端末ごとに符号を分ける
+ * パノラマ用ジャイロ制御 v78.6
+ * 横上下: 全端末gamma・符号をv78.4から反転
  */
 (function(global) {
   'use strict';
@@ -14,7 +14,7 @@
   var SENSOR_LP = 0.22;
   var STARTUP_SETTLE_FRAMES = 20;
   var LOCK_JUMP_REJECT_DEG = 8;
-  var BUILD = 'v78.5';
+  var BUILD = 'v78.6';
   var LANDSCAPE_RIGHT_CUR = 90;
   var LANDSCAPE_LEFT_CUR = 270;
 
@@ -140,12 +140,6 @@
     return a === LANDSCAPE_RIGHT_CUR || a === LANDSCAPE_LEFT_CUR;
   }
 
-  function isIPadDevice() {
-    var ua = navigator.userAgent || '';
-    if (/iPad/i.test(ua)) return true;
-    return navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1;
-  }
-
   function resetSensorBaseline(state) {
     state.initBeta = null;
     state.fBeta = null;
@@ -161,29 +155,13 @@
   }
 
   function readLandscapePitchSensor(rawEvent, normalized) {
-    if (isIPadDevice()) {
-      if (rawEvent && rawEvent.gamma != null && !isNaN(rawEvent.gamma)) {
-        return rawEvent.gamma;
-      }
-      if (normalized.gamma != null && !isNaN(normalized.gamma)) {
-        return normalized.gamma;
-      }
-      return 0;
+    if (rawEvent && rawEvent.gamma != null && !isNaN(rawEvent.gamma)) {
+      return rawEvent.gamma;
     }
-    if (rawEvent && rawEvent.beta != null && !isNaN(rawEvent.beta)) {
-      return rawEvent.beta;
-    }
-    if (normalized.beta != null && !isNaN(normalized.beta)) {
-      return normalized.beta;
+    if (normalized.gamma != null && !isNaN(normalized.gamma)) {
+      return normalized.gamma;
     }
     return 0;
-  }
-
-  function landscapePitchSign(screenAngle) {
-    if (screenAngle === LANDSCAPE_RIGHT_CUR) {
-      return isIPadDevice() ? -1 : 1;
-    }
-    return isIPadDevice() ? 1 : -1;
   }
 
   function trackOrientation(normalized, state, rawEvent) {
@@ -218,7 +196,11 @@
       var p = readLandscapePitchSensor(rawEvent, normalized);
       state.fLandscapeP = lp(state.fLandscapeP, p, SENSOR_LP);
       var delta = state.fLandscapeP - state.landscapeP;
-      pitchOff = degToRad(landscapePitchSign(screenAngle) * delta);
+      if (screenAngle === LANDSCAPE_RIGHT_CUR) {
+        pitchOff = degToRad(delta);
+      } else {
+        pitchOff = degToRad(-delta);
+      }
       var pitchOffDeg = radToDeg(pitchOff);
       if (state.lastPitchOffDeg != null &&
           Math.abs(pitchOffDeg - state.lastPitchOffDeg) > PITCH_SPIKE_DEG) {
