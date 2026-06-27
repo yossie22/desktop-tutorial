@@ -1,7 +1,6 @@
 /**
- * パノラマ用ジャイロ制御 v70
- * v69 ＋ ボタン右の横（90°）で上下の符号を反転
- * 詳細: vendor/gyro-STABLE-v70.txt
+ * パノラマ用ジャイロ制御 v70.1
+ * v70 ＋ 上下の見える範囲だけ拡大（横は生beta・縦横とも上方向ブースト）
  */
 (function(global) {
   'use strict';
@@ -15,7 +14,7 @@
   var SENSOR_LP = 0.22;
   var STARTUP_SETTLE_FRAMES = 20;
   var LOCK_JUMP_REJECT_DEG = 8;
-  var BUILD = 'v70';
+  var BUILD = 'v70.1';
   var LANDSCAPE_RIGHT_CUR = 90;
   var LANDSCAPE_LEFT_CUR = 270;
 
@@ -136,9 +135,54 @@
     return normalized.screenHeading;
   }
 
-  function pitchNeedsInvert(screenAngle) {
+  function isLandscapeScreen(screenAngle) {
     var a = normalizeAngle360(screenAngle);
     return a === LANDSCAPE_RIGHT_CUR || a === LANDSCAPE_LEFT_CUR;
+  }
+
+  function boostPitchOff(pitchOff, screenAngle) {
+    var deg = radToDeg(pitchOff);
+    if (isLandscapeScreen(screenAngle)) {
+      if (deg < 0) deg *= 1.58;
+      else if (deg > 0) deg *= 1.15;
+    } else if (deg < 0) {
+      deg *= 1.32;
+    }
+    return degToRad(deg);
+  }
+
+  function pitchClampLimits(screenAngle) {
+    if (isLandscapeScreen(screenAngle)) {
+      return { min: degToRad(-88), max: degToRad(74) };
+    }
+    return { min: degToRad(-89), max: degToRad(80) };
+  }
+
+  function computePitchOff(normalized, state, rawBeta) {
+    var screenAngle = normalized.screenAngle;
+    var pitchOff;
+
+    if (isLandscapeScreen(screenAngle) && rawBeta != null && isFinite(rawBeta)) {
+      if (state.landPitchInit == null) {
+        state.landPitchInit = rawBeta;
+        state.landPitchF = rawBeta;
+      }
+      state.landPitchF = lp(state.landPitchF, rawBeta, SENSOR_LP);
+      pitchOff = degToRad(state.landPitchInit - state.landPitchF);
+      pitchOff = -pitchOff;
+      var pitchOffDeg = radToDeg(pitchOff);
+      if (state.lastPitchOffDeg != null &&
+          Math.abs(pitchOffDeg - state.lastPitchOffDeg) > PITCH_SPIKE_DEG) {
+        pitchOff = degToRad(state.lastPitchOffDeg);
+      } else {
+        state.lastPitchOffDeg = pitchOffDeg;
+      }
+      return pitchOff;
+    }
+
+    state.fBeta = lp(state.fBeta, normalized.beta, SENSOR_LP);
+    pitchOff = degToRad(state.initBeta - state.fBeta);
+    return pitchOff;
   }
 
   function resetSensorBaseline(state) {
@@ -146,6 +190,8 @@
     state.fBeta = null;
     state.initGamma = null;
     state.fGamma = null;
+    state.landPitchInit = null;
+    state.landPitchF = null;
     state.prevHeading = null;
     state.initHeading = null;
     state.unwrappedHeading = 0;
@@ -153,7 +199,7 @@
     state.lastPitchOffDeg = null;
   }
 
-  function trackOrientation(normalized, state) {
+  function trackOrientation(normalized, state, rawBeta) {
     if (!normalized || normalized.beta == null) return null;
 
     var useHeading = state.headingSource !== 'gamma';
@@ -163,6 +209,10 @@
       state.fBeta = normalized.beta;
       state.initGamma = normalized.gamma;
       state.fGamma = normalized.gamma;
+      if (isLandscapeScreen(normalized.screenAngle) && rawBeta != null && isFinite(rawBeta)) {
+        state.landPitchInit = rawBeta;
+        state.landPitchF = rawBeta;
+      }
       state.prevHeading = useHeading ? readHeadingDeg(normalized) : null;
       state.initHeading = state.prevHeading;
       state.unwrappedHeading = state.prevHeading != null ? state.prevHeading : 0;
@@ -172,18 +222,10 @@
       return { ready: false };
     }
 
-    state.fBeta = lp(state.fBeta, normalized.beta, SENSOR_LP);
-    var pitchOff = degToRad(state.initBeta - state.fBeta);
-    if (pitchNeedsInvert(normalized.screenAngle)) {
-      pitchOff = -pitchOff;
-      var pitchOffDeg = radToDeg(pitchOff);
-      if (state.lastPitchOffDeg != null &&
-          Math.abs(pitchOffDeg - state.lastPitchOffDeg) > PITCH_SPIKE_DEG) {
-        pitchOff = degToRad(state.lastPitchOffDeg);
-      } else {
-        state.lastPitchOffDeg = pitchOffDeg;
-      }
-    }
+    var pitchOff = boostPitchOff(
+      computePitchOff(normalized, state, rawBeta),
+      normalized.screenAngle
+    );
 
     var heading = useHeading ? readHeadingDeg(normalized) : null;
     var yawOff = 0;
@@ -485,12 +527,12 @@
           source = self.orientState.headingSource;
         }
         var settleNorm = normalizeSensorEvent(self.latestEvent, snapped, source);
-        if (settleNorm) trackOrientation(settleNorm, self.orientState);
+        if (settleNorm) trackOrientation(settleNorm, self.orientState, self.latestEvent.beta);
         return;
       }
 
       var normalized = normalizeSensorEvent(self.latestEvent, snapped, source);
-      var o = trackOrientation(normalized, self.orientState);
+      var o = trackOrientation(normalized, self.orientState, self.latestEvent.beta);
       if (!o || !o.ready) return;
 
       if (self.orientState.justLocked) {
@@ -498,13 +540,14 @@
         if (Math.abs(radToDeg(o.yawOff)) > LOCK_JUMP_REJECT_DEG ||
             Math.abs(radToDeg(o.pitchOff)) > LOCK_JUMP_REJECT_DEG) {
           resetSensorBaseline(self.orientState);
-          if (normalized) trackOrientation(normalized, self.orientState);
+          if (normalized) trackOrientation(normalized, self.orientState, self.latestEvent.beta);
           return;
         }
       }
 
       var targetYaw = self.base.viewYaw + o.yawOff;
-      var targetPitch = clamp(self.base.viewPitch + o.pitchOff, -Math.PI / 2, Math.PI / 2);
+      var pl = pitchClampLimits(snapped);
+      var targetPitch = clamp(self.base.viewPitch + o.pitchOff, pl.min, pl.max);
       self.displayYaw = normalizeAngle(
         self.displayYaw + clamp(
           YAW_SMOOTH * angleDelta(self.displayYaw, targetYaw),
@@ -518,8 +561,8 @@
           -PITCH_MAX_STEP,
           PITCH_MAX_STEP
         ),
-        -Math.PI / 2,
-        Math.PI / 2
+        pl.min,
+        pl.max
       );
       v.setYaw(self.displayYaw);
       v.setPitch(self.displayPitch);
