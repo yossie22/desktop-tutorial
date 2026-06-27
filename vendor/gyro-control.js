@@ -1,7 +1,7 @@
 /**
- * パノラマ用ジャイロ制御 v75
- * 縦のみGYRO動作 / 縦→横は角度記録→OFF→横は固定 / 横→縦で自動ON
- * 詳細: vendor/gyro-STABLE-v75.txt
+ * パノラマ用ジャイロ制御 v76
+ * 15°でy/p記録 → 30°でOFF＋横補正 / 横は手動ON可 / 横→縦で自動ON
+ * 詳細: vendor/gyro-STABLE-v76.txt
  */
 (function(global) {
   'use strict';
@@ -11,12 +11,16 @@
   var PITCH_MAX_STEP = 0.032;
   var YAW_MAX_STEP = 0.040;
   var HEADING_SPIKE_DEG = 55;
-  var PITCH_SPIKE_DEG = 20;
   var SENSOR_LP = 0.22;
   var STARTUP_SETTLE_FRAMES = 20;
   var PORTRAIT_RESTART_DELAY_MS = 450;
   var LOCK_JUMP_REJECT_DEG = 8;
-  var BUILD = 'v75';
+  var ROLL_SNAPSHOT_DEG = 15;
+  var ROLL_OFF_DEG = 30;
+  var ROLL_RESET_DEG = 8;
+  var PITCH_UP_BOOST_PORTRAIT = 1.32;
+  var PITCH_UP_BOOST_LANDSCAPE = 1.58;
+  var BUILD = 'v76';
   var LANDSCAPE_RIGHT_CUR = 90;
   var LANDSCAPE_LEFT_CUR = 270;
 
@@ -180,11 +184,38 @@
     return c === 0 || c === 90 || c === 180 || c === LANDSCAPE_LEFT_CUR;
   }
 
+  function getDeviceRollTiltDeg(rawEvent, screenSnapped) {
+    if (!rawEvent || rawEvent.beta == null || rawEvent.gamma == null) return 0;
+    var screen = normalizeAngle360(screenSnapped);
+    if (!isPortraitRoll(screen)) return 0;
+    if (Math.abs(rawEvent.beta - 90) > 50) return 0;
+    var gamma = rawEvent.gamma;
+    if (screen === 180) gamma = -gamma;
+    return gamma;
+  }
+
+  function correctViewForLandscapeRoll(snap, landscapeDir) {
+    var yaw = snap.yaw;
+    var pitch = snap.pitch;
+    var fix = pitch * 0.55;
+    if (landscapeDir === LANDSCAPE_RIGHT_CUR) {
+      yaw = normalizeAngle(yaw - fix);
+    } else if (landscapeDir === LANDSCAPE_LEFT_CUR) {
+      yaw = normalizeAngle(yaw + fix);
+    }
+    return {
+      yaw: yaw,
+      pitch: clamp(pitch, -Math.PI / 2, Math.PI / 2)
+    };
+  }
+
   function resetSensorBaseline(state) {
     state.initBeta = null;
     state.fBeta = null;
     state.initGamma = null;
     state.fGamma = null;
+    state.landPitchInit = null;
+    state.landPitchF = null;
     state.prevHeading = null;
     state.initHeading = null;
     state.unwrappedHeading = 0;
@@ -192,15 +223,30 @@
     state.lastPitchOffDeg = null;
   }
 
-  function computePitchOff(normalized, state) {
+  function computePitchOff(normalized, state, rawBeta, screenSnapped) {
+    var cur = normalizeAngle360(screenSnapped);
+    if (isLandscapeScreen(cur) && rawBeta != null && !isNaN(rawBeta)) {
+      state.landPitchF = lp(state.landPitchF, rawBeta, SENSOR_LP);
+      if (state.landPitchInit == null) {
+        state.landPitchInit = rawBeta;
+        state.landPitchF = rawBeta;
+        return 0;
+      }
+      var landOff = degToRad(state.landPitchInit - state.landPitchF);
+      var landDeg = radToDeg(landOff);
+      if (landDeg < 0) landOff = degToRad(landDeg * PITCH_UP_BOOST_LANDSCAPE);
+      return landOff;
+    }
+    state.landPitchInit = null;
+    state.landPitchF = null;
     state.fBeta = lp(state.fBeta, normalized.beta, SENSOR_LP);
     var pitchOff = degToRad(state.initBeta - state.fBeta);
     var pDeg = radToDeg(pitchOff);
-    if (pDeg < 0) pitchOff = degToRad(pDeg * 1.22);
+    if (pDeg < 0) pitchOff = degToRad(pDeg * PITCH_UP_BOOST_PORTRAIT);
     return pitchOff;
   }
 
-  function trackOrientation(normalized, state) {
+  function trackOrientation(normalized, state, rawBeta, screenSnapped) {
     if (!normalized || normalized.beta == null) return null;
     var useHeading = state.headingSource !== 'gamma';
 
@@ -215,10 +261,12 @@
       state.gammaYawDeg = 0;
       state.headingMode = useHeading && state.prevHeading != null;
       state.lastPitchOffDeg = null;
+      state.landPitchInit = null;
+      state.landPitchF = null;
       return { ready: false };
     }
 
-    var pitchOff = computePitchOff(normalized, state);
+    var pitchOff = computePitchOff(normalized, state, rawBeta, screenSnapped);
     var heading = useHeading ? readHeadingDeg(normalized) : null;
     var yawOff = 0;
 
@@ -310,6 +358,9 @@
     this.autoLandscape = false;
     this.userDismissed = false;
     this._portraitViewSnapshot = null;
+    this._earlyRollSnapshot = null;
+    this._rollTransitionDir = null;
+    this._earlyRollOff = false;
     this._frozenView = null;
     this._landscapeFrozen = false;
     this._gyroWasOnBeforeLandscape = false;
@@ -322,7 +373,7 @@
   GyroControl.BUILD = BUILD;
 
   GyroControl.isOrientationAllowed = function(cur) {
-    return isPortraitRoll(cur);
+    return isAllowedScreenCur(snapRollAngleDeg(cur));
   };
 
   GyroControl.prototype.getHint = function() {
@@ -350,6 +401,12 @@
     this._applyViewAngles(this._frozenView.yaw, this._frozenView.pitch);
   };
 
+  GyroControl.prototype._resetEarlyRollState = function() {
+    this._earlyRollSnapshot = null;
+    this._rollTransitionDir = null;
+    this._earlyRollOff = false;
+  };
+
   GyroControl.prototype._stopGyroOnly = function() {
     if (this.raf) {
       global.cancelAnimationFrame(this.raf);
@@ -374,18 +431,76 @@
     }
   };
 
-  GyroControl.prototype._onPortraitToLandscape = function(newSnapped) {
-    if (this._rollBusy) return;
-    this._rollBusy = true;
-    var snap = this._portraitViewSnapshot ||
+  GyroControl.prototype._triggerEarlyRollOff = function() {
+    var snap = this._earlyRollSnapshot ||
       { yaw: this.displayYaw, pitch: this.displayPitch };
-    this._frozenView = { yaw: snap.yaw, pitch: snap.pitch };
+    var dir = this._rollTransitionDir || LANDSCAPE_RIGHT_CUR;
+    var corrected = correctViewForLandscapeRoll(snap, dir);
+    this._frozenView = corrected;
     this._landscapeFrozen = true;
+    this._earlyRollOff = true;
     this._gyroWasOnBeforeLandscape = true;
     this._stopGyroOnly();
-    this._applyViewAngles(snap.yaw, snap.pitch);
+    this._applyViewAngles(corrected.yaw, corrected.pitch);
+    this.hintText = 'GYRO OFF';
+    this._emit();
+  };
+
+  GyroControl.prototype._checkEarlyRollTransition = function() {
+    if (!this.enabled || !this.latestEvent || this._rollBusy) return false;
+    var screenSnap = snapRollAngleDeg(getScreenAngleDeg());
+    if (!isPortraitRoll(screenSnap)) return false;
+
+    var rollTilt = getDeviceRollTiltDeg(this.latestEvent, screenSnap);
+    var absRoll = Math.abs(rollTilt);
+
+    if (absRoll < ROLL_RESET_DEG) {
+      if (!this._landscapeFrozen) this._resetEarlyRollState();
+      return false;
+    }
+
+    if (absRoll >= ROLL_SNAPSHOT_DEG && !this._earlyRollSnapshot) {
+      this._earlyRollSnapshot = {
+        yaw: this.displayYaw,
+        pitch: this.displayPitch
+      };
+      this._rollTransitionDir = rollTilt > 0 ? LANDSCAPE_RIGHT_CUR : LANDSCAPE_LEFT_CUR;
+    }
+
+    if (absRoll >= ROLL_OFF_DEG && !this._earlyRollOff) {
+      this._triggerEarlyRollOff();
+      return true;
+    }
+    return false;
+  };
+
+  GyroControl.prototype._onPortraitToLandscape = function(newSnapped) {
+    if (this._rollBusy) return;
+    if (this._earlyRollOff) {
+      if (this.visual) this.visual.apply(newSnapped);
+      if (this._earlyRollSnapshot && this._rollTransitionDir) {
+        this._frozenView = correctViewForLandscapeRoll(
+          this._earlyRollSnapshot,
+          this._rollTransitionDir
+        );
+      }
+      this._applyFrozenView();
+      return;
+    }
+    this._rollBusy = true;
+    var snap = this._earlyRollSnapshot || this._portraitViewSnapshot ||
+      { yaw: this.displayYaw, pitch: this.displayPitch };
+    var dir = this._rollTransitionDir ||
+      (newSnapped === LANDSCAPE_LEFT_CUR ? LANDSCAPE_LEFT_CUR : LANDSCAPE_RIGHT_CUR);
+    var corrected = correctViewForLandscapeRoll(snap, dir);
+    this._frozenView = corrected;
+    this._landscapeFrozen = true;
+    this._earlyRollOff = true;
+    this._gyroWasOnBeforeLandscape = true;
+    this._stopGyroOnly();
+    this._applyViewAngles(corrected.yaw, corrected.pitch);
     if (this.visual) this.visual.apply(newSnapped);
-    this.hintText = '横位置（GYRO OFF）';
+    this.hintText = 'GYRO OFF';
     this._emit();
     var self = this;
     setTimeout(function() {
@@ -397,8 +512,9 @@
   GyroControl.prototype._onLandscapeToPortrait = function(newSnapped) {
     if (this._rollBusy) return;
     this._rollBusy = true;
-    var snap = this._frozenView || this._portraitViewSnapshot;
+    var snap = this._frozenView || this._earlyRollSnapshot || this._portraitViewSnapshot;
     this._landscapeFrozen = false;
+    this._resetEarlyRollState();
     if (snap) this._applyViewAngles(snap.yaw, snap.pitch);
     if (this.visual) this.visual.apply(newSnapped);
     this.hintText = '';
@@ -422,14 +538,25 @@
     var rollSnap = snapRollAngleDeg(getScreenAngleDeg());
     if (!isAllowedScreenCur(rollSnap)) return;
 
-    if (this._landscapeFrozen) {
+    if (this._landscapeFrozen && !this.enabled) {
       if (isLandscapeRoll(rollSnap)) {
         if (this.visual) this.visual.apply(rollSnap);
+        if (this._earlyRollSnapshot && this._rollTransitionDir) {
+          this._frozenView = correctViewForLandscapeRoll(
+            this._earlyRollSnapshot,
+            this._rollTransitionDir
+          );
+        }
         this._applyFrozenView();
         return;
       }
       if (isPortraitRoll(rollSnap)) {
-        this._onLandscapeToPortrait(rollSnap);
+        var tilt = this.latestEvent ? getDeviceRollTiltDeg(this.latestEvent, rollSnap) : 999;
+        if (Math.abs(tilt) < ROLL_RESET_DEG) {
+          this._onLandscapeToPortrait(rollSnap);
+        } else {
+          this._applyFrozenView();
+        }
         return;
       }
     }
@@ -524,7 +651,9 @@
       var snapped = snapScreenAngleDeg(getScreenAngleDeg(), self.orientState ?
         self.orientState.snappedCur : null);
       if (!isPortraitRoll(snapped)) {
-        self._savePortraitSnapshot();
+        if (!self._earlyRollOff) {
+          self._savePortraitSnapshot();
+        }
         self._onPortraitToLandscape(snapRollAngleDeg(getScreenAngleDeg()));
         return;
       }
@@ -567,6 +696,7 @@
       this.userDismissed = true;
       this._landscapeFrozen = false;
       this._gyroWasOnBeforeLandscape = false;
+      this._resetEarlyRollState();
     }
     this._cleanupListeners();
     this.base = null;
@@ -582,18 +712,11 @@
     var view = this.getView();
     if (!view) return false;
     var cur = snapRollAngleDeg(getScreenAngleDeg());
-    if (!isPortraitRoll(cur)) {
-      this.hintText = '横位置ではGYROは使えません';
-      this._emit();
-      return false;
-    }
-    if (this._landscapeFrozen) {
-      this.hintText = '横位置ではGYROは使えません';
-      this._emit();
-      return false;
-    }
     this.hintText = '';
     this.userDismissed = false;
+    this._landscapeFrozen = false;
+    this._frozenView = null;
+    this._resetEarlyRollState();
     var wasOn = this.enabled;
     this._cleanupListeners();
     this.enabled = true;
@@ -609,6 +732,8 @@
       fBeta: null,
       initGamma: null,
       fGamma: null,
+      landPitchInit: null,
+      landPitchF: null,
       prevHeading: null,
       initHeading: null,
       unwrappedHeading: 0,
@@ -631,13 +756,17 @@
       var v = self.getView();
       if (!v || !self.latestEvent || !self.orientState || !self.base) return;
 
+      if (self._checkEarlyRollTransition()) return;
+
       var snapped = snapScreenAngleDeg(
         getScreenAngleDeg(),
         self.orientState.snappedCur
       );
 
       if (!isPortraitRoll(snapRollAngleDeg(getScreenAngleDeg()))) {
-        self._savePortraitSnapshot();
+        if (!self._earlyRollOff) {
+          self._savePortraitSnapshot();
+        }
         self._onPortraitToLandscape(snapRollAngleDeg(getScreenAngleDeg()));
         return;
       }
@@ -646,6 +775,7 @@
       self.orientState.snappedCur = snapped;
 
       var source = self.orientState.headingSource;
+      var rawBeta = self.latestEvent.beta;
 
       if (self.orientState.settleLeft > 0) {
         self.orientState.settleLeft--;
@@ -657,12 +787,12 @@
           source = self.orientState.headingSource;
         }
         var settleNorm = normalizeSensorEvent(self.latestEvent, snapped, source);
-        if (settleNorm) trackOrientation(settleNorm, self.orientState);
+        if (settleNorm) trackOrientation(settleNorm, self.orientState, rawBeta, snapped);
         return;
       }
 
       var normalized = normalizeSensorEvent(self.latestEvent, snapped, source);
-      var o = trackOrientation(normalized, self.orientState);
+      var o = trackOrientation(normalized, self.orientState, rawBeta, snapped);
       if (!o || !o.ready) return;
 
       if (self.orientState.justLocked) {
@@ -670,7 +800,7 @@
         if (Math.abs(radToDeg(o.yawOff)) > LOCK_JUMP_REJECT_DEG ||
             Math.abs(radToDeg(o.pitchOff)) > LOCK_JUMP_REJECT_DEG) {
           resetSensorBaseline(self.orientState);
-          if (normalized) trackOrientation(normalized, self.orientState);
+          if (normalized) trackOrientation(normalized, self.orientState, rawBeta, snapped);
           return;
         }
       }
