@@ -16,6 +16,7 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #000; }
 body.hi-res-peek-fast-out { --hi-res-peek-fade: 0.75s; }
 #pano { position: absolute; top: 0; left: 0; width: 100%; height: 100%; transition: opacity var(--hi-res-peek-fade) ease-in-out; }
 body.hi-res-peek-active #pano { opacity: 0; }
+body.hi-res-peek-live #pano { pointer-events: none; }
 
 /* 十字キー（測定用：白） */
 #crosshair {
@@ -845,8 +846,8 @@ body.embed-shadow #pano:active { cursor: grabbing; }
   top: 0;
   width: 50px;
   height: 50px;
-  margin-left: -21px;
-  margin-top: -21px;
+  margin-left: calc(-50px * 27 / 64);
+  margin-top: calc(-50px * 27 / 64);
   transform: none;
 }
 .hires-peek-zone-host.hires-peek-blink .hires-peek-soft-fill {
@@ -949,6 +950,9 @@ body.embed-shadow #pano:active { cursor: grabbing; }
   transform-origin: center center;
   pointer-events: none;
   z-index: 2;
+  will-change: transform;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
 }
 #hiResPeekMediaStage::after {
   content: '';
@@ -972,6 +976,8 @@ body.embed-shadow #pano:active { cursor: grabbing; }
   user-select: none;
   -webkit-user-drag: none;
   transition: opacity 1.4s ease-in-out;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
 }
 .hi-res-peek-video-wrap {
   position: absolute;
@@ -1482,7 +1488,7 @@ data.scenes.forEach(function(scene) {
 });
 
 // ビルド識別（どのファイルが実行されているか確認用）
-var BUILD_STAMP = '2026-06-25-peekClickPlace';
+var BUILD_STAMP = '2026-06-26-macroZoomCtrl';
 var guideVideoPreloadBySrc = {};
 var guideVideoSessionDone = {};
 console.log('🧩 viewer build:', BUILD_STAMP);
@@ -1505,6 +1511,7 @@ var HI_RES_PEEK_FADE_OUT_MS = 800;
 var HI_RES_PEEK_VIDEO_FADE_MS = 1400;
 var HI_RES_PEEK_ZOOM_HINT_FADE_MS = 800;
 var HI_RES_PEEK_ZOOM_HINT_HOLD_MS = 4000;
+var HI_RES_PEEK_FULL_FADE_MS = 1100;
 var hiResPeekAutoZoomAnim = null;
 var hiResPeekVideoPlayPending = false;
 var hiResPeekOpen = false;
@@ -1728,6 +1735,7 @@ function hiResPeekUsePasteMode(cfg) {
   if (!cfg) return false;
   if (cfg.pasteToVr === false) return false;
   if (cfg.pasteToVr === true) return true;
+  if (hiResPeekShootMode(cfg) === 'macro') return true;
   return hiResPeekShootMode(cfg) === 'range' &&
     (cfg.rangeAngleYaw != null || cfg.rangeAnglePitch != null);
 }
@@ -1744,26 +1752,21 @@ function hiResPeekImageFadeOpacity(t) {
 
 function hiResPeekFreezeLivePanoView() {
   if (!currentView) return;
+  if (typeof currentView.stopMovement === 'function') {
+    try { currentView.stopMovement(); } catch (eStop) {}
+  }
+  try { viewer.controls().disable(); } catch (eCtl) {}
+  if (window.sceneGyro) window.sceneGyro.stop(false);
+  document.body.classList.add('hi-res-peek-live');
   var p = currentView.parameters();
   hiResPeekFrozenView = { yaw: p.yaw, pitch: p.pitch, fov: p.fov };
-  function onViewChange() {
-    if (!hiResPeekOpen || !hiResPeekFrozenView || !currentView) return;
-    try {
-      currentView.setParameters({
-        yaw: hiResPeekFrozenView.yaw,
-        pitch: hiResPeekFrozenView.pitch,
-        fov: hiResPeekFrozenView.fov
-      });
-    } catch (e0) {}
-  }
-  if (hiResPeekViewChangeStop) {
-    try { hiResPeekViewChangeStop(); } catch (e1) {}
-  }
-  currentView.addEventListener('change', onViewChange);
-  hiResPeekViewChangeStop = function() {
-    if (currentView) currentView.removeEventListener('change', onViewChange);
-    hiResPeekViewChangeStop = null;
-  };
+  try {
+    currentView.setParameters({
+      yaw: hiResPeekFrozenView.yaw,
+      pitch: hiResPeekFrozenView.pitch,
+      fov: hiResPeekFrozenView.fov
+    });
+  } catch (eLock) {}
 }
 
 function hiResPeekUnfreezeLivePanoView() {
@@ -1772,10 +1775,173 @@ function hiResPeekUnfreezeLivePanoView() {
   hiResPeekLiveFrameRect = null;
   hiResPeekViewState.zoomAnchorX = null;
   hiResPeekViewState.zoomAnchorY = null;
+  document.body.classList.remove('hi-res-peek-live');
   if (hiResPeekViewChangeStop) {
     try { hiResPeekViewChangeStop(); } catch (e0) {}
     hiResPeekViewChangeStop = null;
   }
+}
+
+function hiResPeekActiveCfgOrScene() {
+  if (hiResPeekOpeningCfg) return hiResPeekOpeningCfg;
+  if (hiResPeekActiveCfg) return hiResPeekActiveCfg;
+  return currentSceneObj ? getHiResPeekConfig(currentSceneObj.data) : null;
+}
+
+var _hiResPeekCmProbe = null;
+function hiResPeekCmToPx(cm) {
+  if (!isFinite(cm) || cm <= 0) cm = 7;
+  if (!_hiResPeekCmProbe) {
+    _hiResPeekCmProbe = document.createElement('div');
+    _hiResPeekCmProbe.style.cssText =
+      'position:absolute;left:-9999px;top:0;width:1cm;height:1px;visibility:hidden;pointer-events:none;';
+    document.body.appendChild(_hiResPeekCmProbe);
+  }
+  var pxPerCm = _hiResPeekCmProbe.offsetWidth;
+  if (!pxPerCm || pxPerCm < 8) pxPerCm = 38;
+  return Math.max(120, Math.round(cm * pxPerCm));
+}
+
+var hiResPeekMacroSettleUntil = 0;
+
+function hiResPeekMacroStartWidthPx(cfg, vw) {
+  if (cfg && cfg.macroStartWidthPx != null) {
+    var fixed = Number(cfg.macroStartWidthPx);
+    if (isFinite(fixed) && fixed > 0) {
+      if (vw > 0) fixed = Math.min(fixed, Math.round(vw * 0.92));
+      return fixed;
+    }
+  }
+  return hiResPeekCmToPx(9);
+}
+
+function hiResPeekMacroZoomEndBoost(cfg) {
+  return 1;
+}
+
+function hiResPeekApplyFullHeightZoom(cfg) {
+  var targetZoom = hiResPeekComputeAutoZoomTarget(cfg);
+  var zMin = (cfg && hiResPeekShootMode(cfg) === 'macro') ? 0.15 : 1.01;
+  if (!isFinite(targetZoom) || targetZoom < zMin) return;
+  var view = document.getElementById('hiResPeekView');
+  if (!view) return;
+  var cx = hiResPeekViewState.zoomAnchorX != null ? hiResPeekViewState.zoomAnchorX : view.clientWidth / 2;
+  var cy = hiResPeekViewState.zoomAnchorY != null ? hiResPeekViewState.zoomAnchorY : view.clientHeight / 2;
+  setHiResPeekZoom(targetZoom, cx, cy, true);
+}
+
+function hiResPeekCaptureMacroPastePoint(cfg) {
+  var peekView = document.getElementById('hiResPeekView');
+  if (!peekView) return null;
+  var vr = peekView.getBoundingClientRect();
+  if (!vr.width || !vr.height) return null;
+
+  if (cfg && currentView) {
+    var pano = document.getElementById('pano');
+    if (pano) {
+      var pr = pano.getBoundingClientRect();
+      var yawC = degToRad(Number(cfg.yawCenter) || 0);
+      var pitchC = degToRad(Number(cfg.pitchCenter) || 0);
+      try {
+        var s0 = currentView.coordinatesToScreen({ yaw: yawC, pitch: pitchC });
+        if (s0 && isFinite(s0.x) && isFinite(s0.y)) {
+          return {
+            cx: Math.round((pr.left + s0.x - vr.left) * 2) / 2,
+            cy: Math.round((pr.top + s0.y - vr.top) * 2) / 2
+          };
+        }
+      } catch (e0) {}
+    }
+  }
+
+  var el = hiResPeekOpeningHotspotEl || hiResPeekHotspotEl;
+  if (el) {
+    var mag = el.querySelector('.hires-peek-magnifier');
+    if (mag) {
+      var mr = mag.getBoundingClientRect();
+      if (mr.width >= 4 && mr.height >= 4) {
+        return {
+          cx: Math.round((mr.left + mr.width * (27 / 64) - vr.left) * 2) / 2,
+          cy: Math.round((mr.top + mr.height * (27 / 64) - vr.top) * 2) / 2
+        };
+      }
+    }
+  }
+  return null;
+}
+
+function hiResPeekSetupMacroPasteLayout(cfg, img, keepZoom) {
+  var view = document.getElementById('hiResPeekView');
+  var stage = document.getElementById('hiResPeekMediaStage');
+  if (!view || !stage || !img || !img.naturalWidth || !cfg) return false;
+  var iw = img.naturalWidth;
+  var ih = img.naturalHeight;
+  var vw = view.clientWidth || window.innerWidth;
+  var vh = view.clientHeight || window.innerHeight;
+  if (!vw || !vh) return false;
+
+  stage.style.width = iw + 'px';
+  stage.style.height = ih + 'px';
+  img.style.position = 'absolute';
+  img.style.left = '0';
+  img.style.top = '0';
+  img.style.width = iw + 'px';
+  img.style.height = ih + 'px';
+  img.style.visibility = 'visible';
+
+  var pt = null;
+  if (keepZoom && hiResPeekViewState.macroAnchorX != null && hiResPeekViewState.macroAnchorY != null) {
+    pt = { cx: hiResPeekViewState.macroAnchorX, cy: hiResPeekViewState.macroAnchorY };
+  } else {
+    pt = hiResPeekCaptureMacroPastePoint(cfg);
+    if (!pt) return false;
+    hiResPeekViewState.macroAnchorX = pt.cx;
+    hiResPeekViewState.macroAnchorY = pt.cy;
+  }
+  var fit = hiResPeekMacroStartWidthPx(cfg, vw) / iw;
+  if (!isFinite(fit) || fit <= 0) return false;
+
+  stage.dataset.iw = String(iw);
+  stage.dataset.ih = String(ih);
+  hiResPeekViewState.baseScale = fit;
+  if (!keepZoom) hiResPeekViewState.zoom = 1;
+  hiResPeekViewState.zoomAnchorX = pt.cx;
+  hiResPeekViewState.zoomAnchorY = pt.cy;
+  hiResPeekViewState.panX = Math.round((pt.cx - vw / 2) * 2) / 2;
+  hiResPeekViewState.panY = Math.round((pt.cy - vh / 2) * 2) / 2;
+  img.style.width = '100%';
+  img.style.height = '100%';
+  applyHiResPeekTransform();
+  return true;
+}
+
+function hiResPeekCaptureMacroFrameRect(cfg) {
+  if (!cfg || !currentView) return null;
+  var peekView = document.getElementById('hiResPeekView');
+  var pano = document.getElementById('pano');
+  if (!peekView || !pano) return null;
+  var vr = peekView.getBoundingClientRect();
+  var pr = pano.getBoundingClientRect();
+  var yawC = degToRad(Number(cfg.yawCenter) || 0);
+  var pitchC = degToRad(Number(cfg.pitchCenter) || 0);
+  var hy = degToRad(Number(cfg.rangeAngleYaw) || 8) / 2;
+  var hp = degToRad(Number(cfg.rangeAnglePitch) || 6) / 2;
+  var s0 = null;
+  var sX = null;
+  var sY = null;
+  try {
+    s0 = currentView.coordinatesToScreen({ yaw: yawC, pitch: pitchC });
+    sX = currentView.coordinatesToScreen({ yaw: yawC + hy, pitch: pitchC });
+    sY = currentView.coordinatesToScreen({ yaw: yawC, pitch: pitchC + hp });
+  } catch (e0) { s0 = null; }
+  if (!s0 || !isFinite(s0.x) || !isFinite(s0.y)) return null;
+  var cx = pr.left + s0.x - vr.left;
+  var cy = pr.top + s0.y - vr.top;
+  var fw = 80;
+  var fh = 60;
+  if (sX && isFinite(sX.x)) fw = Math.max(24, Math.abs(sX.x - s0.x) * 2);
+  if (sY && isFinite(sY.y)) fh = Math.max(20, Math.abs(sY.y - s0.y) * 2);
+  return { cx: cx, cy: cy, width: fw, height: fh };
 }
 
 function hiResPeekCaptureHotspotFrameRect() {
@@ -1787,7 +1953,13 @@ function hiResPeekCaptureHotspotFrameRect() {
   var target = zone || el;
   var r = target.getBoundingClientRect();
   var vr = view.getBoundingClientRect();
-  if (r.width < 8 || r.height < 8) return null;
+  if (r.width < 8 || r.height < 8) {
+    var cfg = hiResPeekOpeningCfg || hiResPeekActiveCfg;
+    if (cfg && hiResPeekShootMode(cfg) === 'macro') {
+      return hiResPeekCaptureMacroFrameRect(cfg);
+    }
+    return null;
+  }
   return {
     cx: r.left + r.width / 2 - vr.left,
     cy: r.top + r.height / 2 - vr.top,
@@ -1796,24 +1968,35 @@ function hiResPeekCaptureHotspotFrameRect() {
   };
 }
 
-function hiResPeekApplyLivePanoFrameFit(frameRect, cfg) {
+function hiResPeekApplyLivePanoFrameFit(frameRect, cfg, keepZoom) {
   var view = document.getElementById('hiResPeekView');
+  var stage = document.getElementById('hiResPeekMediaStage');
   var img = document.getElementById('hiResPeekBaseImg');
-  if (!view || !img || !img.naturalWidth || !frameRect) return false;
+  if (!view || !stage || !img || !img.naturalWidth || !frameRect) return false;
   var iw = img.naturalWidth;
   var ih = img.naturalHeight;
-  var startMul = cfg && cfg.peekStartScale != null ? Number(cfg.peekStartScale) : 2;
-  if (!isFinite(startMul) || startMul < 1) startMul = 2;
-  var fit = Math.min(frameRect.width * startMul / iw, frameRect.height * startMul / ih);
-  if (!isFinite(fit) || fit <= 0) return false;
-  hiResPeekViewState.baseScale = fit;
-  hiResPeekViewState.zoom = 1;
-  hiResPeekViewState.zoomAnchorX = frameRect.cx;
-  hiResPeekViewState.zoomAnchorY = frameRect.cy;
   var vw = view.clientWidth || window.innerWidth;
   var vh = view.clientHeight || window.innerHeight;
-  hiResPeekViewState.panX = frameRect.cx - vw / 2;
-  hiResPeekViewState.panY = frameRect.cy - vh / 2;
+  var isMacro = cfg && hiResPeekShootMode(cfg) === 'macro';
+  var fit;
+  if (isMacro) {
+    fit = hiResPeekMacroStartWidthPx(cfg, vw) / iw;
+  } else {
+    var startMul = cfg && cfg.peekStartScale != null ? Number(cfg.peekStartScale) : 2;
+    if (!isFinite(startMul) || startMul < 1) startMul = 2;
+    fit = Math.min(frameRect.width * startMul / iw, frameRect.height * startMul / ih);
+  }
+  if (!isFinite(fit) || fit <= 0) return false;
+  stage.style.width = iw + 'px';
+  stage.style.height = ih + 'px';
+  img.style.width = iw + 'px';
+  img.style.height = ih + 'px';
+  hiResPeekViewState.baseScale = fit;
+  if (!keepZoom) hiResPeekViewState.zoom = 1;
+  hiResPeekViewState.zoomAnchorX = frameRect.cx;
+  hiResPeekViewState.zoomAnchorY = frameRect.cy;
+  hiResPeekViewState.panX = Math.round((frameRect.cx - vw / 2) * 2) / 2;
+  hiResPeekViewState.panY = Math.round((frameRect.cy - vh / 2) * 2) / 2;
   applyHiResPeekTransform();
   return true;
 }
@@ -1830,7 +2013,7 @@ function hiResPeekSetupLivePanoPaste(cfg) {
   var fov = currentView ? currentView.parameters().fov : 1.1;
   if (!isFinite(fov) || fov <= 0) fov = 1.1;
   hiResPeekViewState.backdropFovRad = fov;
-  hiResPeekApplyVrBackdropTone(0, cfg);
+  hiResPeekApplyVrBackdropTone(1, cfg);
   console.log('🔍 高画質覗き: 今のVRの上に貼り付け fov=' + radToDeg(fov).toFixed(1) + '°');
 }
 
@@ -1863,9 +2046,10 @@ function hiResPeekPasteBaseScale(vw, vh, iw, ih, cfg, backdropFovRad) {
 }
 
 function hiResPeekComputeAutoZoomTarget(cfg) {
+  var zMax = hiResPeekZoomMax(cfg);
   if (cfg && cfg.autoZoomTarget != null) {
     var fixed = Number(cfg.autoZoomTarget);
-    if (isFinite(fixed) && fixed > 1.01) return Math.min(5, fixed);
+    if (isFinite(fixed) && fixed > 1.01) return Math.min(zMax, fixed);
   }
   var view = document.getElementById('hiResPeekView');
   var img = document.getElementById('hiResPeekBaseImg');
@@ -1876,15 +2060,20 @@ function hiResPeekComputeAutoZoomTarget(cfg) {
   var ih = img.naturalHeight;
   var base = hiResPeekViewState.baseScale;
   if (!base || base <= 0) return 1.5;
-  var fitMode = cfg && cfg.autoZoomFit ? String(cfg.autoZoomFit) : 'height';
+  var isMacro = hiResPeekShootMode(cfg) === 'macro';
+  var fitMode = cfg && cfg.autoZoomFit ? String(cfg.autoZoomFit) :
+    (isMacro ? 'height' : 'height');
   var zoomTarget;
-  if (fitMode === 'cover') {
+  if (isMacro && hiResPeekKeepLivePanoActive) {
+    zoomTarget = vh / (ih * base);
+    return Math.max(0.15, Math.min(zMax, zoomTarget));
+  } else if (fitMode === 'cover') {
     zoomTarget = Math.max(vw / (iw * base), vh / (ih * base));
   } else if (fitMode === 'contain') {
     zoomTarget = Math.min(vw / (iw * base), vh / (ih * base));
   } else {
     zoomTarget = vh / (ih * base);
-    if (cfg && cfg.autoZoomHeightPad != null) {
+    if (!isMacro && cfg && cfg.autoZoomHeightPad != null) {
       var hPad = Number(cfg.autoZoomHeightPad);
       if (isFinite(hPad) && hPad > 0 && hPad <= 1) zoomTarget *= hPad;
     }
@@ -1893,11 +2082,11 @@ function hiResPeekComputeAutoZoomTarget(cfg) {
     var pad = Number(cfg.autoZoomCoverPad);
     if (isFinite(pad) && pad > 0) zoomTarget *= pad;
   }
-  return Math.max(1.02, Math.min(5, zoomTarget));
+  return Math.max(1.02, Math.min(zMax, zoomTarget));
 }
 
 function hiResPeekAutoZoomDurationMs(cfg) {
-  var defMs = hiResPeekShootMode(cfg) === 'macro' ? 12000 : 10000;
+  var defMs = hiResPeekShootMode(cfg) === 'macro' ? 7500 : 10000;
   var baseMs = cfg && cfg.autoZoomMs != null ? Number(cfg.autoZoomMs) : defMs;
   if (!isFinite(baseMs) || baseMs < 400) baseMs = 10000;
   var speed = cfg && cfg.autoZoomSpeed != null ? Number(cfg.autoZoomSpeed) : 1;
@@ -1906,9 +2095,9 @@ function hiResPeekAutoZoomDurationMs(cfg) {
 }
 
 function hiResPeekVrWashMax(cfg) {
-  var v = cfg && cfg.vrWashMax != null ? Number(cfg.vrWashMax) : 0.14;
-  if (!isFinite(v) || v < 0) v = 0.14;
-  return Math.min(0.3, v);
+  var v = cfg && cfg.vrWashMax != null ? Number(cfg.vrWashMax) : 0.26;
+  if (!isFinite(v) || v < 0) v = 0.26;
+  return Math.min(0.42, v);
 }
 
 function hiResPeekApplyVrBackdropTone(t, cfg) {
@@ -1925,9 +2114,9 @@ function hiResPeekApplyVrBackdropTone(t, cfg) {
     if (ease <= 0.001) {
       pane.style.filter = '';
     } else {
-      var b = 1 + 0.08 * ease;
-      var s = 1 - 0.12 * ease;
-      pane.style.filter = 'brightness(' + b.toFixed(3) + ') saturate(' + s.toFixed(3) + ') contrast(0.97)';
+      var b = 1 + 0.16 * ease;
+      var s = 1 - 0.2 * ease;
+      pane.style.filter = 'brightness(' + b.toFixed(3) + ') saturate(' + s.toFixed(3) + ') contrast(0.95)';
     }
   }
 }
@@ -1949,20 +2138,23 @@ function hiResPeekCancelAutoZoom() {
   }
 }
 
-function hiResPeekRevealNoZoom(cfg) {
+function hiResPeekRevealFullScreenFade(cfg, baseImg) {
   hiResPeekCancelAutoZoom();
   hiResPeekApplyVrBackdropTone(1, cfg);
-  var baseImg = document.getElementById('hiResPeekBaseImg');
   if (!baseImg) {
     hiResPeekFinishZoomReveal(cfg);
     return;
   }
-  baseImg.style.transition = 'opacity 0.85s ease-in-out';
+  baseImg.style.transition = 'opacity ' + (HI_RES_PEEK_FULL_FADE_MS / 1000) + 's ease-in';
+  hiResPeekMacroSettleUntil = performance.now() + HI_RES_PEEK_FULL_FADE_MS + 400;
   requestAnimationFrame(function() {
     requestAnimationFrame(function() {
       if (!hiResPeekOpen) return;
       baseImg.style.opacity = '1';
-      hiResPeekFinishZoomReveal(cfg);
+      setTimeout(function() {
+        if (!hiResPeekOpen) return;
+        hiResPeekFinishZoomReveal(cfg);
+      }, HI_RES_PEEK_FULL_FADE_MS + 80);
     });
   });
 }
@@ -1972,18 +2164,21 @@ function hiResPeekStartAutoZoom(cfg) {
   var baseImg = document.getElementById('hiResPeekBaseImg');
   var livePano = hiResPeekKeepLivePanoActive;
   if (!cfg || cfg.autoZoom === false) {
+    return;
+  }
+  var targetZoom = hiResPeekComputeAutoZoomTarget(cfg);
+  var duration = hiResPeekAutoZoomDurationMs(cfg);
+  var isMacro = hiResPeekShootMode(cfg) === 'macro';
+  var zMin = isMacro ? 0.15 : 1.01;
+  if (!isFinite(targetZoom) || targetZoom < zMin) {
     hiResPeekApplyVrBackdropTone(1, cfg);
     if (baseImg) baseImg.style.opacity = '1';
     hiResPeekFinishZoomReveal(cfg);
     return;
   }
-  var targetZoom = hiResPeekComputeAutoZoomTarget(cfg);
-  var duration = hiResPeekAutoZoomDurationMs(cfg);
-  if (!isFinite(targetZoom) || targetZoom <= 1.01) {
-    hiResPeekApplyVrBackdropTone(1, cfg);
-    if (baseImg) baseImg.style.opacity = '1';
-    hiResPeekFinishZoomReveal(cfg);
-    return;
+  if (livePano && isMacro) {
+    console.log('🔍 接写ズーム: 開始幅' + Math.round((baseImg.naturalWidth || 0) * hiResPeekViewState.baseScale) +
+      'px → ×' + targetZoom.toFixed(2));
   }
   var start = performance.now();
   var z0 = hiResPeekViewState.zoom || 1;
@@ -1991,8 +2186,7 @@ function hiResPeekStartAutoZoom(cfg) {
   if (!view) return;
   var cx = hiResPeekViewState.zoomAnchorX != null ? hiResPeekViewState.zoomAnchorX : view.clientWidth / 2;
   var cy = hiResPeekViewState.zoomAnchorY != null ? hiResPeekViewState.zoomAnchorY : view.clientHeight / 2;
-  var isMacro = hiResPeekShootMode(cfg) === 'macro';
-  hiResPeekApplyVrBackdropTone(0, cfg);
+  hiResPeekApplyVrBackdropTone(livePano ? 1 : 0, cfg);
   if (baseImg) {
     baseImg.style.transition = 'none';
     if (livePano) {
@@ -2010,8 +2204,8 @@ function hiResPeekStartAutoZoom(cfg) {
     var ease = t * t * (3 - 2 * t);
     var z1 = z0 + (targetZoom - z0) * ease;
     setHiResPeekZoom(z1, cx, cy, true);
-    hiResPeekApplyVrBackdropTone(t, cfg);
-    if (baseImg && (livePano || isMacro)) {
+    hiResPeekApplyVrBackdropTone(livePano ? 1 : t, cfg);
+    if (baseImg && isMacro && !livePano) {
       baseImg.style.opacity = String(hiResPeekImageFadeOpacity(t));
     }
     if (t < 1) {
@@ -2242,7 +2436,9 @@ function attachHiResPeekHotspot(sceneId, sceneData) {
       { perspective: { radius: radius } }
     );
     hiResPeekHotspots.push({ el: wrap, handle: handle, cfg: cfg });
-    console.log('🔍 高画質覗き: ' + (isMacro ? '接写' : '範囲') + ' ' + (cfg.imageSrc || '') + ' yaw=' + (cfg.yawCenter || 0) + '°');
+    console.log('🔍 高画質覗き: ' + (isMacro ? '接写' : '範囲') + ' ' + (cfg.imageSrc || '') +
+      ' 位置 左右' + (cfg.yawCenter || 0) + '° 上下' + (cfg.pitchCenter || 0) + '°' +
+      ' / 出る±' + (cfg.showAngleYaw != null ? cfg.showAngleYaw : '?') + '°');
   });
   if (hiResPeekHotspots.length) {
     hiResPeekHotspotEl = hiResPeekHotspots[0].el;
@@ -2323,6 +2519,8 @@ function hiResPeekShowZoomHint(cfg) {
 }
 
 function hiResPeekFinishZoomReveal(cfg) {
+  var stage = document.getElementById('hiResPeekMediaStage');
+  if (stage) stage.style.willChange = 'auto';
   hiResPeekPlayOverlayVideo(true);
   hiResPeekShowZoomHint(cfg);
 }
@@ -2562,7 +2760,12 @@ function applyHiResPeekTransform() {
   var stage = document.getElementById('hiResPeekMediaStage');
   if (!stage) return;
   var s = hiResPeekViewState.baseScale * hiResPeekViewState.zoom;
-  stage.style.transform = 'translate(calc(-50% + ' + hiResPeekViewState.panX + 'px), calc(-50% + ' + hiResPeekViewState.panY + 'px)) scale(' + s + ')';
+  s = Math.round(s * 8192) / 8192;
+  var px = Math.round(hiResPeekViewState.panX * 2) / 2;
+  var py = Math.round(hiResPeekViewState.panY * 2) / 2;
+  stage.style.left = '50%';
+  stage.style.top = '50%';
+  stage.style.transform = 'translate3d(calc(-50% + ' + px + 'px), calc(-50% + ' + py + 'px), 0) scale(' + s + ')';
 }
 
 function fitHiResPeekImage(keepZoom) {
@@ -2578,11 +2781,15 @@ function fitHiResPeekImage(keepZoom) {
   }
   var iw = img.naturalWidth;
   var ih = img.naturalHeight;
-  var cfg = currentSceneObj ? getHiResPeekConfig(currentSceneObj.data) : null;
-  var usePaste = hiResPeekUsePasteMode(cfg) && hiResPeekViewState.backdropFovRad > 0;
+  var cfg = hiResPeekActiveCfgOrScene();
+  var usePaste = cfg && hiResPeekUsePasteMode(cfg) && hiResPeekViewState.backdropFovRad > 0;
   if (usePaste) {
-    hiResPeekViewState.baseScale = hiResPeekPasteBaseScale(
-      vw, vh, iw, ih, cfg, hiResPeekViewState.backdropFovRad);
+    if (hiResPeekShootMode(cfg) === 'macro') {
+      hiResPeekViewState.baseScale = hiResPeekMacroStartWidthPx(cfg, vw) / iw;
+    } else {
+      hiResPeekViewState.baseScale = hiResPeekPasteBaseScale(
+        vw, vh, iw, ih, cfg, hiResPeekViewState.backdropFovRad);
+    }
   } else {
     hiResPeekViewState.baseScale = Math.min(vw / iw, vh / ih);
   }
@@ -2599,7 +2806,8 @@ function fitHiResPeekImage(keepZoom) {
   img.style.width = iw + 'px';
   img.style.height = ih + 'px';
   img.style.visibility = '';
-  if (!(hiResPeekOpen && hiResPeekKeepLivePanoActive && hiResPeekAutoZoomAnim)) {
+  if (!(hiResPeekOpen && hiResPeekKeepLivePanoActive) &&
+      !(hiResPeekOpen && hiResPeekAutoZoomAnim)) {
     img.style.opacity = '1';
   }
   syncHiResPeekVideoLayout(cfg);
@@ -2607,13 +2815,28 @@ function fitHiResPeekImage(keepZoom) {
   console.log('🔍 高画質覗き:', usePaste ? 'VRに貼り付け' : '全体表示', iw + '×' + ih);
 }
 
+function hiResPeekZoomMax(cfg) {
+  return (cfg && hiResPeekShootMode(cfg) === 'macro') ? 25 : 5;
+}
+
+function hiResPeekFadeInMacroImage(baseImg) {
+  if (!baseImg) return;
+  baseImg.style.transition = 'none';
+  baseImg.style.opacity = '0';
+  void baseImg.offsetWidth;
+  baseImg.style.transition = 'opacity 1.1s ease-in';
+  baseImg.style.opacity = '1';
+}
+
 function setHiResPeekZoom(nextZoom, anchorX, anchorY, fromAutoZoom) {
   if (!fromAutoZoom) hiResPeekCancelAutoZoom();
   var view = document.getElementById('hiResPeekView');
   var img = document.getElementById('hiResPeekBaseImg');
   if (!view || !img || !img.naturalWidth) return;
+  var cfg = hiResPeekActiveCfgOrScene();
   var z0 = hiResPeekViewState.zoom;
-  var z1 = Math.max(1, Math.min(5, nextZoom));
+  var zMin = (cfg && hiResPeekShootMode(cfg) === 'macro') ? 0.15 : 1;
+  var z1 = Math.max(zMin, Math.min(hiResPeekZoomMax(cfg), nextZoom));
   if (z1 === z0) return;
   var vw = view.clientWidth;
   var vh = view.clientHeight;
@@ -2624,8 +2847,8 @@ function setHiResPeekZoom(nextZoom, anchorX, anchorY, fromAutoZoom) {
   var ix = (cx - vw / 2 - hiResPeekViewState.panX) / s0;
   var iy = (cy - vh / 2 - hiResPeekViewState.panY) / s0;
   hiResPeekViewState.zoom = z1;
-  hiResPeekViewState.panX = cx - vw / 2 - ix * s1;
-  hiResPeekViewState.panY = cy - vh / 2 - iy * s1;
+  hiResPeekViewState.panX = Math.round((cx - vw / 2 - ix * s1) * 2) / 2;
+  hiResPeekViewState.panY = Math.round((cy - vh / 2 - iy * s1) * 2) / 2;
   applyHiResPeekTransform();
 }
 
@@ -2645,7 +2868,12 @@ function openHiResPeekOverlay(cfg, hotspotEl) {
   var isMacroOpen = hiResPeekShootMode(cfg) === 'macro';
   var keepLive = hiResPeekKeepLivePano(cfg);
   hiResPeekKeepLivePanoActive = keepLive;
+  hiResPeekViewState.macroAnchorX = null;
+  hiResPeekViewState.macroAnchorY = null;
+  hiResPeekMacroSettleUntil = 0;
   hiResPeekOpen = true;
+  var stageEl = document.getElementById('hiResPeekMediaStage');
+  if (stageEl) stageEl.style.willChange = 'transform';
   if (!keepLive) {
     document.body.classList.add('hi-res-peek-active');
   }
@@ -2654,37 +2882,56 @@ function openHiResPeekOverlay(cfg, hotspotEl) {
   hiResPeekSetupPeekBackground(cfg);
   if (keepLive) {
     hiResPeekLiveFrameRect = hiResPeekCaptureHotspotFrameRect();
+    if (!hiResPeekLiveFrameRect && isMacroOpen) {
+      hiResPeekLiveFrameRect = hiResPeekCaptureMacroFrameRect(cfg);
+    }
     hiResPeekFreezeLivePanoView();
   }
   updateHiResPeekFrameVisibility();
   document.body.classList.remove('hi-res-peek-fast-out');
   baseImg.style.opacity = '0';
   var useZoom = cfg.autoZoom !== false;
-  baseImg.style.transition = (keepLive || (isMacroOpen && useZoom)) ? 'none' : 'opacity 0.85s ease-in-out';
+  baseImg.style.transition = 'none';
   var url = hiResPeekImageUrl(cfg.imageSrc);
-  var deferVideo = useZoom;
+  var deferVideo = !!(cfg && (cfg.videoSrc || cfg.videoSrcIos));
+  var imageReadyDone = false;
   function showHiResPeekImageReady() {
+    if (imageReadyDone) return;
+    imageReadyDone = true;
     requestAnimationFrame(function() {
       requestAnimationFrame(function() {
+        if (!hiResPeekOpen) return;
         fitHiResPeekImage(false);
         if (keepLive && hiResPeekLiveFrameRect) {
-          hiResPeekApplyLivePanoFrameFit(hiResPeekLiveFrameRect, cfg);
-        }
-        if (keepLive) {
-          baseImg.style.opacity = '1';
-          baseImg.style.transition = 'none';
+          hiResPeekApplyLivePanoFrameFit(hiResPeekLiveFrameRect, cfg, false);
         }
         setupHiResPeekOverlayVideo(cfg, { deferPlay: deferVideo });
         syncHiResPeekShadowLayer(cfg);
-        if (!keepLive && !useZoom) {
-          hiResPeekRevealNoZoom(cfg);
+        if (!useZoom) {
+          hiResPeekApplyFullHeightZoom(cfg);
+          applyHiResPeekTransform();
+          hiResPeekRevealFullScreenFade(cfg, baseImg);
           return;
+        }
+        if (keepLive) {
+          if (isMacroOpen) hiResPeekFadeInMacroImage(baseImg);
+          else {
+            baseImg.style.transition = 'opacity 0.45s ease-out';
+            requestAnimationFrame(function() {
+              if (!hiResPeekOpen) return;
+              baseImg.style.opacity = '1';
+            });
+          }
+        }
+        var zoomDelay = (keepLive && isMacroOpen) ? 1100 : (keepLive ? 100 : 200);
+        if (keepLive && isMacroOpen) {
+          hiResPeekMacroSettleUntil = performance.now() + zoomDelay + hiResPeekAutoZoomDurationMs(cfg) + 400;
         }
         setTimeout(function() {
           if (!hiResPeekOpen) return;
           if (!keepLive && !isMacroOpen) baseImg.style.opacity = '1';
           hiResPeekStartAutoZoom(cfg);
-        }, keepLive ? 350 : 200);
+        }, zoomDelay);
       });
     });
   }
@@ -2709,6 +2956,7 @@ function closeHiResPeekOverlay() {
   hiResPeekOpen = false;
   hiResPeekHideZoomHint();
   hiResPeekUnfreezeLivePanoView();
+  try { viewer.controls().enable(); } catch (eEn) {}
   hiResPeekOpeningCfg = null;
   hiResPeekOpeningHotspotEl = null;
   hiResPeekCancelAutoZoom();
@@ -2838,7 +3086,20 @@ function bindHiResPeekUi() {
   });
 
   window.addEventListener('resize', function() {
-    if (hiResPeekOpen) fitHiResPeekImage(true);
+    if (!hiResPeekOpen) return;
+    if (hiResPeekAutoZoomAnim || performance.now() < hiResPeekMacroSettleUntil) return;
+    var cfg = hiResPeekActiveCfgOrScene();
+    if (hiResPeekKeepLivePanoActive && cfg && hiResPeekShootMode(cfg) === 'macro') return;
+    var img = document.getElementById('hiResPeekBaseImg');
+    if (hiResPeekKeepLivePanoActive && cfg && img) {
+      if (hiResPeekLiveFrameRect) {
+        hiResPeekApplyLivePanoFrameFit(hiResPeekLiveFrameRect, cfg, true);
+      } else {
+        fitHiResPeekImage(true);
+      }
+    } else {
+      fitHiResPeekImage(true);
+    }
   });
 }
 
