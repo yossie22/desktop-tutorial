@@ -1,7 +1,7 @@
 /**
- * パノラマ用ジャイロ制御 v72
- * v71 ＋ 縦↔横ロール時は必ずOFF→角度復元→自動ON
- * 詳細: vendor/gyro-STABLE-v72.txt
+ * パノラマ用ジャイロ制御 v73
+ * v72 ＋ 縦↔横ロールを即検出、必ずOFF→y/p復元→自動ON
+ * 詳細: vendor/gyro-STABLE-v73.txt
  */
 (function(global) {
   'use strict';
@@ -14,9 +14,9 @@
   var PITCH_SPIKE_DEG = 20;
   var SENSOR_LP = 0.22;
   var STARTUP_SETTLE_FRAMES = 20;
-  var ROLL_RESTART_DELAY_MS = 480;
+  var ROLL_RESTART_DELAY_MS = 650;
   var LOCK_JUMP_REJECT_DEG = 8;
-  var BUILD = 'v72';
+  var BUILD = 'v73';
   var LANDSCAPE_RIGHT_CUR = 90;
   var LANDSCAPE_LEFT_CUR = 270;
 
@@ -135,6 +135,39 @@
   function readHeadingDeg(normalized) {
     if (!normalized) return null;
     return normalized.screenHeading;
+  }
+
+  function snapRollAngleDeg(deg) {
+    var d = normalizeAngle360(deg);
+    var candidates = [0, 90, 180, 270];
+    var best = 0;
+    var bestDist = 999;
+    for (var i = 0; i < candidates.length; i++) {
+      var c = candidates[i];
+      var dist = Math.abs(d - c);
+      if (dist > 180) dist = 360 - dist;
+      if (dist < bestDist) {
+        bestDist = dist;
+        best = c;
+      }
+    }
+    return best;
+  }
+
+  function isPortraitRoll(cur) {
+    var c = normalizeAngle360(cur);
+    return c === 0 || c === 180;
+  }
+
+  function isLandscapeRoll(cur) {
+    return isLandscapeScreen(cur);
+  }
+
+  function isRollBetweenOrientations(fromCur, toCur) {
+    if (fromCur == null || toCur == null) return false;
+    if (fromCur === toCur) return false;
+    return (isPortraitRoll(fromCur) && isLandscapeRoll(toCur)) ||
+      (isLandscapeRoll(fromCur) && isPortraitRoll(toCur));
   }
 
   function pitchNeedsInvert(screenAngle) {
@@ -307,6 +340,8 @@
     this.userDismissed = false;
     this._rollRestartTimer = null;
     this._rollRestartBusy = false;
+    this._rollGuardBound = false;
+    this._bindRollGuard();
   }
 
   GyroControl.BUILD = BUILD;
@@ -324,13 +359,37 @@
     this.stop(false);
   };
 
+  GyroControl.prototype._stopForRoll = function() {
+    if (this.raf) {
+      global.cancelAnimationFrame(this.raf);
+      this.raf = null;
+    }
+    this.latestEvent = null;
+    this.handlers.forEach(function(item) {
+      if (item.target) {
+        item.target.removeEventListener(item.type, item.fn);
+      } else {
+        global.removeEventListener(item.type, item.fn, item.capture === true);
+      }
+    });
+    this.handlers = [];
+    var wasOn = this.enabled;
+    this.base = null;
+    this.orientState = null;
+    this.enabled = false;
+    if (wasOn) {
+      if (this.hooks.onStop) this.hooks.onStop();
+      this._emit();
+    }
+  };
+
   GyroControl.prototype._onScreenRoll = function(savedYaw, savedPitch, newSnapped) {
     if (this._rollRestartBusy) return;
     this._rollRestartBusy = true;
     var view = this.getView();
     var yaw = savedYaw;
     var pitch = savedPitch;
-    this.stop(false);
+    this._stopForRoll();
     if (view) {
       try {
         view.setYaw(yaw);
@@ -345,17 +404,33 @@
       self._rollRestartTimer = null;
       self._rollRestartBusy = false;
       if (self.userDismissed) return;
-      self.requestStart();
+      self.start();
     }, ROLL_RESTART_DELAY_MS);
   };
 
-  GyroControl.prototype._checkScreenRoll = function(newSnapped) {
-    if (!this.enabled || !this.orientState) return false;
-    if (this.orientState.settleLeft > 0) return false;
-    if (this.orientState.lockedCur == null) return false;
-    if (newSnapped === this.orientState.lockedCur) return false;
-    this._onScreenRoll(this.displayYaw, this.displayPitch, newSnapped);
-    return true;
+  GyroControl.prototype._tryRollRestart = function() {
+    if (!this.enabled || !this.orientState || this._rollRestartBusy) return;
+    if (this.orientState.settleLeft > 0) return;
+    if (this.orientState.lockedCur == null) return;
+    var rollSnap = snapRollAngleDeg(getScreenAngleDeg());
+    if (!isAllowedScreenCur(rollSnap)) return;
+    if (!isRollBetweenOrientations(this.orientState.lockedCur, rollSnap)) return;
+    this._onScreenRoll(this.displayYaw, this.displayPitch, rollSnap);
+  };
+
+  GyroControl.prototype._bindRollGuard = function() {
+    if (this._rollGuardBound) return;
+    this._rollGuardBound = true;
+    var self = this;
+    var fn = function() {
+      self._tryRollRestart();
+    };
+    global.addEventListener('orientationchange', fn, true);
+    global.addEventListener('resize', fn, true);
+    if (global.screen && global.screen.orientation &&
+        typeof global.screen.orientation.addEventListener === 'function') {
+      global.screen.orientation.addEventListener('change', fn);
+    }
   };
 
   GyroControl.prototype.setAutoLandscape = function(on) {
@@ -427,7 +502,6 @@
         self._rejectOrientation('この向きでは使えません');
         return;
       }
-      if (self._checkScreenRoll(snapped)) return;
       if (self.visual) self.visual.apply(snapped);
     };
     global.addEventListener('resize', layoutFn);
@@ -530,14 +604,16 @@
         return;
       }
 
+      if (self.orientState.settleLeft === 0 && self.orientState.lockedCur != null) {
+        var rollSnap = snapRollAngleDeg(getScreenAngleDeg());
+        if (isRollBetweenOrientations(self.orientState.lockedCur, rollSnap)) {
+          self._onScreenRoll(self.displayYaw, self.displayPitch, rollSnap);
+          return;
+        }
+      }
+
       if (self.visual) self.visual.apply(snapped);
       self.orientState.snappedCur = snapped;
-
-      if (self.orientState.settleLeft === 0 &&
-          self.orientState.lockedCur != null &&
-          snapped !== self.orientState.lockedCur) {
-        if (self._checkScreenRoll(snapped)) return;
-      }
 
       var source = self.orientState.headingSource;
 
