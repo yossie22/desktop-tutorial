@@ -1,6 +1,6 @@
 /**
- * パノラマ用ジャイロ制御 v70.1
- * v70 ＋ 上下の見える範囲だけ拡大（横は生beta・縦横とも上方向ブースト）
+ * パノラマ用ジャイロ制御 v70.2
+ * v70.1 ＋ 横画面の上下を変換後betaに戻す（90°のみ符号反転）
  */
 (function(global) {
   'use strict';
@@ -14,7 +14,7 @@
   var SENSOR_LP = 0.22;
   var STARTUP_SETTLE_FRAMES = 20;
   var LOCK_JUMP_REJECT_DEG = 8;
-  var BUILD = 'v70.1';
+  var BUILD = 'v70.2';
   var LANDSCAPE_RIGHT_CUR = 90;
   var LANDSCAPE_LEFT_CUR = 270;
 
@@ -159,17 +159,15 @@
   }
 
   function computePitchOff(normalized, state, rawBeta) {
-    var screenAngle = normalized.screenAngle;
+    var screenAngle = normalizeAngle360(normalized.screenAngle);
     var pitchOff;
 
-    if (isLandscapeScreen(screenAngle) && rawBeta != null && isFinite(rawBeta)) {
-      if (state.landPitchInit == null) {
-        state.landPitchInit = rawBeta;
-        state.landPitchF = rawBeta;
+    if (isLandscapeScreen(screenAngle)) {
+      state.fBeta = lp(state.fBeta, normalized.beta, SENSOR_LP);
+      pitchOff = degToRad(state.initBeta - state.fBeta);
+      if (screenAngle === LANDSCAPE_RIGHT_CUR) {
+        pitchOff = -pitchOff;
       }
-      state.landPitchF = lp(state.landPitchF, rawBeta, SENSOR_LP);
-      pitchOff = degToRad(state.landPitchInit - state.landPitchF);
-      pitchOff = -pitchOff;
       var pitchOffDeg = radToDeg(pitchOff);
       if (state.lastPitchOffDeg != null &&
           Math.abs(pitchOffDeg - state.lastPitchOffDeg) > PITCH_SPIKE_DEG) {
@@ -209,10 +207,6 @@
       state.fBeta = normalized.beta;
       state.initGamma = normalized.gamma;
       state.fGamma = normalized.gamma;
-      if (isLandscapeScreen(normalized.screenAngle) && rawBeta != null && isFinite(rawBeta)) {
-        state.landPitchInit = rawBeta;
-        state.landPitchF = rawBeta;
-      }
       state.prevHeading = useHeading ? readHeadingDeg(normalized) : null;
       state.initHeading = state.prevHeading;
       state.unwrappedHeading = state.prevHeading != null ? state.prevHeading : 0;
