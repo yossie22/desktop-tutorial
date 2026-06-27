@@ -1,6 +1,6 @@
 /**
- * パノラマ用ジャイロ制御 v70.5
- * 横90°＝符号反転なし / 横270°＝符号反転 / 横は跳び無視・初動リジェクトなし
+ * パノラマ用ジャイロ制御 v70.6
+ * 横90°＝符号反転 / 横270°＝反転なし / 横は跳び無視・初動リジェクト・下方向ブーストなし
  */
 (function(global) {
   'use strict';
@@ -14,7 +14,7 @@
   var SENSOR_LP = 0.22;
   var STARTUP_SETTLE_FRAMES = 20;
   var LOCK_JUMP_REJECT_DEG = 8;
-  var BUILD = 'v70.5';
+  var BUILD = 'v70.6';
   var LANDSCAPE_RIGHT_CUR = 90;
   var LANDSCAPE_LEFT_CUR = 270;
 
@@ -144,7 +144,6 @@
     var deg = radToDeg(pitchOff);
     if (isLandscapeScreen(screenAngle)) {
       if (deg < 0) deg *= 1.58;
-      else if (deg > 0) deg *= 1.15;
     } else if (deg < 0) {
       deg *= 1.32;
     }
@@ -165,7 +164,7 @@
     if (isLandscapeScreen(screenAngle)) {
       state.fBeta = lp(state.fBeta, normalized.beta, SENSOR_LP);
       pitchOff = degToRad(state.initBeta - state.fBeta);
-      if (screenAngle === LANDSCAPE_LEFT_CUR) {
+      if (screenAngle === LANDSCAPE_RIGHT_CUR) {
         pitchOff = -pitchOff;
       }
       return pitchOff;
@@ -522,13 +521,15 @@
 
       if (self.orientState.justLocked) {
         self.orientState.justLocked = false;
-        var pitchJump = isLandscapeScreen(snapped) ? 0 :
-          Math.abs(radToDeg(o.pitchOff));
-        if (Math.abs(radToDeg(o.yawOff)) > LOCK_JUMP_REJECT_DEG ||
-            pitchJump > LOCK_JUMP_REJECT_DEG) {
-          resetSensorBaseline(self.orientState);
-          if (normalized) trackOrientation(normalized, self.orientState, self.latestEvent.beta);
-          return;
+        if (!isLandscapeScreen(snapped)) {
+          if (Math.abs(radToDeg(o.yawOff)) > LOCK_JUMP_REJECT_DEG ||
+              Math.abs(radToDeg(o.pitchOff)) > LOCK_JUMP_REJECT_DEG) {
+            resetSensorBaseline(self.orientState);
+            if (normalized) {
+              trackOrientation(normalized, self.orientState, self.latestEvent.beta);
+            }
+            return;
+          }
         }
       }
 
