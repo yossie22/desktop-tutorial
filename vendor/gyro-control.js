@@ -1,6 +1,6 @@
 /**
- * パノラマ用ジャイロ制御 v79.10
- * 端末別の反転をやめる / 跳び防止は維持
+ * パノラマ用ジャイロ制御 v79.11
+ * Step2a: 15°で角度保存 / 横へ回転時に記録を保持（復元・自動ONは未実装）
  */
 (function(global) {
   'use strict';
@@ -18,7 +18,9 @@
   var LANDSCAPE_PITCH_STEP_DEG = 5.5;
   var LANDSCAPE_LEFT_UP_BETA_DEG = 1.5;
   var LANDSCAPE_CROSS_REJECT_DEG = 12;
-  var BUILD = 'v79.10';
+  var ROLL_SAVE_DEG = 15;
+  var ROLL_SAVE_BETA_MAX = 20;
+  var BUILD = 'v79.11';
   var LANDSCAPE_RIGHT_CUR = 90;
   var LANDSCAPE_LEFT_CUR = 270;
 
@@ -176,6 +178,19 @@
       return rawEvent.beta - 90;
     }
     return 0;
+  }
+
+  function readPortraitRollDeg(rawEvent) {
+    if (!rawEvent || rawEvent.gamma == null || isNaN(rawEvent.gamma)) return 0;
+    var beta = rawEvent.beta != null && !isNaN(rawEvent.beta) ? rawEvent.beta : 90;
+    if (Math.abs(beta - 90) > ROLL_SAVE_BETA_MAX) return 0;
+    return Math.abs(rawEvent.gamma);
+  }
+
+  function formatSavedViewHint(saved) {
+    if (!saved) return '';
+    return '保存 Y' + Math.round(radToDeg(saved.yaw)) +
+      ' P' + Math.round(radToDeg(saved.pitch));
   }
 
   function filterLandscapePitchSpike(pitchOff, state) {
@@ -403,6 +418,8 @@
     this.hintText = '';
     this.autoLandscape = false;
     this.userDismissed = false;
+    this.savedPortraitView = null;
+    this.rollSaveCaptured = false;
   }
 
   GyroControl.BUILD = BUILD;
@@ -413,6 +430,29 @@
 
   GyroControl.prototype.getHint = function() {
     return this.hintText || '';
+  };
+
+  GyroControl.prototype.getSavedPortraitView = function() {
+    if (!this.savedPortraitView) return null;
+    return {
+      yaw: this.savedPortraitView.yaw,
+      pitch: this.savedPortraitView.pitch
+    };
+  };
+
+  GyroControl.prototype._capturePortraitView = function() {
+    this.savedPortraitView = {
+      yaw: this.displayYaw,
+      pitch: this.displayPitch
+    };
+  };
+
+  GyroControl.prototype._tryRollSave = function(rawEvent) {
+    if (this.rollSaveCaptured || !rawEvent) return;
+    if (readPortraitRollDeg(rawEvent) < ROLL_SAVE_DEG) return;
+    this.rollSaveCaptured = true;
+    this._capturePortraitView();
+    this.hintText = formatSavedViewHint(this.savedPortraitView);
   };
 
   GyroControl.prototype._rejectOrientation = function(msg) {
@@ -540,6 +580,7 @@
     }
     this.hintText = '';
     this.userDismissed = false;
+    this.rollSaveCaptured = false;
     var wasOn = this.enabled;
     this._cleanupListeners();
     this.enabled = true;
@@ -592,8 +633,25 @@
       if (self.orientState.settleLeft === 0 &&
           self.orientState.lockedCur != null &&
           snapped !== self.orientState.lockedCur) {
-        self._rejectOrientation('向きが変わったのでGYROを付け直してください');
+        var wasPortrait = !isLandscapeScreen(self.orientState.lockedCur);
+        var nowLandscape = isLandscapeScreen(snapped);
+        if (wasPortrait && nowLandscape) {
+          if (!self.savedPortraitView) {
+            self._capturePortraitView();
+          }
+          self._rejectOrientation(
+            formatSavedViewHint(self.savedPortraitView) + '（横へ）'
+          );
+        } else {
+          self._rejectOrientation('向きが変わったのでGYROを付け直してください');
+        }
         return;
+      }
+
+      if (self.orientState.settleLeft === 0 &&
+          self.orientState.lockedCur === 0 &&
+          self.latestEvent) {
+        self._tryRollSave(self.latestEvent);
       }
 
       var source = self.orientState.headingSource;
