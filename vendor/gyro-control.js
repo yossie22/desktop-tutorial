@@ -1,6 +1,6 @@
 /**
- * パノラマ用ジャイロ制御 v78.8
- * 横: 1.48倍をやめ跳び無視緩和＋上方向ソフト拡張（固まり防止）
+ * パノラマ用ジャイロ制御 v78.9
+ * 横上下: gamma→beta（縦と同じ）/ 上方向ソフト拡張はやめる
  */
 (function(global) {
   'use strict';
@@ -15,9 +15,7 @@
   var STARTUP_SETTLE_FRAMES = 20;
   var LOCK_JUMP_REJECT_DEG = 8;
   var PITCH_SPIKE_LANDSCAPE = 38;
-  var LANDSCAPE_UP_KNEE_DEG = 28;
-  var LANDSCAPE_UP_STRETCH = 1.38;
-  var BUILD = 'v78.8';
+  var BUILD = 'v78.9';
   var LANDSCAPE_RIGHT_CUR = 90;
   var LANDSCAPE_LEFT_CUR = 270;
 
@@ -158,11 +156,11 @@
   }
 
   function readLandscapePitchSensor(rawEvent, normalized) {
-    if (rawEvent && rawEvent.gamma != null && !isNaN(rawEvent.gamma)) {
-      return rawEvent.gamma;
+    if (rawEvent && rawEvent.beta != null && !isNaN(rawEvent.beta)) {
+      return rawEvent.beta;
     }
-    if (normalized.gamma != null && !isNaN(normalized.gamma)) {
-      return normalized.gamma;
+    if (normalized.beta != null && !isNaN(normalized.beta)) {
+      return normalized.beta;
     }
     return 0;
   }
@@ -184,13 +182,6 @@
       state.lastPitchOffDeg = pitchOffDeg;
     }
     return pitchOff;
-  }
-
-  function landscapePitchForView(pitchOff) {
-    if (pitchOff <= 0) return pitchOff;
-    var d = radToDeg(pitchOff);
-    if (d <= LANDSCAPE_UP_KNEE_DEG) return pitchOff;
-    return degToRad(LANDSCAPE_UP_KNEE_DEG + (d - LANDSCAPE_UP_KNEE_DEG) * LANDSCAPE_UP_STRETCH);
   }
 
   function trackOrientation(normalized, state, rawEvent) {
@@ -224,7 +215,7 @@
     if (landscape) {
       var p = readLandscapePitchSensor(rawEvent, normalized);
       state.fLandscapeP = lp(state.fLandscapeP, p, SENSOR_LP);
-      var delta = state.fLandscapeP - state.landscapeP;
+      var delta = state.landscapeP - state.fLandscapeP;
       if (screenAngle === LANDSCAPE_RIGHT_CUR) {
         pitchOff = degToRad(delta);
       } else {
@@ -554,12 +545,8 @@
         }
       }
 
-      var viewPitchOff = o.pitchOff;
-      if (isLandscapeScreen(snapped)) {
-        viewPitchOff = landscapePitchForView(viewPitchOff);
-      }
       var targetYaw = self.base.viewYaw + o.yawOff;
-      var targetPitch = clamp(self.base.viewPitch + viewPitchOff, -Math.PI / 2, Math.PI / 2);
+      var targetPitch = clamp(self.base.viewPitch + o.pitchOff, -Math.PI / 2, Math.PI / 2);
       self.displayYaw = normalizeAngle(
         self.displayYaw + clamp(
           YAW_SMOOTH * angleDelta(self.displayYaw, targetYaw),
