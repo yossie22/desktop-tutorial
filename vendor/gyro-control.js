@@ -1,6 +1,6 @@
 /**
- * パノラマ用ジャイロ制御 v79.11
- * Step2a: 15°で角度保存 / 横へ回転時に記録を保持（復元・自動ONは未実装）
+ * パノラマ用ジャイロ制御 v79.12
+ * Step2b: 横へ回ってOFF → 15°保存角度へ自動復元
  */
 (function(global) {
   'use strict';
@@ -20,7 +20,7 @@
   var LANDSCAPE_CROSS_REJECT_DEG = 12;
   var ROLL_SAVE_DEG = 15;
   var ROLL_SAVE_BETA_MAX = 20;
-  var BUILD = 'v79.11';
+  var BUILD = 'v79.12';
   var LANDSCAPE_RIGHT_CUR = 90;
   var LANDSCAPE_LEFT_CUR = 270;
 
@@ -455,6 +455,23 @@
     this.hintText = formatSavedViewHint(this.savedPortraitView);
   };
 
+  GyroControl.prototype._restoreSavedPortraitView = function() {
+    if (!this.savedPortraitView) return;
+    var view = this.getView();
+    if (!view) return;
+    view.setYaw(this.savedPortraitView.yaw);
+    view.setPitch(clamp(this.savedPortraitView.pitch, -Math.PI / 2, Math.PI / 2));
+  };
+
+  GyroControl.prototype._offPortraitToLandscape = function() {
+    if (!this.savedPortraitView) {
+      this._capturePortraitView();
+    }
+    this._restoreSavedPortraitView();
+    this.hintText = '';
+    this.stop(false);
+  };
+
   GyroControl.prototype._rejectOrientation = function(msg) {
     this.hintText = msg || '向きが変わったのでGYROを付け直してください';
     this.stop(false);
@@ -636,12 +653,7 @@
         var wasPortrait = !isLandscapeScreen(self.orientState.lockedCur);
         var nowLandscape = isLandscapeScreen(snapped);
         if (wasPortrait && nowLandscape) {
-          if (!self.savedPortraitView) {
-            self._capturePortraitView();
-          }
-          self._rejectOrientation(
-            formatSavedViewHint(self.savedPortraitView) + '（横へ）'
-          );
+          self._offPortraitToLandscape();
         } else {
           self._rejectOrientation('向きが変わったのでGYROを付け直してください');
         }
