@@ -96,8 +96,14 @@ body.gyro-active #pano { touch-action: none; }
     return 1024;
   }
   function sceneViewLimiter(sd) {
-    var face = sd.faceSize;
-    if (sceneMaxTileSize(sd) >= 2048) face = Math.min(face, 2048);
+    var face = sd.faceSize || 2048;
+    if (sceneMaxTileSize(sd) >= 2048) {
+      return Marzipano.RectilinearView.limit.traditional(
+        face * 3,
+        75 * Math.PI / 180,
+        110 * Math.PI / 180
+      );
+    }
     return Marzipano.RectilinearView.limit.traditional(face, 75 * Math.PI / 180, 120 * Math.PI / 180);
   }
 

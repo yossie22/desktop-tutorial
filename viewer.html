@@ -1486,9 +1486,16 @@ function sceneMaxTileSize(sd) {
   return 1024;
 }
 function sceneViewLimiter(sd) {
-  var face = sd.faceSize;
+  var face = sd.faceSize || 2048;
   var maxTile = sceneMaxTileSize(sd);
-  if (maxTile >= 2048) face = Math.min(face, 2048);
+  if (maxTile >= 2048) {
+    // 2048タイル: resolution制限を緩めてピンチ拡大を約2〜3倍可能に
+    return Marzipano.RectilinearView.limit.traditional(
+      face * 3,
+      75 * Math.PI / 180,
+      110 * Math.PI / 180
+    );
+  }
   return Marzipano.RectilinearView.limit.traditional(face, 75 * Math.PI / 180, 120 * Math.PI / 180);
 }
 data.scenes.forEach(function(scene) {
@@ -1497,10 +1504,14 @@ data.scenes.forEach(function(scene) {
   scene.levels.forEach(function(l) {
     if (!l.fallbackOnly) l.tileSize = l.size;
   });
+  if (maxTile >= 2048) {
+    console.log('🔎 2048tiles:', scene.id, sceneTilesBase(scene),
+      'levels=' + scene.levels.map(function(l) { return l.size; }).join('/'));
+  }
 });
 
 // ビルド識別（どのファイルが実行されているか確認用）
-var BUILD_STAMP = '2026-06-28-tiles2048test';
+var BUILD_STAMP = '2026-06-28-tiles2048zoom2';
 var guideVideoPreloadBySrc = {};
 var guideVideoSessionDone = {};
 console.log('🧩 viewer build:', BUILD_STAMP);
