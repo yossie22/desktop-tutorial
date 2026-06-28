@@ -1,6 +1,6 @@
 /**
- * パノラマ用ジャイロ制御 v79.12
- * Step2b: 横へ回ってOFF → 15°保存角度へ自動復元
+ * パノラマ用ジャイロ制御 v79.13
+ * Step2c: 回転前の角度を常時更新 / 横OFF時に確実復元
  */
 (function(global) {
   'use strict';
@@ -20,7 +20,7 @@
   var LANDSCAPE_CROSS_REJECT_DEG = 12;
   var ROLL_SAVE_DEG = 15;
   var ROLL_SAVE_BETA_MAX = 20;
-  var BUILD = 'v79.12';
+  var BUILD = 'v79.13';
   var LANDSCAPE_RIGHT_CUR = 90;
   var LANDSCAPE_LEFT_CUR = 270;
 
@@ -180,6 +180,16 @@
     return 0;
   }
 
+  function readTiltFromPortraitDeg() {
+    var raw = normalizeAngle360(getScreenAngleDeg());
+    var to90 = Math.abs(raw - 90);
+    if (to90 > 180) to90 = 360 - to90;
+    var to270 = Math.abs(raw - 270);
+    if (to270 > 180) to270 = 360 - to270;
+    var flat = raw > 180 ? 360 - raw : raw;
+    return Math.min(to90, to270, flat);
+  }
+
   function readPortraitRollDeg(rawEvent) {
     if (!rawEvent || rawEvent.gamma == null || isNaN(rawEvent.gamma)) return 0;
     var beta = rawEvent.beta != null && !isNaN(rawEvent.beta) ? rawEvent.beta : 90;
@@ -191,6 +201,14 @@
     if (!saved) return '';
     return '保存 Y' + Math.round(radToDeg(saved.yaw)) +
       ' P' + Math.round(radToDeg(saved.pitch));
+  }
+
+  function applySavedViewToScreen(getView, saved) {
+    if (!saved) return;
+    var view = getView();
+    if (!view) return;
+    view.setYaw(saved.yaw);
+    view.setPitch(clamp(saved.pitch, -Math.PI / 2, Math.PI / 2));
   }
 
   function filterLandscapePitchSpike(pitchOff, state) {
@@ -419,7 +437,7 @@
     this.autoLandscape = false;
     this.userDismissed = false;
     this.savedPortraitView = null;
-    this.rollSaveCaptured = false;
+    this.rollSaveFrozen = false;
   }
 
   GyroControl.BUILD = BUILD;
@@ -441,35 +459,75 @@
   };
 
   GyroControl.prototype._capturePortraitView = function() {
+    var view = this.getView();
+    if (!view) return;
     this.savedPortraitView = {
-      yaw: this.displayYaw,
-      pitch: this.displayPitch
+      yaw: view.yaw(),
+      pitch: view.pitch()
     };
   };
 
-  GyroControl.prototype._tryRollSave = function(rawEvent) {
-    if (this.rollSaveCaptured || !rawEvent) return;
-    if (readPortraitRollDeg(rawEvent) < ROLL_SAVE_DEG) return;
-    this.rollSaveCaptured = true;
-    this._capturePortraitView();
-    this.hintText = formatSavedViewHint(this.savedPortraitView);
+  GyroControl.prototype._updatePortraitViewSave = function() {
+    if (!this.orientState || this.orientState.lockedCur !== 0) return;
+    var tilt = readTiltFromPortraitDeg();
+    if (this.latestEvent) {
+      var roll = readPortraitRollDeg(this.latestEvent);
+      if (roll > tilt) tilt = roll;
+    }
+    if (tilt < ROLL_SAVE_DEG) {
+      this._capturePortraitView();
+      this.rollSaveFrozen = false;
+    } else {
+      this.rollSaveFrozen = true;
+    }
   };
 
   GyroControl.prototype._restoreSavedPortraitView = function() {
-    if (!this.savedPortraitView) return;
-    var view = this.getView();
-    if (!view) return;
-    view.setYaw(this.savedPortraitView.yaw);
-    view.setPitch(clamp(this.savedPortraitView.pitch, -Math.PI / 2, Math.PI / 2));
+    applySavedViewToScreen(this.getView.bind(this), this.savedPortraitView);
+  };
+
+  GyroControl.prototype._scheduleSavedViewRestore = function(saved) {
+    if (!saved) return;
+    var getView = this.getView;
+    var applyOnce = function() {
+      applySavedViewToScreen(getView, saved);
+    };
+    applyOnce();
+    requestAnimationFrame(applyOnce);
+    requestAnimationFrame(function() {
+      requestAnimationFrame(applyOnce);
+    });
   };
 
   GyroControl.prototype._offPortraitToLandscape = function() {
     if (!this.savedPortraitView) {
       this._capturePortraitView();
     }
-    this._restoreSavedPortraitView();
+    var saved = this.savedPortraitView;
     this.hintText = '';
     this.stop(false);
+    this._scheduleSavedViewRestore(saved);
+    if (this.hooks.onPortraitRestore && saved) {
+      this.hooks.onPortraitRestore(saved);
+    }
+  };
+
+  GyroControl.prototype._checkOrientationTransition = function(snapped) {
+    if (!this.enabled || !this.orientState) return false;
+    if (this.orientState.settleLeft !== 0) return false;
+    if (this.orientState.lockedCur == null) return false;
+    if (snapped === this.orientState.lockedCur) return false;
+
+    var wasPortrait = !isLandscapeScreen(this.orientState.lockedCur);
+    var nowLandscape = isLandscapeScreen(snapped);
+    if (wasPortrait && nowLandscape) {
+      this.orientState.snappedCur = snapped;
+      if (this.visual) this.visual.apply(snapped);
+      this._offPortraitToLandscape();
+      return true;
+    }
+    this._rejectOrientation('向きが変わったのでGYROを付け直してください');
+    return true;
   };
 
   GyroControl.prototype._rejectOrientation = function(msg) {
@@ -546,6 +604,7 @@
         self._rejectOrientation('この向きでは使えません');
         return;
       }
+      if (self._checkOrientationTransition(snapped)) return;
       if (self.visual) self.visual.apply(snapped);
     };
     global.addEventListener('resize', layoutFn);
@@ -597,7 +656,7 @@
     }
     this.hintText = '';
     this.userDismissed = false;
-    this.rollSaveCaptured = false;
+    this.rollSaveFrozen = false;
     var wasOn = this.enabled;
     this._cleanupListeners();
     this.enabled = true;
@@ -644,26 +703,30 @@
         return;
       }
 
+      if (self.orientState.settleLeft > 0) {
+        if (!isLandscapeScreen(snapped)) {
+          self._capturePortraitView();
+        } else {
+          if (self._checkOrientationTransition(snapped)) return;
+        }
+      }
+
       if (self.visual) self.visual.apply(snapped);
       self.orientState.snappedCur = snapped;
 
       if (self.orientState.settleLeft === 0 &&
           self.orientState.lockedCur != null &&
           snapped !== self.orientState.lockedCur) {
-        var wasPortrait = !isLandscapeScreen(self.orientState.lockedCur);
-        var nowLandscape = isLandscapeScreen(snapped);
-        if (wasPortrait && nowLandscape) {
-          self._offPortraitToLandscape();
-        } else {
-          self._rejectOrientation('向きが変わったのでGYROを付け直してください');
-        }
-        return;
+        if (self._checkOrientationTransition(snapped)) return;
       }
 
       if (self.orientState.settleLeft === 0 &&
-          self.orientState.lockedCur === 0 &&
-          self.latestEvent) {
-        self._tryRollSave(self.latestEvent);
+          self.orientState.lockedCur === 0) {
+        self._updatePortraitViewSave();
+      } else if (self.orientState.settleLeft === 0 &&
+          self.orientState.lockedCur == null &&
+          !isLandscapeScreen(snapped)) {
+        self._capturePortraitView();
       }
 
       var source = self.orientState.headingSource;
