@@ -87,9 +87,24 @@ body.gyro-active #pano { touch-action: none; }
     gyroBtn.style.display = 'none';
   }
 
+  function sceneTilesBase(sd) {
+    return (sd && sd.tilesBase) ? sd.tilesBase : (window.TILES_BASE || 'tiles');
+  }
+  function sceneMaxTileSize(sd) {
+    var base = sceneTilesBase(sd);
+    if (base === 'tiles2048' || (sd && sd.maxTileSize === 2048)) return 2048;
+    return 1024;
+  }
+  function sceneViewLimiter(sd) {
+    var face = sd.faceSize;
+    if (sceneMaxTileSize(sd) >= 2048) face = Math.min(face, 2048);
+    return Marzipano.RectilinearView.limit.traditional(face, 75 * Math.PI / 180, 120 * Math.PI / 180);
+  }
+
   function normalizeLevels(scenes) {
     scenes.forEach(function(scene) {
-      scene.levels = scene.levels.filter(function(l) { return l.size <= 1024; });
+      var maxTile = sceneMaxTileSize(scene);
+      scene.levels = scene.levels.filter(function(l) { return l.size <= maxTile; });
       scene.levels.forEach(function(l) {
         if (!l.fallbackOnly) l.tileSize = l.size;
       });
@@ -110,12 +125,10 @@ body.gyro-active #pano { touch-action: none; }
     var panoEl = document.getElementById('pano');
     viewer = new Marzipano.Viewer(panoEl);
     var source = Marzipano.ImageUrlSource.fromString(
-      window.TILES_BASE + '/' + sd.id + '/{z}/{f}/{y}/{x}.jpg'
+      sceneTilesBase(sd) + '/' + sd.id + '/{z}/{f}/{y}/{x}.jpg'
     );
     var geometry = new Marzipano.CubeGeometry(sd.levels);
-    var limiter = Marzipano.RectilinearView.limit.traditional(
-      sd.faceSize, 75 * Math.PI / 180, 120 * Math.PI / 180
-    );
+    var limiter = sceneViewLimiter(sd);
     var params = Object.assign({}, sd.initialViewParameters || {});
     if (initialYaw != null && initialYaw !== '') params.yaw = degToRad(parseFloat(initialYaw));
     if (initialPitch != null && initialPitch !== '') params.pitch = degToRad(parseFloat(initialPitch));

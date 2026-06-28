@@ -5,6 +5,7 @@ var APP_DATA = {
     {
       "id": "0-aa001",
       "name": "aa001",
+      "tilesBase": "tiles2048",
       "levels": [
         {
           "tileSize": 256,
@@ -18,6 +19,10 @@ var APP_DATA = {
         {
           "tileSize": 1024,
           "size": 1024
+        },
+        {
+          "tileSize": 2048,
+          "size": 2048
         }
       ],
       "faceSize": 2976,

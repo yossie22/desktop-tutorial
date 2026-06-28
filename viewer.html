@@ -1476,25 +1476,37 @@ data.scenes.forEach(function(sd) {
   sd.course = sceneCourseKey(sd);
 });
 
-// ★ タイルレベルを自動補正（Marzipano出力の data.js をそのまま使えるようにする）
-// 1024tiles では size > 1024 のレベルは存在しないため除去し、
-// tileSize も size に合わせて補正する（例: tileSize:512,size:1024 → tileSize:1024,size:1024）
-// ※ faceSize はソース画像の実際の面サイズなので変更しない
+// ★ タイルレベルを自動補正（シーンごとの tilesBase に合わせて上限を決める）
+function sceneTilesBase(sd) {
+  return (sd && sd.tilesBase) ? sd.tilesBase : (window.TILES_BASE || 'tiles');
+}
+function sceneMaxTileSize(sd) {
+  var base = sceneTilesBase(sd);
+  if (base === 'tiles2048' || (sd && sd.maxTileSize === 2048)) return 2048;
+  return 1024;
+}
+function sceneViewLimiter(sd) {
+  var face = sd.faceSize;
+  var maxTile = sceneMaxTileSize(sd);
+  if (maxTile >= 2048) face = Math.min(face, 2048);
+  return Marzipano.RectilinearView.limit.traditional(face, 75 * Math.PI / 180, 120 * Math.PI / 180);
+}
 data.scenes.forEach(function(scene) {
-  scene.levels = scene.levels.filter(function(l) { return l.size <= 1024; });
+  var maxTile = sceneMaxTileSize(scene);
+  scene.levels = scene.levels.filter(function(l) { return l.size <= maxTile; });
   scene.levels.forEach(function(l) {
     if (!l.fallbackOnly) l.tileSize = l.size;
   });
 });
 
 // ビルド識別（どのファイルが実行されているか確認用）
-var BUILD_STAMP = '2026-06-26-macroZoomCtrl';
+var BUILD_STAMP = '2026-06-28-tiles2048test';
 var guideVideoPreloadBySrc = {};
 var guideVideoSessionDone = {};
 console.log('🧩 viewer build:', BUILD_STAMP);
 
 function panoTileSourceForScene(sd, appData) {
-  var tilesBase = window.TILES_BASE || 'tiles';
+  var tilesBase = sceneTilesBase(sd);
   if (window.PanoBlack90 && typeof PanoBlack90.createTileSource === 'function') {
     var blackFaces = PanoBlack90.getBlackFaces(sd, appData || window.APP_DATA);
     if (blackFaces.length) {
@@ -1705,7 +1717,7 @@ function hiResPeekSetupVrBackdropPane(cfg) {
   var tilesBase = window.TILES_BASE || 'tiles';
   var source = panoTileSourceForScene(sd, window.APP_DATA);
   var geometry = new Marzipano.CubeGeometry(sd.levels);
-  var limiter = Marzipano.RectilinearView.limit.traditional(sd.faceSize, 75 * Math.PI / 180, 120 * Math.PI / 180);
+  var limiter = sceneViewLimiter(sd);
   var yawC = degToRad(Number(cfg.yawCenter) || 0);
   var pitchC = degToRad(Number(cfg.pitchCenter) || 0);
   var scale = cfg.backdropFovScale != null ? Number(cfg.backdropFovScale) : 1.85;
@@ -3262,7 +3274,7 @@ if (typeof GyroControl !== 'undefined' && GyroControl.isSupportedDevice() && gyr
 data.scenes.forEach(function(sd) {
   var source = panoTileSourceForScene(sd, data);
   var geometry = new Marzipano.CubeGeometry(sd.levels);
-  var limiter = Marzipano.RectilinearView.limit.traditional(sd.faceSize, 75*Math.PI/180, 120*Math.PI/180);
+  var limiter = sceneViewLimiter(sd);
   var view = new Marzipano.RectilinearView(sd.initialViewParameters, limiter);
   var scene = viewer.createScene({ source: source, geometry: geometry, view: view });
   var dir = sd.direction;
