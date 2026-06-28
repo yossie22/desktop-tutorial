@@ -1,6 +1,6 @@
 /**
- * パノラマ用ジャイロ制御 v79.6
- * ボタン左 … gamma符号修正（上方向復活）/ 急跳び防止のみ
+ * パノラマ用ジャイロ制御 v79.7
+ * ボタン左 … 下=gamma / 上=beta補助（左右で式を分ける）
  */
 (function(global) {
   'use strict';
@@ -16,7 +16,8 @@
   var LOCK_JUMP_REJECT_DEG = 8;
   var PITCH_SPIKE_LANDSCAPE = 38;
   var LANDSCAPE_PITCH_STEP_DEG = 5.5;
-  var BUILD = 'v79.6';
+  var LANDSCAPE_LEFT_UP_BETA_DEG = 1.5;
+  var BUILD = 'v79.7';
   var LANDSCAPE_RIGHT_CUR = 90;
   var LANDSCAPE_LEFT_CUR = 270;
 
@@ -210,8 +211,14 @@
     return degToRad(d);
   }
 
-  function computeLandscapePitchDeg(pitchG, pitchB) {
-    return pitchG < 0 ? pitchG : pitchG + pitchB;
+  function computeLandscapePitchDeg(screenAngle, pitchG, pitchB) {
+    if (screenAngle === LANDSCAPE_RIGHT_CUR) {
+      return pitchG < 0 ? pitchG : pitchG + pitchB;
+    }
+    if (pitchG < 0 && pitchB <= LANDSCAPE_LEFT_UP_BETA_DEG) {
+      return pitchG;
+    }
+    return pitchG + pitchB;
   }
 
   function processLandscapeLeftPitch(pitchOffDeg, state) {
@@ -266,14 +273,14 @@
       var g = readLandscapeGamma(rawEvent, normalized);
       state.fLandscapeP = lp(state.fLandscapeP, g, SENSOR_LP);
       var deltaG = state.fLandscapeP - state.landscapeP;
-      var pitchG = deltaG;
+      var pitchG = screenAngle === LANDSCAPE_RIGHT_CUR ? deltaG : -deltaG;
 
       var b = readLandscapeBetaCentered(rawEvent);
       state.fLandscapeB = lp(state.fLandscapeB, b, SENSOR_LP);
       var deltaB = state.fLandscapeB - state.landscapeB;
       var pitchB = screenAngle === LANDSCAPE_RIGHT_CUR ? -deltaB : deltaB;
 
-      var pitchOffDeg = computeLandscapePitchDeg(pitchG, pitchB);
+      var pitchOffDeg = computeLandscapePitchDeg(screenAngle, pitchG, pitchB);
       if (screenAngle === LANDSCAPE_LEFT_CUR) {
         pitchOff = processLandscapeLeftPitch(pitchOffDeg, state);
       } else {
