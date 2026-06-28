@@ -1,6 +1,6 @@
 /**
- * パノラマ用ジャイロ制御 v78.6
- * 横上下: 全端末gamma・符号をv78.4から反転
+ * パノラマ用ジャイロ制御 v78.7
+ * v78.6向きOK / 横の上方向だけ可動域を広げる（跳び無視は維持）
  */
 (function(global) {
   'use strict';
@@ -14,7 +14,8 @@
   var SENSOR_LP = 0.22;
   var STARTUP_SETTLE_FRAMES = 20;
   var LOCK_JUMP_REJECT_DEG = 8;
-  var BUILD = 'v78.6';
+  var LANDSCAPE_UP_GAIN = 1.48;
+  var BUILD = 'v78.7';
   var LANDSCAPE_RIGHT_CUR = 90;
   var LANDSCAPE_LEFT_CUR = 270;
 
@@ -202,6 +203,10 @@
         pitchOff = degToRad(-delta);
       }
       var pitchOffDeg = radToDeg(pitchOff);
+      if (pitchOffDeg > 0) {
+        pitchOffDeg *= LANDSCAPE_UP_GAIN;
+        pitchOff = degToRad(pitchOffDeg);
+      }
       if (state.lastPitchOffDeg != null &&
           Math.abs(pitchOffDeg - state.lastPitchOffDeg) > PITCH_SPIKE_DEG) {
         pitchOff = degToRad(state.lastPitchOffDeg);
