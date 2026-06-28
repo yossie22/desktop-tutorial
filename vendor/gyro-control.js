@@ -1,6 +1,6 @@
 /**
- * パノラマ用ジャイロ制御 v79.3
- * ボタン左(270°)の上方向 … beta符号を左専用に戻す
+ * パノラマ用ジャイロ制御 v79.4
+ * ボタン左(270°) … 水平付近のgamma誤判定で真下に跳ぶのを防止
  */
 (function(global) {
   'use strict';
@@ -17,7 +17,8 @@
   var PITCH_SPIKE_LANDSCAPE = 38;
   var LANDSCAPE_PITCH_STEP_DEG = 5.5;
   var LANDSCAPE_LEFT_HORIZ_DEG = 5;
-  var BUILD = 'v79.3';
+  var LANDSCAPE_LEFT_NEAR_DEG = 6;
+  var BUILD = 'v79.4';
   var LANDSCAPE_RIGHT_CUR = 90;
   var LANDSCAPE_LEFT_CUR = 270;
 
@@ -211,21 +212,38 @@
     return degToRad(d);
   }
 
-  function computeLandscapePitchDeg(screenAngle, pitchG, pitchB) {
+  function computeLandscapePitchDeg(screenAngle, pitchG, pitchB, lastOutDeg) {
     if (screenAngle === LANDSCAPE_RIGHT_CUR) {
       return pitchG < 0 ? pitchG : pitchG + pitchB;
     }
-    if (pitchG < 0) {
-      return pitchG;
-    }
-    if (Math.abs(pitchG) < LANDSCAPE_LEFT_HORIZ_DEG &&
-        Math.abs(pitchB) < LANDSCAPE_LEFT_HORIZ_DEG) {
+    var h = LANDSCAPE_LEFT_HORIZ_DEG;
+    var near = lastOutDeg == null || Math.abs(lastOutDeg) < LANDSCAPE_LEFT_NEAR_DEG;
+
+    if (Math.abs(pitchG) < h && Math.abs(pitchB) < h) {
       return 0;
     }
-    return pitchG + pitchB;
+
+    if (pitchG < 0) {
+      if (near && pitchG > -(h + 3)) {
+        return 0;
+      }
+      return pitchG;
+    }
+
+    var up = pitchG + pitchB;
+    if (near && up < 0) {
+      return 0;
+    }
+    return up;
   }
 
   function processLandscapeLeftPitch(pitchOffDeg, state) {
+    var lastOut = state.lastOutPitchOffDeg;
+    if (lastOut != null && Math.abs(lastOut) < LANDSCAPE_LEFT_NEAR_DEG && pitchOffDeg < -5) {
+      state.lastPitchOffDeg = 0;
+      state.lastOutPitchOffDeg = 0;
+      return 0;
+    }
     if (Math.abs(pitchOffDeg) < 0.5) {
       state.lastPitchOffDeg = 0;
       state.lastOutPitchOffDeg = 0;
@@ -285,7 +303,12 @@
       var deltaB = state.fLandscapeB - state.landscapeB;
       var pitchB = screenAngle === LANDSCAPE_RIGHT_CUR ? -deltaB : deltaB;
 
-      var pitchOffDeg = computeLandscapePitchDeg(screenAngle, pitchG, pitchB);
+      var pitchOffDeg = computeLandscapePitchDeg(
+        screenAngle,
+        pitchG,
+        pitchB,
+        state.lastOutPitchOffDeg
+      );
       if (screenAngle === LANDSCAPE_LEFT_CUR) {
         pitchOff = processLandscapeLeftPitch(pitchOffDeg, state);
       } else {
