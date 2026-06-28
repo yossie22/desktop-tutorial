@@ -1,6 +1,6 @@
 /**
- * パノラマ用ジャイロ制御 v79.9
- * iPad/iPhone で符号を分ける / 水平付近の誤跳び防止
+ * パノラマ用ジャイロ制御 v79.10
+ * 端末別の反転をやめる / 跳び防止は維持
  */
 (function(global) {
   'use strict';
@@ -18,7 +18,7 @@
   var LANDSCAPE_PITCH_STEP_DEG = 5.5;
   var LANDSCAPE_LEFT_UP_BETA_DEG = 1.5;
   var LANDSCAPE_CROSS_REJECT_DEG = 12;
-  var BUILD = 'v79.9';
+  var BUILD = 'v79.10';
   var LANDSCAPE_RIGHT_CUR = 90;
   var LANDSCAPE_LEFT_CUR = 270;
 
@@ -178,12 +178,6 @@
     return 0;
   }
 
-  function isIPadDevice() {
-    var ua = navigator.userAgent || '';
-    if (/iPad/i.test(ua)) return true;
-    return navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1;
-  }
-
   function filterLandscapePitchSpike(pitchOff, state) {
     var pitchOffDeg = radToDeg(pitchOff);
     if (state.lastPitchOffDeg != null) {
@@ -304,11 +298,6 @@
       var pitchB = screenAngle === LANDSCAPE_RIGHT_CUR ? -deltaB : deltaB;
 
       var pitchOffDeg = computeLandscapePitchDeg(screenAngle, pitchG, pitchB);
-      if (screenAngle === LANDSCAPE_RIGHT_CUR && isIPadDevice()) {
-        pitchOffDeg = -pitchOffDeg;
-      } else if (screenAngle === LANDSCAPE_LEFT_CUR && !isIPadDevice()) {
-        pitchOffDeg = -pitchOffDeg;
-      }
       if (screenAngle === LANDSCAPE_LEFT_CUR) {
         pitchOff = processLandscapeLeftPitch(pitchOffDeg, state);
       } else {
