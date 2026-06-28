@@ -1,6 +1,6 @@
 /**
- * パノラマ用ジャイロ制御 v78.7
- * v78.6向きOK / 横の上方向だけ可動域を広げる（跳び無視は維持）
+ * パノラマ用ジャイロ制御 v78.8
+ * 横: 1.48倍をやめ跳び無視緩和＋上方向ソフト拡張（固まり防止）
  */
 (function(global) {
   'use strict';
@@ -14,8 +14,10 @@
   var SENSOR_LP = 0.22;
   var STARTUP_SETTLE_FRAMES = 20;
   var LOCK_JUMP_REJECT_DEG = 8;
-  var LANDSCAPE_UP_GAIN = 1.48;
-  var BUILD = 'v78.7';
+  var PITCH_SPIKE_LANDSCAPE = 38;
+  var LANDSCAPE_UP_KNEE_DEG = 28;
+  var LANDSCAPE_UP_STRETCH = 1.38;
+  var BUILD = 'v78.8';
   var LANDSCAPE_RIGHT_CUR = 90;
   var LANDSCAPE_LEFT_CUR = 270;
 
@@ -165,6 +167,32 @@
     return 0;
   }
 
+  function filterLandscapePitchSpike(pitchOff, state) {
+    var pitchOffDeg = radToDeg(pitchOff);
+    if (state.lastPitchOffDeg != null) {
+      var crossed = (pitchOffDeg > 0 && state.lastPitchOffDeg <= 0) ||
+        (pitchOffDeg < 0 && state.lastPitchOffDeg >= 0);
+      if (crossed) {
+        state.lastPitchOffDeg = pitchOffDeg;
+      } else if (Math.abs(pitchOffDeg - state.lastPitchOffDeg) > PITCH_SPIKE_LANDSCAPE) {
+        pitchOffDeg = state.lastPitchOffDeg;
+        pitchOff = degToRad(pitchOffDeg);
+      } else {
+        state.lastPitchOffDeg = pitchOffDeg;
+      }
+    } else {
+      state.lastPitchOffDeg = pitchOffDeg;
+    }
+    return pitchOff;
+  }
+
+  function landscapePitchForView(pitchOff) {
+    if (pitchOff <= 0) return pitchOff;
+    var d = radToDeg(pitchOff);
+    if (d <= LANDSCAPE_UP_KNEE_DEG) return pitchOff;
+    return degToRad(LANDSCAPE_UP_KNEE_DEG + (d - LANDSCAPE_UP_KNEE_DEG) * LANDSCAPE_UP_STRETCH);
+  }
+
   function trackOrientation(normalized, state, rawEvent) {
     if (!normalized || normalized.beta == null) return null;
 
@@ -202,17 +230,7 @@
       } else {
         pitchOff = degToRad(-delta);
       }
-      var pitchOffDeg = radToDeg(pitchOff);
-      if (pitchOffDeg > 0) {
-        pitchOffDeg *= LANDSCAPE_UP_GAIN;
-        pitchOff = degToRad(pitchOffDeg);
-      }
-      if (state.lastPitchOffDeg != null &&
-          Math.abs(pitchOffDeg - state.lastPitchOffDeg) > PITCH_SPIKE_DEG) {
-        pitchOff = degToRad(state.lastPitchOffDeg);
-      } else {
-        state.lastPitchOffDeg = pitchOffDeg;
-      }
+      pitchOff = filterLandscapePitchSpike(pitchOff, state);
     } else {
       state.fBeta = lp(state.fBeta, normalized.beta, SENSOR_LP);
       pitchOff = degToRad(state.initBeta - state.fBeta);
@@ -536,8 +554,12 @@
         }
       }
 
+      var viewPitchOff = o.pitchOff;
+      if (isLandscapeScreen(snapped)) {
+        viewPitchOff = landscapePitchForView(viewPitchOff);
+      }
       var targetYaw = self.base.viewYaw + o.yawOff;
-      var targetPitch = clamp(self.base.viewPitch + o.pitchOff, -Math.PI / 2, Math.PI / 2);
+      var targetPitch = clamp(self.base.viewPitch + viewPitchOff, -Math.PI / 2, Math.PI / 2);
       self.displayYaw = normalizeAngle(
         self.displayYaw + clamp(
           YAW_SMOOTH * angleDelta(self.displayYaw, targetYaw),
