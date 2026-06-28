@@ -1,6 +1,6 @@
 /**
- * パノラマ用ジャイロ制御 v79.2
- * v79.1 / ボタン左(270°)の水平引っかかり・逆転を強化修正
+ * パノラマ用ジャイロ制御 v79.3
+ * ボタン左(270°)の上方向 … beta符号を左専用に戻す
  */
 (function(global) {
   'use strict';
@@ -17,7 +17,7 @@
   var PITCH_SPIKE_LANDSCAPE = 38;
   var LANDSCAPE_PITCH_STEP_DEG = 5.5;
   var LANDSCAPE_LEFT_HORIZ_DEG = 5;
-  var BUILD = 'v79.2';
+  var BUILD = 'v79.3';
   var LANDSCAPE_RIGHT_CUR = 90;
   var LANDSCAPE_LEFT_CUR = 270;
 
@@ -218,9 +218,6 @@
     if (pitchG < 0) {
       return pitchG;
     }
-    if (pitchB < 0 && pitchG < LANDSCAPE_LEFT_HORIZ_DEG + 2) {
-      return pitchG;
-    }
     if (Math.abs(pitchG) < LANDSCAPE_LEFT_HORIZ_DEG &&
         Math.abs(pitchB) < LANDSCAPE_LEFT_HORIZ_DEG) {
       return 0;
@@ -286,7 +283,7 @@
       var b = readLandscapeBetaCentered(rawEvent);
       state.fLandscapeB = lp(state.fLandscapeB, b, SENSOR_LP);
       var deltaB = state.fLandscapeB - state.landscapeB;
-      var pitchB = -deltaB;
+      var pitchB = screenAngle === LANDSCAPE_RIGHT_CUR ? -deltaB : deltaB;
 
       var pitchOffDeg = computeLandscapePitchDeg(screenAngle, pitchG, pitchB);
       if (screenAngle === LANDSCAPE_LEFT_CUR) {
