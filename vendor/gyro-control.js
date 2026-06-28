@@ -1,6 +1,6 @@
 /**
- * パノラマ用ジャイロ制御 v79.7
- * ボタン左 … 下=gamma / 上=beta補助（左右で式を分ける）
+ * パノラマ用ジャイロ制御 v79.8
+ * ボタン右 … 上下の向きを反転（左 v79.7 は維持）
  */
 (function(global) {
   'use strict';
@@ -17,7 +17,7 @@
   var PITCH_SPIKE_LANDSCAPE = 38;
   var LANDSCAPE_PITCH_STEP_DEG = 5.5;
   var LANDSCAPE_LEFT_UP_BETA_DEG = 1.5;
-  var BUILD = 'v79.7';
+  var BUILD = 'v79.8';
   var LANDSCAPE_RIGHT_CUR = 90;
   var LANDSCAPE_LEFT_CUR = 270;
 
@@ -281,6 +281,9 @@
       var pitchB = screenAngle === LANDSCAPE_RIGHT_CUR ? -deltaB : deltaB;
 
       var pitchOffDeg = computeLandscapePitchDeg(screenAngle, pitchG, pitchB);
+      if (screenAngle === LANDSCAPE_RIGHT_CUR) {
+        pitchOffDeg = -pitchOffDeg;
+      }
       if (screenAngle === LANDSCAPE_LEFT_CUR) {
         pitchOff = processLandscapeLeftPitch(pitchOffDeg, state);
       } else {
