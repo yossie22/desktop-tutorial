@@ -122,6 +122,20 @@ body, html { width: 100%; height: 100%; min-height: -webkit-fill-available; over
 .map-portal-pin .pin-icon { width: 30px; height: 30px; }
 .map-portal-pin .pin-number { font-size: 12px; }
 .map-portal-pin .pin-label { font-size: 11px; padding: 2px 6px; margin-bottom: 3px; }
+.map-portal.is-fixed {
+  position: fixed;
+  left: auto;
+  top: auto;
+  right: max(6px, env(safe-area-inset-right, 0px));
+  bottom: max(10px, env(safe-area-inset-bottom, 0px));
+  transform: none;
+  transform-origin: 100% 100%;
+  z-index: 45;
+}
+.map-portal.is-fixed.is-open {
+  width: min(34vw, 260px);
+  height: min(34vw, 260px);
+}
 </style>
 </head>
 <body>
@@ -250,8 +264,12 @@ function isMapTouchUI() {
   return window.matchMedia && window.matchMedia('(hover: none)').matches;
 }
 
+function useMapFixedPortalLayout() {
+  return isAppleMobileOrTablet();
+}
+
 function useMapPhonePortalLayout() {
-  return window.innerWidth < 768;
+  return !useMapFixedPortalLayout() && window.innerWidth < 768;
 }
 
 function getPortalPinPos() {
@@ -273,6 +291,22 @@ function getPortalAnchorPos() {
 function layoutMapPortal() {
   var el = document.getElementById('mapPortal');
   if (!el) return;
+  var container = document.getElementById('mapStage');
+  if (useMapFixedPortalLayout()) {
+    if (el.parentNode !== document.body) document.body.appendChild(el);
+    el.classList.add('is-fixed');
+    el.style.left = '';
+    el.style.top = '';
+    el.style.right = '';
+    el.style.bottom = '';
+    el.style.transform = '';
+    el.style.transformOrigin = '';
+    return;
+  }
+  if (container && el.parentNode !== container) container.appendChild(el);
+  el.classList.remove('is-fixed');
+  el.style.right = '';
+  el.style.bottom = '';
   var phone = useMapPhonePortalLayout();
   var pos = getPortalAnchorPos();
   el.style.left = pos.x + '%';
