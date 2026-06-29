@@ -20,19 +20,21 @@ body, html { width: 100%; height: 100%; overflow: hidden; background: #222; }
 .pin-label { background: rgba(255,255,255,0.95); color: #333; font-size: 13px; font-weight: bold; padding: 3px 7px; border-radius: 4px; white-space: nowrap; line-height: 1.2; text-align: center; box-shadow: 0 2px 6px rgba(0,0,0,0.4); margin-bottom: 4px; pointer-events: none; font-family: sans-serif; }
 .help-button { position: fixed; right: 14px; top: 14px; z-index: 50; background: rgba(255,226,106,0.94); color: #111; font-weight: bold; font-size: 15px; text-decoration: none; padding: 9px 14px; border-radius: 999px; box-shadow: 0 3px 12px rgba(0,0,0,0.45); font-family: sans-serif; }
 .map-portal {
-  position: fixed;
-  right: 16px;
-  bottom: 16px;
-  z-index: 55;
+  position: absolute;
+  right: 3%;
+  bottom: 4%;
+  z-index: 20;
   width: 54px;
   height: 54px;
+  transform-origin: 100% 100%;
   transition: width 0.32s ease, height 0.32s ease;
   cursor: pointer;
+  pointer-events: auto;
 }
 .map-portal:hover,
 .map-portal.is-open {
-  width: min(44vw, 290px);
-  height: min(44vw, 290px);
+  width: min(34%, 260px);
+  height: min(34%, 260px);
 }
 .map-portal-label {
   position: absolute;
@@ -108,8 +110,8 @@ body, html { width: 100%; height: 100%; overflow: hidden; background: #222; }
 @media (hover: none) {
   .map-portal { width: 54px; height: 54px; }
   .map-portal.is-open {
-    width: min(44vw, 290px);
-    height: min(44vw, 290px);
+    width: min(34%, 260px);
+    height: min(34%, 260px);
   }
 }
 </style>
@@ -121,14 +123,14 @@ body, html { width: 100%; height: 100%; overflow: hidden; background: #222; }
   <img src="map.jpg" alt="地図" class="map-image">
   <div class="overlay-text main-title" style="width:min(92%,900px);padding:8px;left:2%;top:3%;">アジサイの妖精 (テスト作品）</div>
   <div class="overlay-text desc-text" style="width:min(92%,900px);padding:8px;left:33%;top:43%;">アジサイの妖精が現れます。</div>
+  <div class="map-portal" id="mapPortal" aria-label="ポータル先">
+    <div class="map-portal-label" id="mapPortalLabel">ポータル先</div>
+    <div class="map-portal-ring">
+      <img class="map-portal-mark" id="mapPortalMark" src="portal.png" alt="">
+      <img class="map-portal-map" id="mapPortalMap" src="map_portal.jpg" alt="ポータル先の地図">
+      <div class="map-portal-pin" id="mapPortalPin"></div>
+    </div>
   </div>
-</div>
-<div class="map-portal" id="mapPortal" aria-label="ポータル先">
-  <div class="map-portal-label" id="mapPortalLabel">ポータル先</div>
-  <div class="map-portal-ring">
-    <img class="map-portal-mark" id="mapPortalMark" src="portal.png" alt="">
-    <img class="map-portal-map" id="mapPortalMap" src="map_portal.jpg" alt="ポータル先の地図">
-    <div class="map-portal-pin" id="mapPortalPin"></div>
   </div>
 </div>
 <script>
