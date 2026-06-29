@@ -151,10 +151,10 @@ var MAP_PORTAL = {
   pinY: 74,
   mapOffsetX: 0,
   mapOffsetY: 0,
-  anchorX: 88,
+  anchorX: 97,
   anchorY: 82,
-  phoneAnchorX: 88,
-  phoneAnchorY: 18
+  phoneAnchorX: 97,
+  phoneAnchorY: 82
 };
 
 function mercatorY(lat) { var r = lat * Math.PI / 180; return Math.log(Math.tan(Math.PI / 4 + r / 2)); }
@@ -251,7 +251,7 @@ function isMapTouchUI() {
 }
 
 function useMapPhonePortalLayout() {
-  return isMapTouchUI() || window.innerWidth < 768;
+  return window.innerWidth < 768;
 }
 
 function getPortalPinPos() {
@@ -265,8 +265,8 @@ function getPortalPinPos() {
 function getPortalAnchorPos() {
   var phone = useMapPhonePortalLayout();
   return {
-    x: phone ? (MAP_PORTAL.phoneAnchorX != null ? MAP_PORTAL.phoneAnchorX : 88) : (MAP_PORTAL.anchorX != null ? MAP_PORTAL.anchorX : 88),
-    y: phone ? (MAP_PORTAL.phoneAnchorY != null ? MAP_PORTAL.phoneAnchorY : 18) : (MAP_PORTAL.anchorY != null ? MAP_PORTAL.anchorY : 82)
+    x: phone ? (MAP_PORTAL.phoneAnchorX != null ? MAP_PORTAL.phoneAnchorX : 97) : (MAP_PORTAL.anchorX != null ? MAP_PORTAL.anchorX : 97),
+    y: phone ? (MAP_PORTAL.phoneAnchorY != null ? MAP_PORTAL.phoneAnchorY : 82) : (MAP_PORTAL.anchorY != null ? MAP_PORTAL.anchorY : 82)
   };
 }
 
