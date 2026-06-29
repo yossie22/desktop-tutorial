@@ -8,7 +8,7 @@
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body, html { width: 100%; height: 100%; overflow: hidden; background: #222; }
 .map-container { width: 100vw; height: 100vh; display: flex; justify-content: center; align-items: center; background: #222; overflow: hidden; }
-.map-stage { position: relative; display: block; max-width: 100vw; max-height: 100vh; line-height: 0; overflow: visible; }
+.map-stage { position: relative; display: inline-block; max-width: 100vw; max-height: 100vh; line-height: 0; vertical-align: middle; }
 .map-image { display: block; max-width: 100vw; max-height: 100vh; width: auto; height: auto; }
 .overlay-text { position: absolute; z-index: 5; pointer-events: none; }
 .main-title { font-size: 49px; color: #80ffff; font-weight: bold; font-family: 'Yu Mincho','YuMincho','Hiragino Mincho ProN','MS PMincho',serif; text-shadow: 0 0 10px rgba(0,0,0,0.95), 0 0 20px rgba(0,0,0,0.76), 0 0 30px rgba(0,0,0,0.57), 0 0 40px rgba(0,0,0,0.38); line-height: 1.25; margin-bottom: 10px; text-align: left; }
@@ -21,12 +21,12 @@ body, html { width: 100%; height: 100%; overflow: hidden; background: #222; }
 .help-button { position: fixed; right: 14px; top: 14px; z-index: 50; background: rgba(255,226,106,0.94); color: #111; font-weight: bold; font-size: 15px; text-decoration: none; padding: 9px 14px; border-radius: 999px; box-shadow: 0 3px 12px rgba(0,0,0,0.45); font-family: sans-serif; }
 .map-portal {
   position: absolute;
-  right: 3%;
-  bottom: 6%;
-  top: auto;
+  left: 94%;
+  top: 90%;
   z-index: 30;
   width: 54px;
   height: 54px;
+  transform: translate(-100%, -100%);
   transform-origin: 100% 100%;
   transition: width 0.32s ease, height 0.32s ease;
   cursor: pointer;
@@ -75,6 +75,8 @@ body, html { width: 100%; height: 100%; overflow: hidden; background: #222; }
 .map-portal-ring {
   width: 100%;
   height: 100%;
+  min-width: 48px;
+  min-height: 48px;
   border-radius: 50%;
   overflow: hidden;
   position: relative;
@@ -84,7 +86,10 @@ body, html { width: 100%; height: 100%; overflow: hidden; background: #222; }
 }
 .map-portal-mark {
   position: absolute;
-  inset: 0;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
@@ -94,7 +99,10 @@ body, html { width: 100%; height: 100%; overflow: hidden; background: #222; }
 }
 .map-portal-map {
   position: absolute;
-  inset: 0;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
@@ -131,32 +139,6 @@ body, html { width: 100%; height: 100%; overflow: hidden; background: #222; }
   .map-portal.is-open {
     width: min(34%, 260px);
     height: min(34%, 260px);
-  }
-}
-/* iPad・タブレット：地図の右下 */
-@media (min-width: 768px) {
-  .map-portal {
-    top: auto;
-    bottom: 6%;
-    right: 3%;
-    transform-origin: 100% 100%;
-  }
-}
-/* iPhoneのみ：ピンと重ならないよう右上 */
-@media (max-width: 767px) and (pointer: coarse) and (orientation: portrait) {
-  .map-portal {
-    top: 8%;
-    bottom: auto;
-    right: 3%;
-    transform-origin: 100% 0%;
-  }
-}
-@media (max-width: 932px) and (pointer: coarse) and (orientation: landscape) and (max-height: 500px) {
-  .map-portal {
-    top: 6%;
-    bottom: auto;
-    right: 3%;
-    transform-origin: 100% 0%;
   }
 }
 </style>
@@ -203,7 +185,11 @@ var MAP_PORTAL = {
   pinX: 51,
   pinY: 74,
   mapOffsetX: 0,
-  mapOffsetY: 0
+  mapOffsetY: 0,
+  anchorX: 94,
+  anchorY: 90,
+  phoneAnchorX: 94,
+  phoneAnchorY: 11
 };
 
 function mercatorY(lat) { var r = lat * Math.PI / 180; return Math.log(Math.tan(Math.PI / 4 + r / 2)); }
@@ -297,6 +283,30 @@ function getPortalPinPos() {
   return gpsToPercent(p.lat, p.lng, p.bounds, { left: 0, top: 0, right: 0, bottom: 0 }, { x: p.mapOffsetX || 0, y: p.mapOffsetY || 0 }, null);
 }
 
+function layoutMapPortalWidget() {
+  var portalEl = document.getElementById('mapPortal');
+  if (!portalEl || !MAP_PORTAL) return;
+  var phone = window.innerWidth < 768;
+  var ax, ay, tf, origin;
+  if (phone) {
+    ax = MAP_PORTAL.phoneAnchorX != null ? MAP_PORTAL.phoneAnchorX : 94;
+    ay = MAP_PORTAL.phoneAnchorY != null ? MAP_PORTAL.phoneAnchorY : 11;
+    tf = 'translate(-100%, 0)';
+    origin = '100% 0%';
+  } else {
+    ax = MAP_PORTAL.anchorX != null ? MAP_PORTAL.anchorX : 94;
+    ay = MAP_PORTAL.anchorY != null ? MAP_PORTAL.anchorY : 90;
+    tf = 'translate(-100%, -100%)';
+    origin = '100% 100%';
+  }
+  portalEl.style.left = ax + '%';
+  portalEl.style.top = ay + '%';
+  portalEl.style.right = 'auto';
+  portalEl.style.bottom = 'auto';
+  portalEl.style.transform = tf;
+  portalEl.style.transformOrigin = origin;
+}
+
 function initMapPortal() {
   if (!MAP_PORTAL || !MAP_PORTAL.sceneId) return;
   var portalEl = document.getElementById('mapPortal');
@@ -310,6 +320,7 @@ function initMapPortal() {
   if (captionEl) captionEl.textContent = MAP_PORTAL.shortLabel || 'ポータル';
   if (markEl && MAP_PORTAL.markImage) markEl.src = MAP_PORTAL.markImage;
   if (mapEl && MAP_PORTAL.mapImage) mapEl.src = MAP_PORTAL.mapImage;
+  layoutMapPortalWidget();
   var pos = getPortalPinPos();
   pinEl.style.left = pos.x + '%';
   pinEl.style.top = pos.y + '%';
@@ -326,7 +337,8 @@ function initMapPortal() {
       portalEl.classList.toggle('is-open');
       e.stopPropagation();
     });
-    document.addEventListener('click', function() {
+    document.addEventListener('click', function(e) {
+      if (e.target.closest && e.target.closest('.map-portal')) return;
       portalEl.classList.remove('is-open');
     });
     portalEl.addEventListener('touchstart', function(e) {
@@ -348,6 +360,15 @@ spread.forEach(function(item, i) {
   container.appendChild(el);
 });
 initMapPortal();
+var mapImgEl = document.querySelector('.map-image');
+if (mapImgEl) {
+  if (mapImgEl.complete) layoutMapPortalWidget();
+  else mapImgEl.addEventListener('load', layoutMapPortalWidget);
+}
+window.addEventListener('resize', layoutMapPortalWidget);
+window.addEventListener('orientationchange', function() {
+  setTimeout(layoutMapPortalWidget, 120);
+});
 </script>
 </body>
 </html>
