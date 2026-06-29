@@ -4,185 +4,66 @@
 <title>VRツアーマップ</title>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<script src="data.js"></script>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
-body, html { width: 100%; height: 100%; min-height: -webkit-fill-available; overflow: hidden; background: #222; }
-.map-container { width: 100vw; height: 100vh; height: 100dvh; display: flex; justify-content: center; align-items: center; background: #222; overflow: hidden; }
-.map-stage { position: relative; display: inline-block; max-width: 100vw; max-height: 100vh; max-height: 100dvh; line-height: 0; vertical-align: middle; overflow: visible; }
-.map-image { display: block; max-width: 100vw; max-height: 100vh; max-height: 100dvh; width: auto; height: auto; }
+body, html { width: 100%; height: 100%; overflow: hidden; background: #000; }
+.map-container {
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+}
+.map-stage {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  line-height: 0;
+}
+.map-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+}
+.map-overlay { position: absolute; inset: 0; z-index: 2; pointer-events: none; }
+.map-overlay > * { pointer-events: auto; }
 .overlay-text { position: absolute; z-index: 5; pointer-events: none; }
-.main-title { font-size: 49px; color: #80ffff; font-weight: bold; font-family: 'Yu Mincho','YuMincho','Hiragino Mincho ProN','MS PMincho',serif; text-shadow: 0 0 10px rgba(0,0,0,0.95), 0 0 20px rgba(0,0,0,0.76), 0 0 30px rgba(0,0,0,0.57), 0 0 40px rgba(0,0,0,0.38); line-height: 1.25; margin-bottom: 10px; text-align: left; }
-.desc-text { font-size: 28px; color: #ffff00; font-family: 'Meiryo',sans-serif; text-shadow: 0 0 10px rgba(0,0,0,0), 0 0 20px rgba(0,0,0,0), 0 0 30px rgba(0,0,0,0), 0 0 40px rgba(0,0,0,0); white-space: pre-wrap; line-height: 1.7; text-align: left; }
+.main-title { font-size: clamp(28px, 5vw, 57px); color: #80ffff; font-weight: bold; font-family: 'Yu Mincho','YuMincho','Hiragino Mincho ProN','MS PMincho',serif; text-shadow: 0 0 10px rgba(0,0,0,0.95), 0 0 20px rgba(0,0,0,0.76); line-height: 1.25; text-align: left; }
+.desc-text { font-size: clamp(16px, 2.5vw, 29px); color: #ffff00; font-family: 'Meiryo',sans-serif; white-space: pre-wrap; line-height: 1.7; text-align: left; }
 .map-pin { position: absolute; transform: translate(-50%, -100%); cursor: pointer; z-index: 10; display: flex; flex-direction: column; align-items: center; transition: transform 0.2s; }
 .map-pin:hover, .map-pin:active { transform: translate(-50%, -100%) scale(1.15); }
 .pin-icon { width: 36px; height: 36px; border: 3px solid white; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); box-shadow: 0 3px 8px rgba(0,0,0,0.5); display: flex; justify-content: center; align-items: center; }
 .pin-number { transform: rotate(45deg); font-size: 14px; font-weight: bold; color: white; line-height: 1; }
 .pin-label { background: rgba(255,255,255,0.95); color: #333; font-size: 13px; font-weight: bold; padding: 3px 7px; border-radius: 4px; white-space: nowrap; line-height: 1.2; text-align: center; box-shadow: 0 2px 6px rgba(0,0,0,0.4); margin-bottom: 4px; pointer-events: none; font-family: sans-serif; }
-.help-button { position: fixed; right: 14px; top: 14px; z-index: 50; background: rgba(255,226,106,0.94); color: #111; font-weight: bold; font-size: 15px; text-decoration: none; padding: 9px 14px; border-radius: 999px; box-shadow: 0 3px 12px rgba(0,0,0,0.45); font-family: sans-serif; }
-.map-portal {
-  position: absolute;
-  z-index: 40;
-  width: 52px;
-  height: 52px;
-  transform: translate(-100%, -100%);
-  transform-origin: 100% 100%;
-  transition: width 0.32s ease, height 0.32s ease;
-  cursor: pointer;
-  pointer-events: auto;
-}
-@media (hover: hover) {
-  .map-portal:hover {
-    width: min(34%, 260px);
-    height: min(34%, 260px);
-  }
-}
-.map-portal.is-open {
-  width: min(34%, 260px);
-  height: min(34%, 260px);
-}
-.map-portal-caption {
-  position: absolute;
-  top: -17px;
-  left: 50%;
-  transform: translateX(-50%);
-  color: #ffff00;
-  font-size: 11px;
-  font-weight: bold;
-  font-family: 'Meiryo', sans-serif;
-  text-shadow: 0 0 6px rgba(0,0,0,0.95);
-  white-space: nowrap;
-  pointer-events: none;
-  opacity: 1;
-  line-height: 1.2;
-}
-.map-portal-label {
-  position: absolute;
-  top: -30px;
-  left: 50%;
-  transform: translateX(-50%);
-  color: #ffff00;
-  font-size: 15px;
-  font-weight: bold;
-  font-family: 'Meiryo', sans-serif;
-  text-shadow: 0 0 8px rgba(0,0,0,0.95);
-  white-space: nowrap;
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity 0.2s ease;
-}
-@media (hover: hover) {
-  .map-portal:hover .map-portal-label { opacity: 1; }
-  .map-portal:hover .map-portal-caption { opacity: 0; }
-}
-.map-portal.is-open .map-portal-label { opacity: 1; }
-.map-portal.is-open .map-portal-caption { opacity: 0; }
-.map-portal-ring {
-  width: 100%;
-  height: 100%;
-  border-radius: 50%;
-  overflow: hidden;
-  position: relative;
-  border: 3px solid rgba(255, 190, 225, 0.9);
-  box-shadow: 0 0 16px rgba(255, 120, 200, 0.7), 0 0 32px rgba(255, 90, 180, 0.4);
-  background: #1a1020;
-}
-.map-portal-mark,
-.map-portal-map {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  pointer-events: none;
-  transition: opacity 0.28s ease;
-}
-.map-portal-map { opacity: 0; }
-@media (hover: none), (pointer: coarse) {
-  .map-portal .map-portal-mark { opacity: 1 !important; }
-  .map-portal.is-open .map-portal-mark { opacity: 0 !important; }
-  .map-portal.is-open .map-portal-map { opacity: 1 !important; }
-}
-@media (hover: hover) {
-  .map-portal:hover .map-portal-mark { opacity: 0; }
-  .map-portal:hover .map-portal-map { opacity: 1; }
-}
-.map-portal.is-open .map-portal-mark { opacity: 0; }
-.map-portal.is-open .map-portal-map { opacity: 1; }
-.map-portal-pin {
-  position: absolute;
-  transform: translate(-50%, -100%);
-  opacity: 0;
-  pointer-events: none;
-  z-index: 3;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  transition: opacity 0.22s ease;
-}
-@media (hover: hover) {
-  .map-portal:hover .map-portal-pin { opacity: 1; pointer-events: auto; }
-}
-.map-portal.is-open .map-portal-pin { opacity: 1; pointer-events: auto; }
-.map-portal-pin .pin-icon { width: 30px; height: 30px; }
-.map-portal-pin .pin-number { font-size: 12px; }
-.map-portal-pin .pin-label { font-size: 11px; padding: 2px 6px; margin-bottom: 3px; }
-.map-portal.is-fixed {
-  position: fixed;
-  left: auto;
-  top: auto;
-  right: max(6px, env(safe-area-inset-right, 0px));
-  bottom: max(10px, env(safe-area-inset-bottom, 0px));
-  transform: none;
-  transform-origin: 100% 100%;
-  z-index: 45;
-}
-.map-portal.is-fixed.is-open {
-  width: min(34vw, 260px);
-  height: min(34vw, 260px);
-}
+.help-button { position: absolute; right: 14px; top: 14px; z-index: 50; background: rgba(255,226,106,0.94); color: #111; font-weight: bold; font-size: 15px; text-decoration: none; padding: 9px 14px; border-radius: 999px; box-shadow: 0 3px 12px rgba(0,0,0,0.45); font-family: sans-serif; }
 </style>
 </head>
 <body>
-<a class="help-button" href="help/使い方.html">？使い方</a>
 <div class="map-container">
   <div class="map-stage" id="mapStage">
-  <img src="map.jpg" alt="地図" class="map-image">
-  <div class="overlay-text main-title" style="width:min(92%,900px);padding:8px;left:2%;top:3%;">アジサイの妖精 (テスト作品）</div>
-  <div class="overlay-text desc-text" style="width:min(92%,900px);padding:8px;left:33%;top:43%;">アジサイの妖精が現れます。</div>
+    <img src="map.jpg" alt="地図" class="map-image" id="mapImage">
+    <div class="map-overlay" id="mapOverlay">
+      <a class="help-button" href="help/使い方.html">？使い方</a>
+      <div class="overlay-text main-title" id="tourTitle" style="width:min(92%,900px);padding:8px;left:2%;top:3%;"></div>
+      <div class="overlay-text desc-text" id="tourDesc" style="width:min(92%,900px);padding:8px;left:24%;top:79%;"></div>
+    </div>
   </div>
 </div>
 <script>
+var TOUR_TITLE = (typeof APP_DATA !== 'undefined' && APP_DATA.tourTitle) ? APP_DATA.tourTitle : 'VRツアー';
+var TOUR_DESC = (typeof APP_DATA !== 'undefined' && APP_DATA.tourDescription) ? APP_DATA.tourDescription : '';
+document.getElementById('tourTitle').textContent = TOUR_TITLE;
+document.getElementById('tourDesc').textContent = TOUR_DESC;
+
+// GPS範囲：map.jpg の左上＝topLeft、右下＝bottomRight に対応させる
+// map.jpg (1217×703) の比率 ≈ 1.73 と、この範囲の比率は一致しています
 var MAP_BOUNDS = { topLeft: { lat: 33.52093, lng: 131.217184 }, bottomRight: { lat: 33.520168, lng: 131.218755 } };
 var MAP_INSETS = { left: 0, top: 0, right: 0, bottom: 0 };
 var MAP_PIN_OFFSET = { x: 0, y: 0 };
 var MAP_TWO_POINT = null;
-
-var MAP_PORTAL = {
-  label: 'ポータル先',
-  shortLabel: 'ポータル',
-  markImage: 'portal.png',
-  mapImage: 'map_portal.jpg',
-  sceneId: '4-bb001',
-  pinName: '霊山',
-  pinColor: '#00cc44',
-  pinX: 51,
-  pinY: 74,
-  mapOffsetX: 0,
-  mapOffsetY: 0,
-  anchorX: 97,
-  anchorY: 82,
-  phoneAnchorX: 97,
-  phoneAnchorY: 82
-};
-
 function mercatorY(lat) { var r = lat * Math.PI / 180; return Math.log(Math.tan(Math.PI / 4 + r / 2)); }
-function gpsToPercent(lat, lng, bounds, insets, offset, twoPoint) {
-  bounds = bounds || MAP_BOUNDS;
-  insets = insets || MAP_INSETS;
-  offset = offset || MAP_PIN_OFFSET;
-  twoPoint = twoPoint == null ? MAP_TWO_POINT : twoPoint;
-  var x, y, tp = twoPoint;
+function gpsToPercent(lat, lng) {
+  var x, y, bounds = MAP_BOUNDS, tp = MAP_TWO_POINT;
   if (tp && tp.p1 && tp.p2) {
     var p1 = tp.p1, p2 = tp.p2;
     x = Math.abs(p2.lng - p1.lng) > 1e-12 ? p1.x + (lng - p1.lng) / (p2.lng - p1.lng) * (p2.x - p1.x) : p1.x;
@@ -194,16 +75,21 @@ function gpsToPercent(lat, lng, bounds, insets, offset, twoPoint) {
     x = lngSpan ? (lng - bounds.topLeft.lng) / lngSpan * 100 : 0;
     y = (yTop - yBot) ? (yTop - mercatorY(lat)) / (yTop - yBot) * 100 : 0;
   }
-  var il = insets.left || 0, it = insets.top || 0, ir = insets.right || 0, ib = insets.bottom || 0;
+  var il = MAP_INSETS.left || 0, it = MAP_INSETS.top || 0, ir = MAP_INSETS.right || 0, ib = MAP_INSETS.bottom || 0;
   x = il + x * (100 - il - ir) / 100;
   y = it + y * (100 - it - ib) / 100;
-  x += (offset.x || 0); y += (offset.y || 0);
+  x += (MAP_PIN_OFFSET.x || 0); y += (MAP_PIN_OFFSET.y || 0);
   return { x: x, y: y };
 }
 var PINS = [
-  { lat: 33.520345, lng: 131.21794, name: 'スモークツリー', sceneId: '0-aa001', color: '#e8453c', heading: 90 },
+
+  // Pin #1: スモークツリー (aa - sceneId: 0-aa001)
+  { lat: 33.520345, lng: 131.21794, name: 'スモークツリー', sceneId: '0-aa001', color: '#e8453c' },
+
+  // Pin #2: アジサイ (aa - sceneId: 1-aa002)
   { lat: 33.520525, lng: 131.21764, name: 'アジサイ', sceneId: '1-aa002', color: '#00ff40' }
 ];
+
 var SIDE_BRANCHES = [];
 
 function spreadPinPositions(pins) {
@@ -237,209 +123,33 @@ function goToScene(pin) {
   if (SIDE_BRANCHES.length > 0) {
     url += '&sideBranches=' + encodeURIComponent(JSON.stringify(SIDE_BRANCHES));
   }
-  url += '&back=./map.html';
+  url += '&back=' + encodeURIComponent('map.html');
   window.location.href = url;
 }
 
-function goToPortalScene() {
-  if (!MAP_PORTAL || !MAP_PORTAL.sceneId) return;
-  var url = './viewer.html?id=' + encodeURIComponent(MAP_PORTAL.sceneId);
-  if (SIDE_BRANCHES.length > 0) {
-    url += '&sideBranches=' + encodeURIComponent(JSON.stringify(SIDE_BRANCHES));
-  }
-  url += '&back=./map.html';
-  window.location.href = url;
+function renderPins() {
+  var overlay = document.getElementById('mapOverlay');
+  overlay.querySelectorAll('.map-pin').forEach(function(el) { el.remove(); });
+  var spread = spreadPinPositions(PINS);
+  spread.forEach(function(item, i) {
+    var el = document.createElement('div');
+    el.className = 'map-pin';
+    el.style.left = item.pos.x + '%';
+    el.style.top = item.pos.y + '%';
+    el.setAttribute('data-idx', i);
+    el.innerHTML = '<div class="pin-label">' + item.pin.name + '</div><div class="pin-icon" style="background:' + item.pin.color + ';"><span class="pin-number">' + (i+1) + '</span></div>';
+    el.addEventListener('click', function() { goToScene(PINS[parseInt(this.getAttribute('data-idx'))]); });
+    overlay.appendChild(el);
+  });
 }
 
-function isAppleMobileOrTablet() {
-  var ua = navigator.userAgent || '';
-  if (/iPad|iPhone|iPod/i.test(ua)) return true;
-  try {
-    if (navigator.userAgentData && navigator.userAgentData.platform === 'iOS') return true;
-  } catch (e1) {}
-  if (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1) return true;
-  if (/Macintosh/i.test(ua) && navigator.maxTouchPoints > 0 && 'ontouchstart' in window) return true;
-  return false;
-}
+var mapImage = document.getElementById('mapImage');
+function onMapReady() { renderPins(); }
+if (mapImage.complete && mapImage.naturalWidth) onMapReady();
+else mapImage.addEventListener('load', onMapReady);
 
-function isMapTouchUI() {
-  if (isAppleMobileOrTablet()) return true;
-  if ('ontouchstart' in window) return true;
-  if (navigator.maxTouchPoints > 0) return true;
-  return window.matchMedia && window.matchMedia('(hover: none)').matches;
-}
-
-function useMapFixedPortalLayout() {
-  return isMapTouchUI();
-}
-
-function useMapPhonePortalLayout() {
-  return !useMapFixedPortalLayout() && window.innerWidth < 768;
-}
-
-function getMapViewportBox() {
-  var vv = window.visualViewport;
-  return {
-    w: vv ? vv.width : window.innerWidth,
-    h: vv ? vv.height : window.innerHeight,
-    left: vv ? vv.offsetLeft : 0,
-    top: vv ? vv.offsetTop : 0
-  };
-}
-
-function getPortalPinPos() {
-  var p = MAP_PORTAL;
-  return {
-    x: (parseFloat(p.pinX) || 0) + (parseFloat(p.mapOffsetX) || 0),
-    y: (parseFloat(p.pinY) || 0) + (parseFloat(p.mapOffsetY) || 0)
-  };
-}
-
-function getPortalAnchorPos() {
-  var phone = useMapPhonePortalLayout();
-  return {
-    x: phone ? (MAP_PORTAL.phoneAnchorX != null ? MAP_PORTAL.phoneAnchorX : 97) : (MAP_PORTAL.anchorX != null ? MAP_PORTAL.anchorX : 97),
-    y: phone ? (MAP_PORTAL.phoneAnchorY != null ? MAP_PORTAL.phoneAnchorY : 82) : (MAP_PORTAL.anchorY != null ? MAP_PORTAL.anchorY : 82)
-  };
-}
-
-function layoutMapPortal() {
-  var el = document.getElementById('mapPortal');
-  if (!el) return;
-  var container = document.getElementById('mapStage');
-  if (useMapFixedPortalLayout()) {
-    if (el.parentNode !== document.body) document.body.appendChild(el);
-    el.classList.add('is-fixed');
-    var margin = 6;
-    var vp = getMapViewportBox();
-    var open = el.classList.contains('is-open');
-    var size = open ? Math.min(vp.w * 0.34, 260) : 52;
-    el.style.position = 'fixed';
-    el.style.left = (vp.left + vp.w - size - margin) + 'px';
-    el.style.top = (vp.top + vp.h - size - margin) + 'px';
-    el.style.right = 'auto';
-    el.style.bottom = 'auto';
-    el.style.width = size + 'px';
-    el.style.height = size + 'px';
-    el.style.transform = 'none';
-    el.style.webkitTransform = 'none';
-    el.style.transformOrigin = '100% 100%';
-    el.style.zIndex = '45';
-    el.style.visibility = 'visible';
-    el.style.opacity = '1';
-    return;
-  }
-  if (container && el.parentNode !== container) container.appendChild(el);
-  el.classList.remove('is-fixed');
-  el.style.width = '';
-  el.style.height = '';
-  el.style.zIndex = '';
-  el.style.visibility = '';
-  el.style.opacity = '';
-  el.style.webkitTransform = '';
-  el.style.right = '';
-  el.style.bottom = '';
-  var phone = useMapPhonePortalLayout();
-  var pos = getPortalAnchorPos();
-  el.style.position = '';
-  el.style.left = pos.x + '%';
-  el.style.top = pos.y + '%';
-  if (phone) {
-    el.style.transform = 'translate3d(-100%, 0, 0)';
-    el.style.transformOrigin = '100% 0%';
-  } else {
-    el.style.transform = 'translate3d(-100%, -100%, 0)';
-    el.style.transformOrigin = '100% 100%';
-  }
-}
-
-function initMapPortal() {
-  if (!MAP_PORTAL || !MAP_PORTAL.sceneId) return;
-  var container = document.getElementById('mapStage');
-  if (!container) return;
-
-  var portalEl = document.getElementById('mapPortal');
-  if (!portalEl) {
-    portalEl = document.createElement('div');
-    portalEl.className = 'map-portal';
-    portalEl.id = 'mapPortal';
-    portalEl.innerHTML =
-      '<div class="map-portal-caption" id="mapPortalCaption"></div>' +
-      '<div class="map-portal-label" id="mapPortalLabel"></div>' +
-      '<div class="map-portal-ring">' +
-      '<img class="map-portal-mark" id="mapPortalMark" alt="">' +
-      '<img class="map-portal-map" id="mapPortalMap" alt="">' +
-      '<div class="map-portal-pin" id="mapPortalPin"></div>' +
-      '</div>';
-    if (useMapFixedPortalLayout()) document.body.appendChild(portalEl);
-    else container.appendChild(portalEl);
-  }
-
-  var captionEl = document.getElementById('mapPortalCaption');
-  var labelEl = document.getElementById('mapPortalLabel');
-  var markEl = document.getElementById('mapPortalMark');
-  var mapEl = document.getElementById('mapPortalMap');
-  var pinEl = document.getElementById('mapPortalPin');
-
-  if (captionEl) captionEl.textContent = MAP_PORTAL.shortLabel || 'ポータル';
-  if (labelEl) labelEl.textContent = MAP_PORTAL.label || 'ポータル先';
-  if (markEl && MAP_PORTAL.markImage) markEl.src = MAP_PORTAL.markImage;
-  if (mapEl && MAP_PORTAL.mapImage) mapEl.src = MAP_PORTAL.mapImage;
-
-  if (pinEl) {
-    var pos = getPortalPinPos();
-    pinEl.style.left = pos.x + '%';
-    pinEl.style.top = pos.y + '%';
-    pinEl.innerHTML = '<div class="pin-label">' + (MAP_PORTAL.pinName || '') + '</div>' +
-      '<div class="pin-icon" style="background:' + (MAP_PORTAL.pinColor || '#00cc44') + ';"><span class="pin-number">P</span></div>';
-    pinEl.addEventListener('click', function(e) {
-      e.stopPropagation();
-      goToPortalScene();
-    });
-  }
-
-  layoutMapPortal();
-
-  var touchMode = isMapTouchUI();
-  if (touchMode) {
-    portalEl.addEventListener('click', function(e) {
-      if (e.target.closest && e.target.closest('.map-portal-pin')) return;
-      portalEl.classList.toggle('is-open');
-      layoutMapPortal();
-      e.stopPropagation();
-    });
-    document.addEventListener('click', function(e) {
-      if (e.target.closest && e.target.closest('.map-portal')) return;
-      portalEl.classList.remove('is-open');
-      layoutMapPortal();
-    });
-  }
-}
-
-var container = document.getElementById('mapStage');
-var spread = spreadPinPositions(PINS);
-spread.forEach(function(item, i) {
-  var el = document.createElement('div');
-  el.className = 'map-pin';
-  el.style.left = item.pos.x + '%';
-  el.style.top = item.pos.y + '%';
-  el.setAttribute('data-idx', i);
-  el.innerHTML = '<div class="pin-label">' + item.pin.name + '</div><div class="pin-icon" style="background:' + item.pin.color + ';"><span class="pin-number">' + (i+1) + '</span></div>';
-  el.addEventListener('click', function() { goToScene(PINS[parseInt(this.getAttribute('data-idx'))]); });
-  container.appendChild(el);
-});
-initMapPortal();
-var mapImgEl = document.querySelector('.map-image');
-if (mapImgEl) {
-  if (mapImgEl.complete) layoutMapPortal();
-  else mapImgEl.addEventListener('load', layoutMapPortal);
-}
-window.addEventListener('resize', layoutMapPortal);
-window.addEventListener('orientationchange', function() {
-  setTimeout(layoutMapPortal, 120);
-});
-if (window.visualViewport) {
-  window.visualViewport.addEventListener('resize', layoutMapPortal);
+if (!TOUR_DESC) {
+  document.getElementById('tourDesc').textContent = TOUR_TITLE + 'が現れます。';
 }
 </script>
 </body>

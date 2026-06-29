@@ -385,8 +385,14 @@ var APP_DATA = {
       "pinName": "霊山",
       "pinColor": "#00cc44",
       "bounds": {
-        "topLeft": { "lat": 33.502, "lng": 131.268 },
-        "bottomRight": { "lat": 33.418, "lng": 131.392 }
+        "topLeft": {
+          "lat": 33.502,
+          "lng": 131.268
+        },
+        "bottomRight": {
+          "lat": 33.418,
+          "lng": 131.392
+        }
       },
       "lat": 33.468,
       "lng": 131.318,
@@ -400,5 +406,8 @@ var APP_DATA = {
     "faces": [
       "b"
     ]
+  },
+  "viewConfig": {
+    "defaultFovDeg": 68
   }
 };

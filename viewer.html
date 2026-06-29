@@ -1485,6 +1485,23 @@ function sceneMaxTileSize(sd) {
   if (base === 'tiles2048' || (sd && sd.maxTileSize === 2048)) return 2048;
   return 1024;
 }
+var LEGACY_DEFAULT_FOV_RAD = 1.1479251634083179;
+
+function resolveSceneInitialFov(sceneData) {
+  var iv = sceneData && sceneData.initialViewParameters ? sceneData.initialViewParameters : {};
+  if (iv.customFov === true && iv.fov != null) {
+    return iv.fov;
+  }
+  var vc = window.APP_DATA && window.APP_DATA.viewConfig;
+  if (vc && vc.defaultFovDeg != null && isFinite(vc.defaultFovDeg)) {
+    return degToRad(parseFloat(vc.defaultFovDeg));
+  }
+  if (iv.fov != null) {
+    return iv.fov;
+  }
+  return LEGACY_DEFAULT_FOV_RAD;
+}
+
 function sceneViewLimiter(sd) {
   var face = sd.faceSize || 2048;
   var maxTile = sceneMaxTileSize(sd);
@@ -3286,7 +3303,9 @@ data.scenes.forEach(function(sd) {
   var source = panoTileSourceForScene(sd, data);
   var geometry = new Marzipano.CubeGeometry(sd.levels);
   var limiter = sceneViewLimiter(sd);
-  var view = new Marzipano.RectilinearView(sd.initialViewParameters, limiter);
+  var iv = Object.assign({}, sd.initialViewParameters || {});
+  iv.fov = resolveSceneInitialFov(sd);
+  var view = new Marzipano.RectilinearView(iv, limiter);
   var scene = viewer.createScene({ source: source, geometry: geometry, view: view });
   var dir = sd.direction;
   scenesData[sd.id] = { scene: scene, view: view, data: Object.assign({}, sd, { direction: dir }) };
@@ -7035,7 +7054,14 @@ function switchScene(sceneId, yaw, pitch, fov, fromPortalHotspot, keepFullscreen
   }
 
   var prevView = currentView;
-  var targetFov = fov !== undefined ? fov : (prevView ? prevView.parameters().fov : obj.view.parameters().fov);
+  var targetFov;
+  if (fov !== undefined) {
+    targetFov = fov;
+  } else if (prevView) {
+    targetFov = prevView.parameters().fov;
+  } else {
+    targetFov = resolveSceneInitialFov(obj.data);
+  }
   var viewParams = null;
   if (targetYaw !== undefined && targetPitch !== undefined) {
     viewParams = { yaw: targetYaw, pitch: targetPitch, fov: targetFov };
