@@ -393,20 +393,20 @@ body.gyro-active #pano { touch-action: none; }
 .portal-hotspot img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
   display: block;
   border: none;
   outline: none;
   background: transparent;
   box-shadow: none;
 }
-/* タップ判定：中央の円（広すぎ→22%に縮小済み → やや拡大 34%/40%） */
+/* タップ判定（感度アップ：中央の当たり判定を広め） */
 .portal-hit-area {
   position: absolute;
-  left: 33%;
-  top: 33%;
-  width: 34%;
-  height: 34%;
+  left: 26%;
+  top: 26%;
+  width: 48%;
+  height: 48%;
   border-radius: 50%;
   z-index: 2;
   cursor: pointer;
@@ -422,10 +422,10 @@ body.gyro-active #pano { touch-action: none; }
 }
 @media (pointer: coarse) {
   .portal-hit-area {
-    left: 30%;
-    top: 30%;
-    width: 40%;
-    height: 40%;
+    left: 22%;
+    top: 22%;
+    width: 56%;
+    height: 56%;
   }
 }
 .portal-inner {
@@ -3562,6 +3562,14 @@ function setPortalTappable(hs, enabled) {
   if (hs.hitArea) hs.hitArea.style.pointerEvents = enabled ? 'auto' : 'none';
 }
 
+var PORTAL_VIEW_RANGE_BOOST = 1.28;
+var PORTAL_TAP_MOVE_TOLERANCE_PX = 18;
+
+function portalCanTap(hs) {
+  if (!hs || !hs.ih) return false;
+  return !!(hs.portalActive || hs.portalFadingOut);
+}
+
 var portalDiveAnimToken = 0;
 
 function easeOutCubic01(t) {
@@ -3691,12 +3699,21 @@ function playPortalDiveTransition(hs) {
 function bindPortalTap(el, onTap) {
   var lastTouchEnd = 0;
   var touchMoved = false;
+  var touchStartX = 0;
+  var touchStartY = 0;
   el.addEventListener('touchstart', function(e) {
     touchMoved = false;
+    if (e.touches && e.touches.length) {
+      touchStartX = e.touches[0].clientX;
+      touchStartY = e.touches[0].clientY;
+    }
     e.stopPropagation();
   }, { passive: true });
-  el.addEventListener('touchmove', function() {
-    touchMoved = true;
+  el.addEventListener('touchmove', function(e) {
+    if (touchMoved || !e.touches || !e.touches.length) return;
+    var dx = e.touches[0].clientX - touchStartX;
+    var dy = e.touches[0].clientY - touchStartY;
+    if (Math.hypot(dx, dy) > PORTAL_TAP_MOVE_TOLERANCE_PX) touchMoved = true;
   }, { passive: true });
   el.addEventListener('touchend', function(e) {
     if (touchMoved) return;
@@ -3714,7 +3731,12 @@ function bindPortalTap(el, onTap) {
 }
 
 function onPortalHotspotTap(hs) {
-  if (!hs || !hs.portalActive || !hs.ih) return;
+  if (!portalCanTap(hs)) return;
+  if (hs.portalFadeOutTimer) {
+    clearTimeout(hs.portalFadeOutTimer);
+    hs.portalFadeOutTimer = null;
+  }
+  hs.portalFadingOut = false;
   var ih = hs.ih;
   if (ih.frameSequence && resolveFrameSequenceUrls(ih.frameSequence).length && ih.playVideoOnTap !== false && !isPortalDiveTransition(ih)) {
     setPortalTappable(hs, false);
@@ -7189,6 +7211,8 @@ function switchScene(sceneId, yaw, pitch, fov, fromPortalHotspot, keepFullscreen
         sceneId: sceneId,
         flagKey: 'hotspotShown_' + sceneId + '_' + portalIdx + '_' + (ih.targetScene || 'portal'),
         portalActive: false,
+        portalFadingOut: false,
+        portalFadeOutTimer: null,
         videoPlaying: false,
         linkedVideo: null,
         autoFadeTimer: null
@@ -7312,8 +7336,8 @@ function updateUI() {
         var range = portalRangeDeg(hs.ih);
         var pitchCenter = portalCenterPitchDeg(hs.ih);
         var pitchRange = portalPitchRangeDeg(hs.ih);
-        var inRange = Math.abs(angleDiffDeg(yawDeg, center)) <= range &&
-          Math.abs(pitch - pitchCenter) <= pitchRange;
+        var inRange = Math.abs(angleDiffDeg(yawDeg, center)) <= range * PORTAL_VIEW_RANGE_BOOST &&
+          Math.abs(pitch - pitchCenter) <= pitchRange * PORTAL_VIEW_RANGE_BOOST;
         
         if (inRange) {
           var fadeMs = portalFadeMs(hs.ih);
@@ -7323,6 +7347,11 @@ function updateUI() {
           var appearMs = fadeMs;
           var imageDelayMs = preset.reveal ? Math.min(120, Math.round(portalStartHoldMs(hs.ih, preset) * 0.5), Math.max(0, totalTime - appearMs)) : 0;
           window[hs.flagKey] = true;
+          hs.portalFadingOut = false;
+          if (hs.portalFadeOutTimer) {
+            clearTimeout(hs.portalFadeOutTimer);
+            hs.portalFadeOutTimer = null;
+          }
           showPortalMotion(hs.inner, hs.cover, hs.ih, totalTime);
           hs.img.style.transition = 'opacity ' + appearMs + 'ms ease-in-out';
           hs.img.style.opacity = '1';
@@ -7339,18 +7368,31 @@ function updateUI() {
           if (hs.ih.videoSrc && hs.ih.playVideoOnTap !== false) {
             console.log('🎬 動画ポータル: タップで ' + hs.ih.videoSrc + ' を再生');
           }
-          // 一定時間後はポータル画像を消し、景色を隠し続けないようにする
+          // 消え始めてもフェード完了まではタップ可能
           hs.autoFadeTimer = setTimeout(function() {
             if (hs.videoPlaying) return;
+            var fadeOutMs = Math.max(appearMs, fadeMs, 450);
             hidePortalMotion(hs.inner, hs.cover, hs.ih);
-            if (hs.portalImg) hs.portalImg.style.opacity = preset.reveal ? '0' : '1';
-            hs.img.style.opacity = '0';
-            setPortalTappable(hs, false);
-            console.log('🎎 hotspot フェードアウト開始: ' + hs.ih.src);
-            if (hs.ih.resetDisplay) {
-              window[hs.flagKey] = false;
-              console.log('🔄 hotspot リセット表示有効: 次に表示範囲に入ったら再表示します');
+            if (hs.portalImg) {
+              hs.portalImg.style.transition = 'opacity ' + fadeOutMs + 'ms ease-in-out';
+              hs.portalImg.style.opacity = '0';
             }
+            hs.img.style.transition = 'opacity ' + fadeOutMs + 'ms ease-in-out';
+            hs.img.style.opacity = '0';
+            hs.portalFadingOut = true;
+            setPortalTappable(hs, true);
+            if (hs.portalFadeOutTimer) clearTimeout(hs.portalFadeOutTimer);
+            hs.portalFadeOutTimer = setTimeout(function() {
+              hs.portalFadeOutTimer = null;
+              hs.portalFadingOut = false;
+              setPortalTappable(hs, false);
+              console.log('🎎 hotspot フェードアウト完了: ' + hs.ih.src);
+              if (hs.ih.resetDisplay) {
+                window[hs.flagKey] = false;
+                console.log('🔄 hotspot リセット表示有効: 次に表示範囲に入ったら再表示します');
+              }
+            }, fadeOutMs);
+            console.log('🎎 hotspot フェードアウト開始: ' + hs.ih.src + '（消えるまでタップ可）');
           }, totalTime);
         }
       }

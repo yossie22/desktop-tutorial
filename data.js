@@ -336,9 +336,9 @@ var APP_DATA = {
         {
           "sceneStartId": "4-bb001",
           "sourceScene": "4-bb001",
-          "src": "portal2.png",
-          "width": 700,
-          "height": 700,
+          "src": "portal_288x214.png",
+          "width": 350,
+          "height": 350,
           "yawCenter": 180,
           "yawRange": 30,
           "targetScene": "0-aa001",
@@ -347,7 +347,7 @@ var APP_DATA = {
           "fadeTime": 5,
           "dispTime": 10000,
           "startHoldTime": 1000,
-          "effect": "grow",
+          "effect": "growHalf",
           "resetDisplay": false,
           "pitchCenter": 5,
           "pitchRange": 35
