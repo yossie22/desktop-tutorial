@@ -19,128 +19,83 @@ body, html { width: 100%; height: 100%; overflow: hidden; background: #222; }
 .pin-number { transform: rotate(45deg); font-size: 14px; font-weight: bold; color: white; line-height: 1; }
 .pin-label { background: rgba(255,255,255,0.95); color: #333; font-size: 13px; font-weight: bold; padding: 3px 7px; border-radius: 4px; white-space: nowrap; line-height: 1.2; text-align: center; box-shadow: 0 2px 6px rgba(0,0,0,0.4); margin-bottom: 4px; pointer-events: none; font-family: sans-serif; }
 .help-button { position: fixed; right: 14px; top: 14px; z-index: 50; background: rgba(255,226,106,0.94); color: #111; font-weight: bold; font-size: 15px; text-decoration: none; padding: 9px 14px; border-radius: 999px; box-shadow: 0 3px 12px rgba(0,0,0,0.45); font-family: sans-serif; }
-.map-portal {
-  position: absolute;
-  left: 94%;
-  top: 90%;
-  z-index: 30;
-  width: 54px;
-  height: 54px;
-  transform: translate(-100%, -100%);
-  transform-origin: 100% 100%;
-  transition: width 0.32s ease, height 0.32s ease;
-  cursor: pointer;
-  pointer-events: auto;
+.map-portal-trigger { z-index: 40; }
+.portal-trigger-dot {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  border: 3px solid rgba(255, 190, 225, 0.95);
+  box-shadow: 0 0 14px rgba(255, 100, 200, 0.8), 0 0 24px rgba(255, 80, 180, 0.45);
+  background: radial-gradient(circle at 50% 45%, rgba(120, 50, 100, 0.7), rgba(30, 10, 40, 0.95));
+  background-size: cover;
+  background-position: center;
+  flex-shrink: 0;
 }
-.map-portal:hover,
-.map-portal.is-open {
-  width: min(34%, 260px);
-  height: min(34%, 260px);
+.map-portal-overlay {
+  display: none;
+  position: fixed;
+  left: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 300;
+  background: rgba(0, 0, 0, 0.5);
+  justify-content: center;
+  align-items: center;
+  padding: 12px;
 }
-.map-portal-caption {
-  position: absolute;
-  top: -17px;
-  left: 50%;
-  transform: translateX(-50%);
-  color: #ffff00;
-  font-size: 11px;
-  font-weight: bold;
-  font-family: 'Meiryo', sans-serif;
-  text-shadow: 0 0 6px rgba(0,0,0,0.95), 0 0 12px rgba(0,0,0,0.75);
-  white-space: nowrap;
-  pointer-events: none;
-  opacity: 1;
-  z-index: 2;
-  line-height: 1.2;
+.map-portal-overlay.is-open { display: flex; }
+.map-portal-panel {
+  position: relative;
+  width: min(88vw, 300px);
+  height: min(88vw, 300px);
+  max-width: 300px;
+  max-height: 300px;
 }
-.map-portal-label {
+.map-portal-panel-label {
   position: absolute;
-  top: -34px;
+  top: -28px;
   left: 50%;
   transform: translateX(-50%);
   color: #ffff00;
   font-size: 15px;
   font-weight: bold;
   font-family: 'Meiryo', sans-serif;
-  text-shadow: 0 0 8px rgba(0,0,0,0.95), 0 0 16px rgba(0,0,0,0.7);
-  opacity: 0;
-  transition: opacity 0.22s ease;
+  text-shadow: 0 0 8px rgba(0,0,0,0.95);
   white-space: nowrap;
   pointer-events: none;
 }
-.map-portal:hover .map-portal-label,
-.map-portal.is-open .map-portal-label { opacity: 1; }
-.map-portal:hover .map-portal-caption,
-.map-portal.is-open .map-portal-caption { opacity: 0; }
 .map-portal-ring {
   width: 100%;
   height: 100%;
-  min-width: 48px;
-  min-height: 48px;
   border-radius: 50%;
   overflow: hidden;
   position: relative;
   border: 3px solid rgba(255, 190, 225, 0.9);
-  box-shadow: 0 0 16px rgba(255, 120, 200, 0.7), 0 0 32px rgba(255, 90, 180, 0.4), inset 0 0 10px rgba(255, 210, 240, 0.35);
-  background: radial-gradient(circle at 50% 45%, rgba(80,40,90,0.5), rgba(20,10,30,0.95));
+  box-shadow: 0 0 16px rgba(255, 120, 200, 0.7), 0 0 32px rgba(255, 90, 180, 0.4);
+  background: #1a1020;
 }
-.map-portal-mark {
+.map-portal-ring img.map-portal-map {
   position: absolute;
   top: 0;
   left: 0;
-  right: 0;
-  bottom: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
-  opacity: 1;
-  transition: opacity 0.28s ease;
   pointer-events: none;
 }
-.map-portal-map {
+.map-portal-ring .map-portal-pin {
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  opacity: 0;
-  transition: opacity 0.28s ease;
-  pointer-events: none;
-}
-.map-portal:hover .map-portal-mark,
-.map-portal.is-open .map-portal-mark { opacity: 0; }
-.map-portal:hover .map-portal-map,
-.map-portal.is-open .map-portal-map { opacity: 1; }
-.map-portal-pin {
-  position: absolute;
-  transform: translate(-50%, -100%) scale(0.72);
-  opacity: 0;
-  transition: opacity 0.22s ease, transform 0.22s ease;
-  pointer-events: none;
+  transform: translate(-50%, -100%);
   z-index: 3;
   display: flex;
   flex-direction: column;
   align-items: center;
+  cursor: pointer;
 }
-.map-portal:hover .map-portal-pin,
-.map-portal.is-open .map-portal-pin {
-  opacity: 1;
-  pointer-events: auto;
-  transform: translate(-50%, -100%) scale(1);
-}
-.map-portal-pin .pin-icon { width: 30px; height: 30px; }
-.map-portal-pin .pin-number { font-size: 12px; }
-.map-portal-pin .pin-label { font-size: 11px; padding: 2px 6px; margin-bottom: 3px; }
-@media (hover: none) {
-  .map-portal { width: 58px; height: 58px; }
-  .map-portal.is-open {
-    width: min(34%, 260px);
-    height: min(34%, 260px);
-  }
-}
+.map-portal-ring .map-portal-pin .pin-icon { width: 30px; height: 30px; }
+.map-portal-ring .map-portal-pin .pin-number { font-size: 12px; }
+.map-portal-ring .map-portal-pin .pin-label { font-size: 11px; padding: 2px 6px; margin-bottom: 3px; }
 </style>
 </head>
 <body>
@@ -150,15 +105,15 @@ body, html { width: 100%; height: 100%; overflow: hidden; background: #222; }
   <img src="map.jpg" alt="地図" class="map-image">
   <div class="overlay-text main-title" style="width:min(92%,900px);padding:8px;left:2%;top:3%;">アジサイの妖精 (テスト作品）</div>
   <div class="overlay-text desc-text" style="width:min(92%,900px);padding:8px;left:33%;top:43%;">アジサイの妖精が現れます。</div>
-  <div class="map-portal" id="mapPortal" aria-label="ポータル先">
-    <div class="map-portal-caption" id="mapPortalCaption">ポータル</div>
-    <div class="map-portal-label" id="mapPortalLabel">ポータル先</div>
+  </div>
+</div>
+<div class="map-portal-overlay" id="mapPortalOverlay" aria-hidden="true">
+  <div class="map-portal-panel" id="mapPortalPanel">
+    <div class="map-portal-panel-label" id="mapPortalLabel">ポータル先</div>
     <div class="map-portal-ring">
-      <img class="map-portal-mark" id="mapPortalMark" src="portal.png" alt="">
-      <img class="map-portal-map" id="mapPortalMap" src="map_portal.jpg" alt="ポータル先の地図">
+      <img class="map-portal-map" id="mapPortalMap" src="map_portal.jpg" alt="">
       <div class="map-portal-pin" id="mapPortalPin"></div>
     </div>
-  </div>
   </div>
 </div>
 <script>
@@ -167,7 +122,6 @@ var MAP_INSETS = { left: 0, top: 0, right: 0, bottom: 0 };
 var MAP_PIN_OFFSET = { x: 0, y: 0 };
 var MAP_TWO_POINT = null;
 
-/* 地図右下ポータル（地図外シーンへ）— map_portal.jpg を同フォルダに置く */
 var MAP_PORTAL = {
   label: 'ポータル先',
   shortLabel: 'ポータル',
@@ -176,20 +130,14 @@ var MAP_PORTAL = {
   sceneId: '4-bb001',
   pinName: '霊山',
   pinColor: '#00cc44',
-  bounds: {
-    topLeft: { lat: 33.502, lng: 131.268 },
-    bottomRight: { lat: 33.418, lng: 131.392 }
-  },
-  lat: 33.468,
-  lng: 131.318,
   pinX: 51,
   pinY: 74,
   mapOffsetX: 0,
   mapOffsetY: 0,
-  anchorX: 94,
-  anchorY: 90,
-  phoneAnchorX: 94,
-  phoneAnchorY: 11
+  anchorX: 88,
+  anchorY: 82,
+  phoneAnchorX: 88,
+  phoneAnchorY: 18
 };
 
 function mercatorY(lat) { var r = lat * Math.PI / 180; return Math.log(Math.tan(Math.PI / 4 + r / 2)); }
@@ -217,14 +165,9 @@ function gpsToPercent(lat, lng, bounds, insets, offset, twoPoint) {
   return { x: x, y: y };
 }
 var PINS = [
-
-  // Pin #1: スモークツリー (aa - sceneId: 0-aa001)
   { lat: 33.520345, lng: 131.21794, name: 'スモークツリー', sceneId: '0-aa001', color: '#e8453c', heading: 90 },
-
-  // Pin #2: アジサイ (aa - sceneId: 1-aa002)
   { lat: 33.520525, lng: 131.21764, name: 'アジサイ', sceneId: '1-aa002', color: '#00ff40' }
 ];
-
 var SIDE_BRANCHES = [];
 
 function spreadPinPositions(pins) {
@@ -274,53 +217,54 @@ function goToPortalScene() {
 
 function getPortalPinPos() {
   var p = MAP_PORTAL;
-  if (p.pinX != null && p.pinY != null) {
-    return {
-      x: (parseFloat(p.pinX) || 0) + (parseFloat(p.mapOffsetX) || 0),
-      y: (parseFloat(p.pinY) || 0) + (parseFloat(p.mapOffsetY) || 0)
-    };
-  }
-  return gpsToPercent(p.lat, p.lng, p.bounds, { left: 0, top: 0, right: 0, bottom: 0 }, { x: p.mapOffsetX || 0, y: p.mapOffsetY || 0 }, null);
+  return {
+    x: (parseFloat(p.pinX) || 0) + (parseFloat(p.mapOffsetX) || 0),
+    y: (parseFloat(p.pinY) || 0) + (parseFloat(p.mapOffsetY) || 0)
+  };
 }
 
-function layoutMapPortalWidget() {
-  var portalEl = document.getElementById('mapPortal');
-  if (!portalEl || !MAP_PORTAL) return;
+function getPortalAnchorPos() {
   var phone = window.innerWidth < 768;
-  var ax, ay, tf, origin;
-  if (phone) {
-    ax = MAP_PORTAL.phoneAnchorX != null ? MAP_PORTAL.phoneAnchorX : 94;
-    ay = MAP_PORTAL.phoneAnchorY != null ? MAP_PORTAL.phoneAnchorY : 11;
-    tf = 'translate(-100%, 0)';
-    origin = '100% 0%';
-  } else {
-    ax = MAP_PORTAL.anchorX != null ? MAP_PORTAL.anchorX : 94;
-    ay = MAP_PORTAL.anchorY != null ? MAP_PORTAL.anchorY : 90;
-    tf = 'translate(-100%, -100%)';
-    origin = '100% 100%';
-  }
-  portalEl.style.left = ax + '%';
-  portalEl.style.top = ay + '%';
-  portalEl.style.right = 'auto';
-  portalEl.style.bottom = 'auto';
-  portalEl.style.transform = tf;
-  portalEl.style.transformOrigin = origin;
+  return {
+    x: phone ? (MAP_PORTAL.phoneAnchorX != null ? MAP_PORTAL.phoneAnchorX : 88) : (MAP_PORTAL.anchorX != null ? MAP_PORTAL.anchorX : 88),
+    y: phone ? (MAP_PORTAL.phoneAnchorY != null ? MAP_PORTAL.phoneAnchorY : 18) : (MAP_PORTAL.anchorY != null ? MAP_PORTAL.anchorY : 82)
+  };
+}
+
+function openPortalOverlay() {
+  var ov = document.getElementById('mapPortalOverlay');
+  if (!ov) return;
+  ov.classList.add('is-open');
+  ov.setAttribute('aria-hidden', 'false');
+}
+
+function closePortalOverlay() {
+  var ov = document.getElementById('mapPortalOverlay');
+  if (!ov) return;
+  ov.classList.remove('is-open');
+  ov.setAttribute('aria-hidden', 'true');
+}
+
+function layoutPortalTrigger() {
+  var el = document.getElementById('mapPortalTrigger');
+  if (!el) return;
+  var pos = getPortalAnchorPos();
+  el.style.left = pos.x + '%';
+  el.style.top = pos.y + '%';
 }
 
 function initMapPortal() {
   if (!MAP_PORTAL || !MAP_PORTAL.sceneId) return;
-  var portalEl = document.getElementById('mapPortal');
-  if (!portalEl) return;
+  var container = document.getElementById('mapStage');
   var labelEl = document.getElementById('mapPortalLabel');
-  var captionEl = document.getElementById('mapPortalCaption');
-  var markEl = document.getElementById('mapPortalMark');
   var mapEl = document.getElementById('mapPortalMap');
   var pinEl = document.getElementById('mapPortalPin');
+  var overlayEl = document.getElementById('mapPortalOverlay');
+  if (!container || !pinEl || !overlayEl) return;
+
   if (labelEl && MAP_PORTAL.label) labelEl.textContent = MAP_PORTAL.label;
-  if (captionEl) captionEl.textContent = MAP_PORTAL.shortLabel || 'ポータル';
-  if (markEl && MAP_PORTAL.markImage) markEl.src = MAP_PORTAL.markImage;
   if (mapEl && MAP_PORTAL.mapImage) mapEl.src = MAP_PORTAL.mapImage;
-  layoutMapPortalWidget();
+
   var pos = getPortalPinPos();
   pinEl.style.left = pos.x + '%';
   pinEl.style.top = pos.y + '%';
@@ -330,20 +274,32 @@ function initMapPortal() {
     e.stopPropagation();
     goToPortalScene();
   });
-  var touchMode = window.matchMedia && window.matchMedia('(hover: none)').matches;
-  if (touchMode) {
-    portalEl.addEventListener('click', function(e) {
-      if (e.target.closest('.map-portal-pin')) return;
-      portalEl.classList.toggle('is-open');
+
+  var trigger = document.getElementById('mapPortalTrigger');
+  if (!trigger) {
+    trigger = document.createElement('div');
+    trigger.className = 'map-pin map-portal-trigger';
+    trigger.id = 'mapPortalTrigger';
+    trigger.innerHTML = '<div class="pin-label">' + (MAP_PORTAL.shortLabel || 'ポータル') + '</div>' +
+      '<div class="portal-trigger-dot"></div>';
+    trigger.addEventListener('click', function(e) {
       e.stopPropagation();
+      openPortalOverlay();
     });
-    document.addEventListener('click', function(e) {
-      if (e.target.closest && e.target.closest('.map-portal')) return;
-      portalEl.classList.remove('is-open');
-    });
-    portalEl.addEventListener('touchstart', function(e) {
-      e.stopPropagation();
-    }, { passive: true });
+    container.appendChild(trigger);
+    var dot = trigger.querySelector('.portal-trigger-dot');
+    if (dot && MAP_PORTAL.markImage) {
+      dot.style.backgroundImage = 'url("' + MAP_PORTAL.markImage + '")';
+    }
+  }
+  layoutPortalTrigger();
+
+  overlayEl.addEventListener('click', function(e) {
+    if (e.target === overlayEl) closePortalOverlay();
+  });
+  var panel = document.getElementById('mapPortalPanel');
+  if (panel) {
+    panel.addEventListener('click', function(e) { e.stopPropagation(); });
   }
 }
 
@@ -360,14 +316,9 @@ spread.forEach(function(item, i) {
   container.appendChild(el);
 });
 initMapPortal();
-var mapImgEl = document.querySelector('.map-image');
-if (mapImgEl) {
-  if (mapImgEl.complete) layoutMapPortalWidget();
-  else mapImgEl.addEventListener('load', layoutMapPortalWidget);
-}
-window.addEventListener('resize', layoutMapPortalWidget);
+window.addEventListener('resize', layoutPortalTrigger);
 window.addEventListener('orientationchange', function() {
-  setTimeout(layoutMapPortalWidget, 120);
+  setTimeout(layoutPortalTrigger, 120);
 });
 </script>
 </body>
