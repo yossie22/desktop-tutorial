@@ -1540,9 +1540,9 @@ function resolveSceneInitialFov(sceneData) {
 
 function tiles1024ZoomBoost() {
   var vc = window.APP_DATA && window.APP_DATA.viewConfig;
-  var v = vc && vc.tiles1024ZoomBoost != null ? parseFloat(vc.tiles1024ZoomBoost) : 2;
-  if (!isFinite(v)) return 2;
-  return Math.max(1, Math.min(2, v));
+  var v = vc && vc.tiles1024ZoomBoost != null ? parseFloat(vc.tiles1024ZoomBoost) : 3;
+  if (!isFinite(v)) return 3;
+  return Math.max(1, Math.min(3, v));
 }
 
 function sceneViewLimiter(sd) {
@@ -1560,8 +1560,8 @@ function sceneViewLimiter(sd) {
   if (boost <= 1) {
     return Marzipano.RectilinearView.limit.traditional(face, 75 * Math.PI / 180, 120 * Math.PI / 180);
   }
-  // 1024タイル: 1〜2倍までデジタルズーム（多少ぼやけるがピンチ拡大可能）
-  var minFovDeg = 120 - (120 - 110) * (boost - 1);
+  // 1024タイル: 1〜3倍までデジタルズーム（多少ぼやけるがピンチ拡大可能）
+  var minFovDeg = 120 - 10 * (boost - 1);
   return Marzipano.RectilinearView.limit.traditional(
     face * boost,
     75 * Math.PI / 180,
@@ -1581,7 +1581,7 @@ data.scenes.forEach(function(scene) {
 });
 
 // ビルド識別（どのファイルが実行されているか確認用）
-var BUILD_STAMP = '2026-07-01-tiles1024zoom2';
+var BUILD_STAMP = '2026-07-01-tiles1024zoom3';
 var guideVideoPreloadBySrc = {};
 var guideVideoSessionDone = {};
 console.log('🧩 viewer build:', BUILD_STAMP);

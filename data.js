@@ -408,6 +408,6 @@ var APP_DATA = {
   "viewConfig": {
     "defaultFovDeg": 68,
     "tilesBase": "tiles1024",
-    "tiles1024ZoomBoost": 2
+    "tiles1024ZoomBoost": 3
   }
 };

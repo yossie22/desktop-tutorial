@@ -97,9 +97,9 @@ body.gyro-active #pano { touch-action: none; }
   }
   function tiles1024ZoomBoost(appData) {
     var vc = appData && appData.viewConfig;
-    var v = vc && vc.tiles1024ZoomBoost != null ? parseFloat(vc.tiles1024ZoomBoost) : 2;
-    if (!isFinite(v)) return 2;
-    return Math.max(1, Math.min(2, v));
+    var v = vc && vc.tiles1024ZoomBoost != null ? parseFloat(vc.tiles1024ZoomBoost) : 3;
+    if (!isFinite(v)) return 3;
+    return Math.max(1, Math.min(3, v));
   }
 
   function sceneViewLimiter(sd, appData) {
@@ -115,7 +115,7 @@ body.gyro-active #pano { touch-action: none; }
     if (boost <= 1) {
       return Marzipano.RectilinearView.limit.traditional(face, 75 * Math.PI / 180, 120 * Math.PI / 180);
     }
-    var minFovDeg = 120 - (120 - 110) * (boost - 1);
+    var minFovDeg = 120 - 10 * (boost - 1);
     return Marzipano.RectilinearView.limit.traditional(
       face * boost,
       75 * Math.PI / 180,
