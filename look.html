@@ -95,7 +95,14 @@ body.gyro-active #pano { touch-action: none; }
     if (base === 'tiles2048' || (sd && sd.maxTileSize === 2048)) return 2048;
     return 1024;
   }
-  function sceneViewLimiter(sd) {
+  function tiles1024ZoomBoost(appData) {
+    var vc = appData && appData.viewConfig;
+    var v = vc && vc.tiles1024ZoomBoost != null ? parseFloat(vc.tiles1024ZoomBoost) : 2;
+    if (!isFinite(v)) return 2;
+    return Math.max(1, Math.min(2, v));
+  }
+
+  function sceneViewLimiter(sd, appData) {
     var face = sd.faceSize || 2048;
     if (sceneMaxTileSize(sd) >= 2048) {
       return Marzipano.RectilinearView.limit.traditional(
@@ -104,7 +111,16 @@ body.gyro-active #pano { touch-action: none; }
         110 * Math.PI / 180
       );
     }
-    return Marzipano.RectilinearView.limit.traditional(face, 75 * Math.PI / 180, 120 * Math.PI / 180);
+    var boost = tiles1024ZoomBoost(appData);
+    if (boost <= 1) {
+      return Marzipano.RectilinearView.limit.traditional(face, 75 * Math.PI / 180, 120 * Math.PI / 180);
+    }
+    var minFovDeg = 120 - (120 - 110) * (boost - 1);
+    return Marzipano.RectilinearView.limit.traditional(
+      face * boost,
+      75 * Math.PI / 180,
+      minFovDeg * Math.PI / 180
+    );
   }
 
   function normalizeLevels(scenes) {
@@ -134,7 +150,7 @@ body.gyro-active #pano { touch-action: none; }
       sceneTilesBase(sd) + '/' + sd.id + '/{z}/{f}/{y}/{x}.jpg'
     );
     var geometry = new Marzipano.CubeGeometry(sd.levels);
-    var limiter = sceneViewLimiter(sd);
+    var limiter = sceneViewLimiter(sd, data);
     var params = Object.assign({}, sd.initialViewParameters || {});
     if (initialYaw != null && initialYaw !== '') params.yaw = degToRad(parseFloat(initialYaw));
     if (initialPitch != null && initialPitch !== '') params.pitch = degToRad(parseFloat(initialPitch));
