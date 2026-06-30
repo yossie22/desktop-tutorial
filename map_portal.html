@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<title>ポータル地図</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body, html { width: 100%; height: 100%; min-height: -webkit-fill-available; overflow: hidden; background: #222; }
+.map-container { width: 100vw; height: 100vh; height: 100dvh; display: flex; justify-content: center; align-items: center; background: #222; overflow: hidden; }
+.map-stage { position: relative; display: inline-block; max-width: 100vw; max-height: 100vh; max-height: 100dvh; line-height: 0; vertical-align: middle; overflow: visible; }
+.map-image { display: block; max-width: 100vw; max-height: 100vh; max-height: 100dvh; width: auto; height: auto; }
+.overlay-text { position: absolute; z-index: 5; pointer-events: none; }
+.main-title { font-size: 28px; color: #ffff00; font-weight: bold; font-family: Meiryo,sans-serif; text-shadow: 0 0 8px rgba(0,0,0,0.95); line-height: 1.25; text-align: left; }
+.desc-text { font-size: 18px; color: #ffff00; font-family: Meiryo,sans-serif; text-shadow: 0 0 8px rgba(0,0,0,0.95); white-space: pre-wrap; line-height: 1.7; text-align: left; }
+.map-pin { position: absolute; transform: translate(-50%, -100%); cursor: pointer; z-index: 10; display: flex; flex-direction: column; align-items: center; transition: transform 0.2s; }
+.map-pin:hover, .map-pin:active { transform: translate(-50%, -100%) scale(1.15); }
+.pin-icon { width: 36px; height: 36px; border: 3px solid white; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); box-shadow: 0 3px 8px rgba(0,0,0,0.5); display: flex; justify-content: center; align-items: center; }
+.pin-number { transform: rotate(45deg); font-size: 14px; font-weight: bold; color: white; line-height: 1; }
+.pin-label { background: rgba(255,255,255,0.95); color: #333; font-size: 13px; font-weight: bold; padding: 3px 7px; border-radius: 4px; white-space: nowrap; line-height: 1.2; text-align: center; box-shadow: 0 2px 6px rgba(0,0,0,0.4); margin-bottom: 4px; pointer-events: none; font-family: sans-serif; }
+.back-button { position: fixed; left: 14px; top: 14px; z-index: 50; background: rgba(255,255,255,0.94); color: #111; font-weight: bold; font-size: 15px; text-decoration: none; padding: 9px 14px; border-radius: 999px; box-shadow: 0 3px 12px rgba(0,0,0,0.45); font-family: sans-serif; }
+.help-button { position: fixed; right: 14px; top: 14px; z-index: 50; background: rgba(255,226,106,0.94); color: #111; font-weight: bold; font-size: 15px; text-decoration: none; padding: 9px 14px; border-radius: 999px; box-shadow: 0 3px 12px rgba(0,0,0,0.45); font-family: sans-serif; }
+</style>
+</head>
+<body>
+<a class="back-button" id="backBtn" href="./map.html">← 地図に戻る</a>
+<a class="help-button" href="help/index.html">？使い方</a>
+<div class="map-container">
+  <div class="map-stage" id="mapStage">
+  <img src="map_portal.jpg" alt="ポータル地図" class="map-image">
+  <div class="overlay-text main-title" style="left:2%;top:3%;">ポータル先</div>
+  <div class="overlay-text desc-text" style="left:2%;top:12%;">霊山の第２展望台です。</div>
+  </div>
+</div>
+<script>
+var MAP_PORTAL_BOUNDS = { topLeft: { lat: 33.180037, lng: 131.538665 }, bottomRight: { lat: 33.15496, lng: 131.595008 } };
+var MAP_PORTAL_INSETS = { left: 0, top: 0, right: 0, bottom: 0 };
+var MAP_PORTAL_PIN_OFFSET = { x: 0, y: 0 };
+var MAP_PORTAL_TWO_POINT = null;
+function mercatorY(lat) { var r = lat * Math.PI / 180; return Math.log(Math.tan(Math.PI / 4 + r / 2)); }
+function gpsToPercent(lat, lng) {
+  var x, y, bounds = MAP_PORTAL_BOUNDS, tp = MAP_PORTAL_TWO_POINT;
+  if (tp && tp.p1 && tp.p2) {
+    var p1 = tp.p1, p2 = tp.p2;
+    x = Math.abs(p2.lng - p1.lng) > 1e-12 ? p1.x + (lng - p1.lng) / (p2.lng - p1.lng) * (p2.x - p1.x) : p1.x;
+    var y1 = mercatorY(p1.lat), y2 = mercatorY(p2.lat), ym = mercatorY(lat);
+    if (Math.abs(y2 - y1) > 1e-12) { var s1 = p1.y / 100, s2 = p2.y / 100, sm = (ym - y1) / (y2 - y1); y = (s1 + sm * (s2 - s1)) * 100; } else { y = p1.y; }
+  } else {
+    var lngSpan = bounds.bottomRight.lng - bounds.topLeft.lng;
+    var yTop = mercatorY(bounds.topLeft.lat), yBot = mercatorY(bounds.bottomRight.lat);
+    x = lngSpan ? (lng - bounds.topLeft.lng) / lngSpan * 100 : 0;
+    y = (yTop - yBot) ? (yTop - mercatorY(lat)) / (yTop - yBot) * 100 : 0;
+  }
+  var il = MAP_PORTAL_INSETS.left || 0, it = MAP_PORTAL_INSETS.top || 0, ir = MAP_PORTAL_INSETS.right || 0, ib = MAP_PORTAL_INSETS.bottom || 0;
+  x = il + x * (100 - il - ir) / 100;
+  y = it + y * (100 - it - ib) / 100;
+  x += (MAP_PORTAL_PIN_OFFSET.x || 0); y += (MAP_PORTAL_PIN_OFFSET.y || 0);
+  return { x: x, y: y };
+}
+function pinToPercent(pin) {
+  if (pin.lat != null && pin.lng != null && !isNaN(pin.lat) && !isNaN(pin.lng)) return gpsToPercent(pin.lat, pin.lng);
+  return { x: parseFloat(pin.pinX) || 50, y: parseFloat(pin.pinY) || 50 };
+}
+var PORTAL_MAP_IMAGE = 'map_portal.jpg';
+var PORTAL_MAP_LABEL = 'ポータル先';
+var PORTAL_MAP_DESC = '霊山の第２展望台です。';
+var PORTAL_PINS = [
+  { sceneId: '4-bb001', name: '霊山', color: '#00cc44', lat: 33.160049, lng: 131.570504, pinX: 56.5, pinY: 79.7 }
+];
+var SIDE_BRANCHES = [];
+
+function spreadPortalPinPositions(pins) {
+  var positions = pins.map(function(pin) { return { pin: pin, pos: pinToPercent(pin) }; });
+  var groups = {};
+  positions.forEach(function(item, i) {
+    var k = item.pos.x.toFixed(1) + ',' + item.pos.y.toFixed(1);
+    if (!groups[k]) groups[k] = [];
+    groups[k].push(i);
+  });
+  Object.keys(groups).forEach(function(k) {
+    var idxs = groups[k];
+    if (idxs.length <= 1) return;
+    var r = 1.8;
+    idxs.forEach(function(pi, j) {
+      var a = (2 * Math.PI * j) / idxs.length - Math.PI / 2;
+      positions[pi].pos.x += Math.cos(a) * r;
+      positions[pi].pos.y += Math.sin(a) * r;
+    });
+  });
+  positions.forEach(function(item) {
+    item.pos.x += parseFloat(item.pin.mapOffsetX || 0) || 0;
+    item.pos.y += parseFloat(item.pin.mapOffsetY || 0) || 0;
+  });
+  return positions;
+}
+
+function goToPortalPin(pin) {
+  if (!pin || !pin.sceneId) return;
+  var url = './viewer.html?id=' + encodeURIComponent(pin.sceneId);
+  if (SIDE_BRANCHES.length > 0) url += "&sideBranches=" + encodeURIComponent(JSON.stringify(SIDE_BRANCHES));
+  url += '&back=./map_portal.html';
+  window.location.href = url;
+}
+
+(function initBackLink() {
+  var backBtn = document.getElementById("backBtn");
+  if (!backBtn) return;
+  var params = new URLSearchParams(window.location.search);
+  var back = params.get("back");
+  if (back) backBtn.href = back;
+})();
+
+(function initPortalMap() {
+  var img = document.querySelector(".map-image");
+  if (img && PORTAL_MAP_IMAGE) img.src = PORTAL_MAP_IMAGE;
+  var titleEl = document.querySelector(".main-title");
+  if (titleEl && PORTAL_MAP_LABEL) titleEl.textContent = PORTAL_MAP_LABEL;
+  var descEl = document.querySelector(".desc-text");
+  if (descEl && PORTAL_MAP_DESC) descEl.textContent = PORTAL_MAP_DESC;
+  var container = document.getElementById("mapStage");
+  if (!container || !PORTAL_PINS.length) return;
+  var spread = spreadPortalPinPositions(PORTAL_PINS);
+  spread.forEach(function(item, i) {
+    var el = document.createElement("div");
+    el.className = "map-pin";
+    el.style.left = item.pos.x + '%';
+    el.style.top = item.pos.y + '%';
+    el.setAttribute("data-idx", i);
+    el.innerHTML = '<div class="pin-label">' + (item.pin.name || item.pin.sceneId) + '</div><div class="pin-icon" style="background:' + (item.pin.color || '#00cc44') + ';"><span class="pin-number">' + (i + 1) + '</span></div>';
+    el.addEventListener("click", function() { goToPortalPin(PORTAL_PINS[parseInt(this.getAttribute("data-idx"), 10)]); });
+    container.appendChild(el);
+  });
+})();
+</script>
+</body>
+</html>
