@@ -404,7 +404,10 @@ var APP_DATA = {
   },
   "name": "Local 1024tiles",
   "courseBgm": {
-    "aa": "aa.mp3"
+    "aa": {
+      "file": "aa.mp3",
+      "loop": true
+    }
   },
   "panoramaBlack90": {
     "enabled": false,

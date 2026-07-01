@@ -1701,7 +1701,30 @@ function soundsUrl(file) {
 function probeSoundsFile(file) {
   return fetch(soundsUrl(file), { method: 'HEAD', cache: 'no-store' })
     .then(function(r) { return r.ok; })
-    .catch(function() { return false; });
+    .catch(function() { return false; })
+    .then(function(ok) {
+      if (ok) return true;
+      return probeSoundsFileViaAudio(file);
+    });
+}
+
+function probeSoundsFileViaAudio(file) {
+  return new Promise(function(resolve) {
+    var audio = new Audio();
+    var done = false;
+    function finish(ok) {
+      if (done) return;
+      done = true;
+      try { audio.removeAttribute('src'); audio.load(); } catch (e) {}
+      resolve(!!ok);
+    }
+    audio.addEventListener('canplay', function() { finish(true); }, { once: true });
+    audio.addEventListener('error', function() { finish(false); }, { once: true });
+    setTimeout(function() { finish(false); }, 2500);
+    audio.preload = 'auto';
+    audio.src = soundsUrl(file);
+    try { audio.load(); } catch (e2) { finish(false); }
+  });
 }
 
 function resolveAutoSceneBgmItems(sceneData) {
@@ -1754,7 +1777,21 @@ function playHiResPeekBgm(cfg) {
   var sceneId = currentSceneObj && currentSceneObj.data ? currentSceneObj.data.id : '';
   var candidates = buildHiResPeekBgmCandidates(cfg, sceneId);
   if (!candidates.length) return;
-  fadeOutBgmForVideo();
+  bgmSuppressedForVideo++;
+  Object.keys(bgmAudios).forEach(function(key) {
+    var a = bgmAudios[key];
+    if (!a) return;
+    if (a.__fadeTimer) {
+      clearInterval(a.__fadeTimer);
+      clearTimeout(a.__fadeTimer);
+      a.__fadeTimer = null;
+    }
+    if (a.__fadeInTimer) {
+      clearInterval(a.__fadeInTimer);
+      a.__fadeInTimer = null;
+    }
+    try { a.pause(); a.volume = 0; } catch (e) {}
+  });
   tryPlayHiResPeekBgmCandidate(cfg, candidates, 0);
 }
 
@@ -8904,6 +8941,7 @@ function radToDeg(r) { return r * 180 / Math.PI; }
 window.goToMap = function() {
   courseBgmSessionPlayed = {};
   activeBgmCourse = null;
+  lastSceneBgmId = null;
   guideVideoSessionDone = {};
   stopAllBGM();
   var back = urlParams.get('back') || 'map.html';
@@ -8939,6 +8977,7 @@ function normalizeBgmItem(raw, defaultLoop, extra) {
 }
 
 var sceneBgmResolveToken = 0;
+var lastSceneBgmId = null;
 
 /** シーンの bgm / APP_DATA.sceneBgm（data.js 明示指定） */
 function getExplicitBgmItems(sceneData) {
@@ -8968,10 +9007,26 @@ function getCourseBgmItems(sceneData) {
   if (!sceneData) return null;
   var cb = data.courseBgm || (window.APP_DATA && window.APP_DATA.courseBgm);
   if (cb && sceneData.course && cb[sceneData.course]) {
-    var normalizedCourseItem = normalizeBgmItem(cb[sceneData.course], false, { fromCourse: true });
+    var normalizedCourseItem = normalizeBgmItem(cb[sceneData.course], true, { fromCourse: true });
     if (normalizedCourseItem) return [normalizedCourseItem];
   }
   return null;
+}
+
+function mergeSceneBgmItems(sceneItems, courseItems) {
+  var out = [];
+  var seen = {};
+  function add(list) {
+    if (!list || !list.length) return;
+    list.forEach(function(item) {
+      if (!item || !item.file || seen[item.file]) return;
+      seen[item.file] = true;
+      out.push(item);
+    });
+  }
+  add(sceneItems);
+  add(courseItems);
+  return out.length ? out : null;
 }
 
 function sceneUsesCourseBgm(sceneData) {
@@ -8984,7 +9039,10 @@ function playSceneBGM(sceneId) {
   var sceneObj = scenesData[sceneId];
   if (!sceneObj) return;
   var token = ++sceneBgmResolveToken;
-  var explicit = getExplicitBgmItems(sceneObj.data);
+  if (lastSceneBgmId !== sceneId) {
+    stopBgmLayer('scene');
+    lastSceneBgmId = sceneId;
+  }
 
   function startItems(bgmItems) {
     if (token !== sceneBgmResolveToken) return;
@@ -9002,17 +9060,32 @@ function playSceneBGM(sceneId) {
     playSceneBGMItems(sceneId, sceneObj, bgmItems);
   }
 
+  var explicit = getExplicitBgmItems(sceneObj.data);
   if (explicit && explicit.length) {
-    startItems(explicit);
+    startItems(mergeSceneBgmItems(explicit, getCourseBgmItems(sceneObj.data)));
     return;
   }
 
   resolveAutoSceneBgmItems(sceneObj.data).then(function(autoItems) {
-    if (autoItems && autoItems.length) {
-      startItems(autoItems);
-      return;
+    startItems(mergeSceneBgmItems(autoItems, getCourseBgmItems(sceneObj.data)));
+  });
+}
+
+function stopBgmLayer(layer) {
+  Object.keys(bgmAudios).forEach(function(key) {
+    var a = bgmAudios[key];
+    if (!a || a.__bgmLayer !== layer) return;
+    if (a.__fadeTimer) {
+      clearInterval(a.__fadeTimer);
+      clearTimeout(a.__fadeTimer);
+      a.__fadeTimer = null;
     }
-    startItems(getCourseBgmItems(sceneObj.data));
+    if (a.__fadeInTimer) {
+      clearInterval(a.__fadeInTimer);
+      a.__fadeInTimer = null;
+    }
+    try { a.pause(); a.currentTime = 0; } catch (e) {}
+    delete bgmAudios[key];
   });
 }
 
@@ -9026,64 +9099,55 @@ function playSceneBGMItems(sceneId, sceneObj, bgmItems) {
   }
 
   if (course && activeBgmCourse && course !== activeBgmCourse) {
-    stopAllBGM();
+    stopBgmLayer('course');
     activeBgmCourse = null;
   }
 
-  var bgmFiles = bgmItems.map(function(item) { return item.file; }).filter(Boolean);
-  if (bgmFiles.length === 0) {
-    stopAllBGM();
-    activeBgmCourse = null;
-    return;
-  }
-
-  var primaryFile = bgmFiles[0];
-
-  if (primaryFile && bgmAudios[primaryFile]) {
-    var cur = bgmAudios[primaryFile];
-    if (!cur.paused && !cur.ended && cur.volume > 0.05) {
-      if (cur.__fadeTimer) {
-        clearInterval(cur.__fadeTimer);
-        cur.__fadeTimer = null;
-      }
-      cur.volume = bgmVolume;
-      cur.loop = resolveLoopFlag(primaryFile, bgmItems[0]);
-      if (course) activeBgmCourse = course;
-      return;
-    }
-  }
-
-  var usesCourseBgmNow = bgmItems.some(function(item) { return item && item.fromCourse; });
-  if (course && courseBgmSessionPlayed[course] && usesCourseBgmNow && !resolveLoopFlag(primaryFile, bgmItems[0])) {
-    if (course) activeBgmCourse = course;
-    return;
-  }
-
-  var newBGMSet = {};
-  bgmFiles.forEach(function(file) { newBGMSet[file] = true; });
+  var keepFiles = {};
+  bgmItems.forEach(function(item) {
+    if (item && item.file) keepFiles[item.file] = true;
+  });
 
   Object.keys(bgmAudios).forEach(function(key) {
-    if (!newBGMSet[key]) {
-      fadeOutAudio(bgmAudios[key], function() {
-        bgmAudios[key].pause();
-        delete bgmAudios[key];
-      });
+    if (keepFiles[key]) return;
+    var a = bgmAudios[key];
+    if (!a || a.__bgmLayer === 'course') return;
+    if (a.__fadeTimer) {
+      clearInterval(a.__fadeTimer);
+      clearTimeout(a.__fadeTimer);
+      a.__fadeTimer = null;
     }
+    if (a.__fadeInTimer) {
+      clearInterval(a.__fadeInTimer);
+      a.__fadeInTimer = null;
+    }
+    try { a.pause(); a.currentTime = 0; } catch (e) {}
+    delete bgmAudios[key];
   });
 
   bgmItems.forEach(function(item) {
     var file = item.file;
     if (!file) return;
-    if (!bgmAudios[file] || (bgmAudios[file].paused && !bgmAudios[file].ended)) {
+    var layer = item.fromCourse ? 'course' : 'scene';
+    var existing = bgmAudios[file];
+    if (existing && !existing.paused && !existing.ended && existing.volume > 0.05) {
+      if (existing.__fadeTimer) {
+        clearInterval(existing.__fadeTimer);
+        existing.__fadeTimer = null;
+      }
+      existing.loop = resolveLoopFlag(file, item);
+      existing.volume = bgmVolume;
+      existing.__bgmLayer = layer;
+      if (item.fromCourse && course) activeBgmCourse = course;
+      return;
+    }
+    if (!existing || existing.paused || existing.ended) {
       playAudio(soundsUrl(file), {
         loop: resolveLoopFlag(file, item),
         course: (item.fromCourse && course) ? course : null,
-        cacheKey: file
+        cacheKey: file,
+        layer: layer
       });
-      if (item.fromCourse && course) activeBgmCourse = course;
-    } else {
-      bgmAudios[file].loop = resolveLoopFlag(file, item);
-      bgmAudios[file].volume = bgmVolume;
       if (item.fromCourse && course) activeBgmCourse = course;
     }
   });
@@ -9100,6 +9164,7 @@ function playAudio(filePath, opts) {
   var key = opts.cacheKey || filePath.replace(/^sounds\//, '').replace(/\?.*$/, '');
   audio.loop = !!opts.loop;
   audio.volume = 0;
+  audio.__bgmLayer = opts.layer || (opts.course ? 'course' : 'scene');
   audio.__bgmCourse = opts.course || null;
   if (audio.__bgmCourse) courseBgmSessionPlayed[audio.__bgmCourse] = true;
 
