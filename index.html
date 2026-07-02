@@ -43,17 +43,21 @@ body, html { width: 100%; height: 100%; overflow: hidden; background: #000; }
 .map-portal.is-open .map-portal-label { opacity: 1; }
 .map-portal.is-open .map-portal-caption { opacity: 0; }
 .map-portal-ring { width: 100%; height: 100%; border-radius: 50%; overflow: hidden; position: relative; border: 3px solid rgba(255,190,225,0.9); box-shadow: 0 0 16px rgba(255,120,200,0.7), 0 0 32px rgba(255,90,180,0.4); background: #1a1020; }
+.map-portal.is-open .map-portal-ring { overflow: visible; }
+@media (hover: hover) { .map-portal:hover .map-portal-ring { overflow: visible; } .map-portal:hover .map-portal-pin { opacity: 1; visibility: visible; pointer-events: auto; } }
 .map-portal-mark, .map-portal-map { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; pointer-events: none; transition: opacity 0.28s ease; }
 .map-portal-map { opacity: 0; }
 @media (hover: none), (pointer: coarse) { .map-portal .map-portal-mark { opacity: 1 !important; } .map-portal.is-open .map-portal-mark { opacity: 0 !important; } .map-portal.is-open .map-portal-map { opacity: 1 !important; } }
-.map-portal-pin { position: absolute; transform: translate(-50%, -100%); opacity: 0; pointer-events: none; z-index: 3; display: flex; flex-direction: column; align-items: center; transition: opacity 0.22s ease; }
-.map-portal.is-open .map-portal-pin { opacity: 1; pointer-events: auto; }
+.map-portal-pin { position: absolute; transform: translate(-50%, -100%); opacity: 0; visibility: hidden; pointer-events: none; z-index: 10; display: flex; flex-direction: column; align-items: center; transition: opacity 0.22s ease, visibility 0.22s ease; }
+.map-portal.is-open .map-portal-pin { opacity: 1; visibility: visible; pointer-events: auto; }
 .map-portal-pin .pin-icon { width: 30px; height: 30px; }
 .map-portal-pin .pin-number { font-size: 12px; }
 .map-portal-pin .pin-label { font-size: 11px; padding: 2px 6px; margin-bottom: 3px; }
 @media (hover: none), (pointer: coarse), (max-width: 1024px) {
   #mapPortal.map-portal { position: fixed !important; left: auto !important; top: auto !important; right: 12px !important; bottom: 16px !important; width: 52px !important; height: 52px !important; transform: none !important; -webkit-transform: none !important; z-index: 99999 !important; visibility: visible !important; opacity: 1 !important; display: block !important; pointer-events: auto !important; }
   #mapPortal.map-portal.is-open { width: min(34vw, 260px) !important; height: min(34vw, 260px) !important; }
+  #mapPortal.map-portal:not(.is-open) .map-portal-pin { opacity: 0 !important; visibility: hidden !important; pointer-events: none !important; }
+  #mapPortal.map-portal.is-open .map-portal-pin { opacity: 1 !important; visibility: visible !important; pointer-events: auto !important; z-index: 10 !important; }
 }
 </style>
 </head>
@@ -140,6 +144,75 @@ function goToPortalMap() {
   if (!MAP_PORTAL || !MAP_PORTAL.fullMapPage) return;
   window.location.href = './' + MAP_PORTAL.fullMapPage;
 }
+function getPortalPinPos() {
+  var p = MAP_PORTAL;
+  return { x: (parseFloat(p.pinX) || 0) + (parseFloat(p.mapOffsetX) || 0), y: (parseFloat(p.pinY) || 0) + (parseFloat(p.mapOffsetY) || 0) };
+}
+function pinPercentThroughObjectFitCover(pinX, pinY, imageAR) {
+  if (!imageAR || !isFinite(imageAR) || imageAR <= 0) return { x: pinX, y: pinY };
+  var px = pinX / 100, py = pinY / 100, dx, dy;
+  if (imageAR >= 1) { var visW = 1 / imageAR, offX = (1 - visW) / 2; dx = (px - offX) / visW; dy = py; }
+  else { var visH = imageAR, offY = (1 - visH) / 2; dx = px; dy = (py - offY) / visH; }
+  return { x: Math.max(0, Math.min(100, dx * 100)), y: Math.max(0, Math.min(100, dy * 100)) };
+}
+function getPortalMapImageAspect() {
+  var el = document.getElementById('mapPortalMap');
+  if (!el || !el.naturalWidth) return 1;
+  return el.naturalWidth / el.naturalHeight;
+}
+function layoutMapPortalPin() {
+  var pinEl = document.getElementById('mapPortalPin');
+  if (!pinEl) return;
+  var pos = getPortalPinPos();
+  var display = pinPercentThroughObjectFitCover(pos.x, pos.y, getPortalMapImageAspect());
+  pinEl.style.left = display.x + '%';
+  pinEl.style.top = display.y + '%';
+}
+function bindMapPortalLongPress(portalEl) {
+  if (!portalEl || portalEl._portalLongPressBound) return;
+  portalEl._portalLongPressBound = true;
+  var HOLD_MS = 600, MOVE_TOL = 18, timer = null, moved = false, sx = 0, sy = 0, startMs = 0;
+  function clearTimer() { if (timer) { clearTimeout(timer); timer = null; } }
+  function onDown(cx, cy) {
+    moved = false;
+    portalEl._portalLongFired = false;
+    sx = cx; sy = cy;
+    startMs = Date.now();
+    clearTimer();
+    timer = setTimeout(function() {
+      if (moved) return;
+      portalEl._portalLongFired = true;
+      goToPortalMap();
+    }, HOLD_MS);
+  }
+  function onMove(cx, cy) {
+    if (moved) return;
+    if (Math.hypot(cx - sx, cy - sy) > MOVE_TOL) { moved = true; clearTimer(); }
+  }
+  function onUp() {
+    var held = Date.now() - startMs;
+    clearTimer();
+    if (!moved && held >= HOLD_MS && !portalEl._portalLongFired) {
+      portalEl._portalLongFired = true;
+      goToPortalMap();
+    }
+  }
+  portalEl.addEventListener('touchstart', function(e) {
+    if (!e.touches || !e.touches.length) return;
+    e.preventDefault();
+    onDown(e.touches[0].clientX, e.touches[0].clientY);
+  }, { passive: false });
+  portalEl.addEventListener('touchmove', function(e) {
+    if (!e.touches || !e.touches.length) return;
+    onMove(e.touches[0].clientX, e.touches[0].clientY);
+  }, { passive: true });
+  portalEl.addEventListener('touchend', onUp, { passive: true });
+  portalEl.addEventListener('touchcancel', onUp, { passive: true });
+  portalEl.addEventListener('mousedown', function(e) { if (e.button !== 0) return; onDown(e.clientX, e.clientY); });
+  portalEl.addEventListener('mousemove', function(e) { if (e.buttons !== 1) return; onMove(e.clientX, e.clientY); });
+  portalEl.addEventListener('mouseup', onUp);
+  portalEl.addEventListener('mouseleave', onUp);
+}
 function isAppleMobileOrTablet() {
   var ua = navigator.userAgent || '';
   if (/iPad|iPhone|iPod/i.test(ua)) return true;
@@ -191,24 +264,38 @@ function initMapPortal() {
   if (captionEl) captionEl.textContent = MAP_PORTAL.shortLabel || 'ポータル';
   if (labelEl) labelEl.textContent = MAP_PORTAL.label || 'ポータル先';
   if (markEl && MAP_PORTAL.markImage) markEl.src = MAP_PORTAL.markImage;
-  if (mapEl && MAP_PORTAL.mapImage) mapEl.src = MAP_PORTAL.mapImage;
+  if (mapEl && MAP_PORTAL.mapImage) {
+    mapEl.onload = layoutMapPortalPin;
+    mapEl.src = MAP_PORTAL.mapImage;
+  }
   if (pinEl) {
     pinEl.innerHTML = '<div class="pin-label">' + (MAP_PORTAL.pinName || '') + '</div><div class="pin-icon" style="background:' + (MAP_PORTAL.pinColor || '#00cc44') + ';"><span class="pin-number">P</span></div>';
+    layoutMapPortalPin();
     pinEl.addEventListener('click', function(e) { e.stopPropagation(); goToPortalScene(); });
   }
   layoutMapPortal();
+  bindMapPortalLongPress(portalEl);
   if (isMapTouchUI() && !portalEl._touchClickBound) {
     portalEl._touchClickBound = true;
     portalEl.addEventListener('click', function(e) {
+      if (portalEl._portalLongFired) {
+        portalEl._portalLongFired = false;
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
       if (e.target.closest && e.target.closest('.map-portal-pin')) return;
       portalEl.classList.toggle('is-open');
       layoutMapPortal();
+      layoutMapPortalPin();
+      setTimeout(layoutMapPortalPin, 80);
       e.stopPropagation();
     });
     document.addEventListener('click', function(e) {
       if (e.target.closest && e.target.closest('.map-portal')) return;
       portalEl.classList.remove('is-open');
       layoutMapPortal();
+      layoutMapPortalPin();
     });
   }
 }
@@ -283,9 +370,9 @@ if (!TOUR_DESC) {
   document.getElementById('tourDesc').textContent = TOUR_TITLE + 'が現れます。';
 }
 initMapPortal();
-window.addEventListener('load', layoutMapPortal);
-window.addEventListener('pageshow', layoutMapPortal);
-window.addEventListener('orientationchange', function() { setTimeout(layoutMapPortal, 120); });
+window.addEventListener('load', function() { layoutMapPortal(); layoutMapPortalPin(); });
+window.addEventListener('pageshow', function() { layoutMapPortal(); layoutMapPortalPin(); });
+window.addEventListener('orientationchange', function() { setTimeout(function() { layoutMapPortal(); layoutMapPortalPin(); }, 120); });
 </script>
 </body>
 </html>
