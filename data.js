@@ -390,7 +390,19 @@ var APP_DATA = {
           "pitchCenter": 5,
           "pitchRange": 35
         }
-      ]
+      ],
+      "spatialAudio": {
+        "sources": [
+          {
+            "file": "4-bb001.mp3",
+            "label": "音源",
+            "yawDeg": 0,
+            "pitchDeg": 0,
+            "minVolume": 0.5,
+            "falloffDeg": 65
+          }
+        ]
+      }
     }
   ],
   "mapConfig": {
@@ -448,6 +460,10 @@ var APP_DATA = {
   "courseBgm": {
     "aa": {
       "file": "aa.mp3",
+      "loop": true
+    },
+    "bb": {
+      "file": "bb.mp3",
       "loop": true
     }
   },
