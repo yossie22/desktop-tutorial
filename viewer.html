@@ -3322,12 +3322,23 @@ var audioEnabled = false;
 var bgmPlaying = true;
 var audioUnlockConsumed = false;
 
-function enableAudioOnFirstGesture() {
-  if (audioUnlockConsumed) return;
-  audioUnlockConsumed = true;
+function unlockAudioAndPlayBgm() {
+  var wasOff = !audioEnabled;
   audioEnabled = true;
-  // 地図の BGMオフ（?bgm=0）を尊重。長押しの bgmForce とは別
-  if (currentSceneObj && shouldPlayBGM()) playSceneBGM(currentSceneObj.data.id);
+  audioUnlockConsumed = true;
+  try {
+    if (typeof getSharedBgmAudioContext === 'function') getSharedBgmAudioContext().resume();
+  } catch (eUnlock) {}
+  if (!currentSceneObj || !shouldPlayBGM()) return;
+  var sceneNarrMissing = !Object.keys(bgmAudios).some(function(k) {
+    var a = bgmAudios[k];
+    return a && a.__bgmLayer === 'scene' && !a.loop && !a.paused && !a.ended;
+  });
+  if (wasOff || sceneNarrMissing) playSceneBGM(currentSceneObj.data.id);
+}
+
+function enableAudioOnFirstGesture() {
+  unlockAudioAndPlayBgm();
 }
 document.addEventListener('click', enableAudioOnFirstGesture, { once: true });
 document.addEventListener('touchstart', enableAudioOnFirstGesture, { once: true, passive: true });
@@ -3411,8 +3422,12 @@ if (typeof GyroControl !== 'undefined' && GyroControl.isSupportedDevice() && gyr
     var hint = sceneGyro.getHint ? sceneGyro.getHint() : '';
     gyroBtnEl.title = hint || '';
   });
+  gyroBtnEl.addEventListener('touchstart', function() {
+    unlockAudioAndPlayBgm();
+  }, { passive: true });
   gyroBtnEl.addEventListener('click', function(e) {
     e.stopPropagation();
+    unlockAudioAndPlayBgm();
     sceneGyro.toggle().then(function() {
       var hint = sceneGyro.getHint ? sceneGyro.getHint() : '';
       if (hint) gyroBtnEl.title = hint;
@@ -9047,6 +9062,45 @@ function spatialStereoPanForConfig(cfg, viewYaw) {
   return Math.max(-1, Math.min(1, Math.sin(diff)));
 }
 
+function connectCourseBgmGainChain(audio) {
+  if (!audio || audio.__courseGainDone) return;
+  if (typeof guideDeviceIsIosSafari !== 'function' || !guideDeviceIsIosSafari()) return;
+  try {
+    var ctx = getSharedBgmAudioContext();
+    var src = ctx.createMediaElementSource(audio);
+    audio.__courseGainDone = true;
+    var gain = ctx.createGain();
+    gain.gain.value = audio.volume > 0 ? audio.volume : bgmVolume;
+    src.connect(gain);
+    gain.connect(ctx.destination);
+    audio.__courseGain = gain;
+    audio.volume = 1;
+  } catch (eCourse) {
+    console.warn('コースBGM Gain接続スキップ:', eCourse);
+  }
+}
+
+function setBgmOutputVolume(audio, vol) {
+  if (!audio) return;
+  vol = Math.max(0, Math.min(1, vol));
+  if (audio.__spatial && audio.__spatialGain) {
+    audio.__spatialGain.gain.value = vol;
+    return;
+  }
+  if (audio.__courseGain) {
+    audio.__courseGain.gain.value = vol;
+    return;
+  }
+  audio.volume = vol;
+}
+
+function getBgmOutputVolume(audio) {
+  if (!audio) return 0;
+  if (audio.__spatial && audio.__spatialGain) return audio.__spatialGain.gain.value;
+  if (audio.__courseGain) return audio.__courseGain.gain.value;
+  return audio.volume;
+}
+
 function connectSpatialBgmChain(audio) {
   if (!audio || audio.__spatialChainDone) return;
   try {
@@ -9089,8 +9143,9 @@ function getBgmDuckFadeMs() {
 function getBgmDuckVolumeFactor() {
   var cfg = getBgmDuckingConfig();
   if (cfg.enabled === false) return 1;
-  var duck = Number(cfg.duckVolume);
-  if (!isFinite(duck)) duck = 0.18;
+  var isIos = typeof guideDeviceIsIosSafari === 'function' && guideDeviceIsIosSafari();
+  var duck = Number(isIos && cfg.duckVolumeIos != null ? cfg.duckVolumeIos : cfg.duckVolume);
+  if (!isFinite(duck)) duck = isIos ? 0.07 : 0.18;
   return Math.max(0, Math.min(1, duck));
 }
 
@@ -9123,16 +9178,16 @@ function applySpatialBgmVolumes() {
     if (bgmSuppressedForVideo > 0) return;
     if (a.__bgmLayer === 'course') {
       var courseVol = getCourseBgmTargetVolume();
-      if (duckChanged && duckFade > 0) fadeInAudio(a, courseVol, duckFade);
-      else a.volume = courseVol;
+      if (a.__courseGain || (duckChanged && duckFade > 0)) {
+        if (duckChanged && duckFade > 0 && !a.__courseGain) fadeInAudio(a, courseVol, duckFade);
+        else setBgmOutputVolume(a, courseVol);
+      } else {
+        a.volume = courseVol;
+      }
       return;
     }
     var vol = getAudioTargetVolume(a);
-    if (a.__spatial && a.__spatialGain) {
-      a.__spatialGain.gain.value = vol;
-    } else {
-      a.volume = vol;
-    }
+    setBgmOutputVolume(a, vol);
     if (a.__spatial && a.__spatialPanner && currentView) {
       a.__spatialPanner.pan.value = spatialStereoPanForConfig(a.__spatial, currentView.parameters().yaw);
     }
@@ -9403,6 +9458,9 @@ function playAudio(filePath, opts) {
   if (opts.spatial) {
     try { getSharedBgmAudioContext().resume(); } catch (eCtx2) {}
     if (!opts.reverb || opts.reverb.mix <= 0) connectSpatialBgmChain(audio);
+  } else if (audio.__bgmLayer === 'course') {
+    try { getSharedBgmAudioContext().resume(); } catch (eCtx3) {}
+    connectCourseBgmGainChain(audio);
   }
 
   if (opts.reverb && opts.reverb.preset && opts.reverb.mix > 0) {
@@ -9509,21 +9567,23 @@ function fadeInAudio(audio, targetVol, duration) {
     return audio.__spatial ? getAudioTargetVolume(audio) : targetVol;
   }
   var tv = targetNow();
-  if (audio.volume >= tv * 0.92) {
-    audio.volume = tv;
+  var curVol = getBgmOutputVolume(audio);
+  if (curVol >= tv * 0.92) {
+    setBgmOutputVolume(audio, tv);
     return;
   }
-  var startVol = audio.volume;
+  var startVol = curVol;
   var stepCount = Math.max(1, duration / 50);
   var stepVol = (tv - startVol) / stepCount;
   audio.__fadeInTimer = setInterval(function() {
     tv = targetNow();
-    if (audio.volume < tv) {
-      audio.volume = Math.min(tv, audio.volume + Math.abs(stepVol));
+    curVol = getBgmOutputVolume(audio);
+    if (curVol < tv) {
+      setBgmOutputVolume(audio, Math.min(tv, curVol + Math.abs(stepVol)));
     } else {
       clearInterval(audio.__fadeInTimer);
       audio.__fadeInTimer = null;
-      audio.volume = tv;
+      setBgmOutputVolume(audio, tv);
     }
   }, 50);
 }

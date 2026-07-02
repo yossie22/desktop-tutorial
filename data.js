@@ -65,7 +65,7 @@ var APP_DATA = {
             "label": "ナレーション",
             "yawDeg": 0,
             "pitchDeg": 0,
-            "minVolume": 0.3,
+            "minVolume": 0.4,
             "falloffDeg": 90
           }
         ]
@@ -271,7 +271,7 @@ var APP_DATA = {
             "label": "音源",
             "yawDeg": 0,
             "pitchDeg": 0,
-            "minVolume": 0.3,
+            "minVolume": 0.4,
             "falloffDeg": 65
           }
         ]
@@ -442,6 +442,7 @@ var APP_DATA = {
   "bgmDucking": {
     "enabled": true,
     "duckVolume": 0.18,
+    "duckVolumeIos": 0.07,
     "fadeMs": 800
   },
   "courseBgm": {
