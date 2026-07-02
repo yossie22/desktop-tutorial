@@ -41,13 +41,18 @@ body, html { width: 100%; height: 100%; overflow: hidden; background: #000; }
   right: 82px;
   bottom: 22px;
   z-index: 99998;
-  color: #ffff00;
+  color: #80ffff;
   font-weight: bold;
   font-size: 14px;
   font-family: Meiryo,sans-serif;
-  text-shadow: 0 0 10px rgba(0,0,0,0.95), 0 0 18px rgba(0,0,0,0.75);
+  text-shadow: 0 0 10px rgba(0,0,0,0.95), 0 0 18px rgba(0,0,0,0.75), 0 0 18px rgba(128,255,255,0.25);
   pointer-events: none;
   opacity: 0.95;
+  animation: landscapeHintPulse 1.6s ease-in-out infinite;
+}
+@keyframes landscapeHintPulse {
+  0%, 100% { opacity: 0.55; filter: brightness(1.0); }
+  50% { opacity: 1; filter: brightness(1.35); }
 }
 .map-portal { position: absolute; z-index: 40; width: 52px; height: 52px; transform: translate(-100%, -100%); transform-origin: 100% 100%; transition: width 0.32s ease, height 0.32s ease; cursor: pointer; pointer-events: auto; }
 .map-portal.is-open { width: min(34%, 260px); height: min(34%, 260px); }
@@ -80,7 +85,7 @@ body, html { width: 100%; height: 100%; overflow: hidden; background: #000; }
     <img src="map.jpg" alt="地図" class="map-image" id="mapImage">
     <div class="map-overlay" id="mapOverlay">
       <a class="help-button" href="help/使い方.html">？使い方</a>
-      <div class="landscape-hint" aria-hidden="true">横画面おすすめ</div>
+      <div class="landscape-hint" aria-hidden="true">スマホは横位置</div>
       <div class="overlay-text main-title" id="tourTitle" style="width:min(92%,900px);padding:8px;left:2%;top:3%;"></div>
       <div class="overlay-text desc-text" id="tourDesc" style="width:min(92%,900px);padding:8px;left:24%;top:79%;"></div>
     </div>
