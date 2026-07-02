@@ -13,6 +13,7 @@ body {
   color: #f8f8f8;
   background: #171717;
   line-height: 1.7;
+  font-size: 18px;
 }
 .wrap {
   max-width: 860px;
@@ -27,7 +28,7 @@ body {
   flex-wrap: wrap;
 }
 h1 {
-  font-size: 24px;
+  font-size: 28px;
   margin: 0;
   color: #66e8ff;
 }
@@ -39,6 +40,10 @@ h1 {
   font-weight: bold;
   padding: 8px 14px;
   border-radius: 999px;
+}
+.back.bottom {
+  display: inline-block;
+  margin: 18px 0 0;
 }
 .card {
   background: #242424;
@@ -208,11 +213,11 @@ h1 {
 }
 .tip {
   color: #d8d8d8;
-  font-size: 14px;
+  font-size: 16px;
 }
 .small {
   color: #aaa;
-  font-size: 13px;
+  font-size: 15px;
   margin-top: 18px;
   white-space: pre-line;
 }
@@ -232,6 +237,7 @@ strong { color: #fff; }
   <div data-help-notes></div>
   <div data-help-gps></div>
   <div class="small" data-help-footer></div>
+  <a class="back bottom" data-help-back-bottom href="../map.html">地図に戻る</a>
 </div>
 <script>
 (function() {

@@ -23,7 +23,7 @@
       order: 15,
       feature: 'hasMapPortal',
       defaultTitle: '地図右下の丸いマーク（ポータル）',
-      defaultBody: '地図に載っていない別の場所へ行ける入口です。タップで丸が開き、中のピンを押すとその場所のVRへ移動できます。丸を長押し（約0.5秒）すると、広いポータル地図が開きます。',
+      defaultBody: '地図に載っていない別の場所へ行ける入口です。右下の丸いマークを長押し（約0.6秒）すると、ポータル地図が開きます。',
       markType: 'image',
       imageSrc: '../portal.png',
       blink: false
@@ -378,6 +378,7 @@ function buildHelpConfig(appData, userCfg) {
     if (!rootEl || !cfg) return;
     var titleEl = rootEl.querySelector('[data-help-title]');
     var backEl = rootEl.querySelector('[data-help-back]');
+    var backBottomEl = rootEl.querySelector('[data-help-back-bottom]');
     var stepsEl = rootEl.querySelector('[data-help-steps]');
     var notesEl = rootEl.querySelector('[data-help-notes]');
     var gpsEl = rootEl.querySelector('[data-help-gps]');
@@ -387,6 +388,10 @@ function buildHelpConfig(appData, userCfg) {
     if (backEl) {
       backEl.textContent = cfg.backLabel || '地図に戻る';
       backEl.href = cfg.backHref || defaultMapBackHref();
+    }
+    if (backBottomEl) {
+      backBottomEl.textContent = cfg.backLabel || '地図に戻る';
+      backBottomEl.href = cfg.backHref || defaultMapBackHref();
     }
     if (stepsEl) {
       stepsEl.innerHTML = (cfg.steps || []).map(function(step) {
