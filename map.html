@@ -58,6 +58,9 @@ body, html { width: 100%; height: 100%; min-height: -webkit-fill-available; over
   opacity: 1 !important;
   pointer-events: auto;
 }
+@media (hover: hover) and (pointer: fine) {
+  .map-portal.is-fixed:not(.is-ready) { visibility: hidden !important; pointer-events: none; }
+}
 .map-portal.is-fixed.is-open { width: min(34vw, 260px); height: min(34vw, 260px); }
 </style>
 </head>
@@ -68,6 +71,15 @@ body, html { width: 100%; height: 100%; min-height: -webkit-fill-available; over
   <img src="map.jpg" alt="地図" class="map-image">
   <div class="overlay-text main-title" style="width:min(92%,900px);padding:8px;left:2%;top:3%;">アジサイの妖精 (テスト作品）</div>
   <div class="overlay-text desc-text" style="width:min(92%,900px);padding:8px;left:33%;top:43%;">アジサイの妖精が現れます。</div>
+  </div>
+</div>
+<div class="map-portal is-fixed" id="mapPortal">
+  <div class="map-portal-caption" id="mapPortalCaption">ポータル</div>
+  <div class="map-portal-label" id="mapPortalLabel">ポータル先</div>
+  <div class="map-portal-ring">
+    <img class="map-portal-mark" id="mapPortalMark" src="portal.png" alt="">
+    <img class="map-portal-map" id="mapPortalMap" src="map_portal.jpg" alt="">
+    <div class="map-portal-pin" id="mapPortalPin"></div>
   </div>
 </div>
 <script>
@@ -175,6 +187,7 @@ function layoutMapPortal() {
   if (useMapFixedPortalLayout()) {
     if (el.parentNode !== document.body) document.body.appendChild(el);
     el.classList.add("is-fixed");
+    el.classList.add("is-ready");
     el.style.position = "";
     el.style.left = "";
     el.style.top = "";
@@ -191,6 +204,7 @@ function layoutMapPortal() {
   }
   if (container && el.parentNode !== container) container.appendChild(el);
   el.classList.remove("is-fixed");
+  el.classList.add("is-ready");
   el.style.width = ""; el.style.height = ""; el.style.zIndex = ""; el.style.visibility = ""; el.style.opacity = ""; el.style.webkitTransform = "";
   el.style.right = ""; el.style.bottom = "";
   var phone = useMapPhonePortalLayout();
