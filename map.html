@@ -46,20 +46,40 @@ body, html { width: 100%; height: 100%; min-height: -webkit-fill-available; over
   position: fixed !important;
   left: auto !important;
   top: auto !important;
-  right: max(8px, env(safe-area-inset-right, 0px)) !important;
-  bottom: max(12px, env(safe-area-inset-bottom, 0px)) !important;
+  right: 12px !important;
+  bottom: 16px !important;
   width: 52px;
   height: 52px;
   transform: none !important;
   -webkit-transform: none !important;
   transform-origin: 100% 100%;
-  z-index: 9999;
+  z-index: 99999;
   visibility: visible !important;
   opacity: 1 !important;
   pointer-events: auto;
+  display: block !important;
 }
-@media (hover: hover) and (pointer: fine) {
-  .map-portal.is-fixed:not(.is-ready) { visibility: hidden !important; pointer-events: none; }
+@media (hover: none), (pointer: coarse), (max-width: 1024px) {
+  #mapPortal.map-portal {
+    position: fixed !important;
+    left: auto !important;
+    top: auto !important;
+    right: 12px !important;
+    bottom: 16px !important;
+    width: 52px !important;
+    height: 52px !important;
+    transform: none !important;
+    -webkit-transform: none !important;
+    z-index: 99999 !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    display: block !important;
+    pointer-events: auto !important;
+  }
+  #mapPortal.map-portal.is-open {
+    width: min(34vw, 260px) !important;
+    height: min(34vw, 260px) !important;
+  }
 }
 .map-portal.is-fixed.is-open { width: min(34vw, 260px); height: min(34vw, 260px); }
 </style>
@@ -73,7 +93,7 @@ body, html { width: 100%; height: 100%; min-height: -webkit-fill-available; over
   <div class="overlay-text desc-text" style="width:min(92%,900px);padding:8px;left:33%;top:43%;">アジサイの妖精が現れます。</div>
   </div>
 </div>
-<div class="map-portal is-fixed" id="mapPortal">
+<div class="map-portal is-fixed" id="mapPortal" style="position:fixed;right:12px;bottom:16px;width:52px;height:52px;z-index:99999;transform:none;-webkit-transform:none;visibility:visible;opacity:1;display:block;">
   <div class="map-portal-caption" id="mapPortalCaption">ポータル</div>
   <div class="map-portal-label" id="mapPortalLabel">ポータル先</div>
   <div class="map-portal-ring">
@@ -180,6 +200,12 @@ function pinPercentThroughObjectFitCover(pinX, pinY, imageAR) {
 function getPortalMapImageAspect() { var el = document.getElementById("mapPortalMap"); if (!el || !el.naturalWidth) return 1; return el.naturalWidth / el.naturalHeight; }
 function layoutMapPortalPin() { var pinEl = document.getElementById("mapPortalPin"); if (!pinEl) return; var pos = getPortalPinPos(); var display = pinPercentThroughObjectFitCover(pos.x, pos.y, getPortalMapImageAspect()); pinEl.style.left = display.x + "%"; pinEl.style.top = display.y + "%"; }
 function getPortalAnchorPos() { var phone = useMapPhonePortalLayout(); return { x: phone ? (MAP_PORTAL.phoneAnchorX!=null?MAP_PORTAL.phoneAnchorX:97) : (MAP_PORTAL.anchorX!=null?MAP_PORTAL.anchorX:97), y: phone ? (MAP_PORTAL.phoneAnchorY!=null?MAP_PORTAL.phoneAnchorY:82) : (MAP_PORTAL.anchorY!=null?MAP_PORTAL.anchorY:82) }; }
+function applyMapPortalFixedStyle(el) {
+  if (!el) return;
+  var open = el.classList.contains("is-open");
+  var sz = open ? Math.min((window.innerWidth || 390) * 0.34, 260) : 52;
+  el.style.cssText = "position:fixed;left:auto;top:auto;right:12px;bottom:16px;width:" + sz + "px;height:" + sz + "px;transform:none;-webkit-transform:none;z-index:99999;visibility:visible;opacity:1;display:block;pointer-events:auto;";
+}
 function layoutMapPortal() {
   var el = document.getElementById("mapPortal");
   if (!el) return;
@@ -187,24 +213,12 @@ function layoutMapPortal() {
   if (useMapFixedPortalLayout()) {
     if (el.parentNode !== document.body) document.body.appendChild(el);
     el.classList.add("is-fixed");
-    el.classList.add("is-ready");
-    el.style.position = "";
-    el.style.left = "";
-    el.style.top = "";
-    el.style.right = "";
-    el.style.bottom = "";
-    el.style.width = "";
-    el.style.height = "";
-    el.style.transform = "";
-    el.style.webkitTransform = "";
-    el.style.zIndex = "";
-    el.style.visibility = "";
-    el.style.opacity = "";
+    applyMapPortalFixedStyle(el);
     return;
   }
   if (container && el.parentNode !== container) container.appendChild(el);
   el.classList.remove("is-fixed");
-  el.classList.add("is-ready");
+  el.style.cssText = "";
   el.style.width = ""; el.style.height = ""; el.style.zIndex = ""; el.style.visibility = ""; el.style.opacity = ""; el.style.webkitTransform = "";
   el.style.right = ""; el.style.bottom = "";
   var phone = useMapPhonePortalLayout();
