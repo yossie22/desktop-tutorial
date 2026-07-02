@@ -42,7 +42,22 @@ body, html { width: 100%; height: 100%; min-height: -webkit-fill-available; over
 .map-portal-pin .pin-icon { width: 30px; height: 30px; }
 .map-portal-pin .pin-number { font-size: 12px; }
 .map-portal-pin .pin-label { font-size: 11px; padding: 2px 6px; margin-bottom: 3px; }
-.map-portal.is-fixed { position: fixed; left: auto; top: auto; right: max(6px, env(safe-area-inset-right, 0px)); bottom: max(10px, env(safe-area-inset-bottom, 0px)); transform: none; transform-origin: 100% 100%; z-index: 45; }
+.map-portal.is-fixed {
+  position: fixed !important;
+  left: auto !important;
+  top: auto !important;
+  right: max(8px, env(safe-area-inset-right, 0px)) !important;
+  bottom: max(12px, env(safe-area-inset-bottom, 0px)) !important;
+  width: 52px;
+  height: 52px;
+  transform: none !important;
+  -webkit-transform: none !important;
+  transform-origin: 100% 100%;
+  z-index: 9999;
+  visibility: visible !important;
+  opacity: 1 !important;
+  pointer-events: auto;
+}
 .map-portal.is-fixed.is-open { width: min(34vw, 260px); height: min(34vw, 260px); }
 </style>
 </head>
@@ -160,15 +175,18 @@ function layoutMapPortal() {
   if (useMapFixedPortalLayout()) {
     if (el.parentNode !== document.body) document.body.appendChild(el);
     el.classList.add("is-fixed");
-    var margin = 6, vp = getMapViewportBox(), open = el.classList.contains("is-open"), size = open ? Math.min(vp.w * 0.34, 260) : 52;
-    el.style.position = "fixed";
-    el.style.left = (vp.left + vp.w - size - margin) + "px";
-    el.style.top = (vp.top + vp.h - size - margin) + "px";
-    el.style.right = "auto"; el.style.bottom = "auto";
-    el.style.width = size + "px"; el.style.height = size + "px";
-    el.style.transform = "none"; el.style.webkitTransform = "none";
-    el.style.transformOrigin = "100% 100%"; el.style.zIndex = "45";
-    el.style.visibility = "visible"; el.style.opacity = "1";
+    el.style.position = "";
+    el.style.left = "";
+    el.style.top = "";
+    el.style.right = "";
+    el.style.bottom = "";
+    el.style.width = "";
+    el.style.height = "";
+    el.style.transform = "";
+    el.style.webkitTransform = "";
+    el.style.zIndex = "";
+    el.style.visibility = "";
+    el.style.opacity = "";
     return;
   }
   if (container && el.parentNode !== container) container.appendChild(el);
@@ -187,7 +205,7 @@ function scheduleMapPortalRelayout() {
   layoutMapPortal();
   layoutMapPortalPin();
   if (!isMapTouchUI()) return;
-  [100, 300, 700, 1500].forEach(function(ms) {
+  [50, 200, 500, 1000, 2000, 3500].forEach(function(ms) {
     setTimeout(function() { layoutMapPortal(); layoutMapPortalPin(); }, ms);
   });
 }
@@ -226,7 +244,8 @@ function initMapPortal() {
   scheduleMapPortalRelayout();
   bindMapPortalLongPress(portalEl);
   var touchMode = isMapTouchUI();
-  if (touchMode) {
+  if (touchMode && !portalEl._touchClickBound) {
+    portalEl._touchClickBound = true;
     portalEl.addEventListener("click", function(e) {
       if (e.target.closest && e.target.closest(".map-portal-pin")) return;
       portalEl.classList.toggle("is-open");
@@ -300,6 +319,7 @@ spread.forEach(function(item, i) {
   container.appendChild(el);
 });
 initMapPortal();
+window.addEventListener('load', scheduleMapPortalRelayout);
 var mapImgEl = document.querySelector(".map-image");
 if (mapImgEl) {
   if (mapImgEl.complete) scheduleMapPortalRelayout();
